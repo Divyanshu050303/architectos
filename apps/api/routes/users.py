@@ -4,7 +4,13 @@ from fastapi import APIRouter, Response, status
 
 from apps.api.cookies import clear_refresh_cookie
 from apps.api.dependencies.auth import CurrentUser
-from apps.api.dependencies.services import AppSettings, PasswordServiceDep, SessionServiceDep, UserServiceDep
+from apps.api.dependencies.services import (
+    AppSettings,
+    PasswordServiceDep,
+    RateLimitsDep,
+    SessionServiceDep,
+    UserServiceDep,
+)
 from apps.api.schemas.auth import ChangePasswordRequest
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.users import (
@@ -82,8 +88,9 @@ async def revoke_session(
     ),
 )
 async def change_password(
-    body: ChangePasswordRequest, current: CurrentUser, passwords: PasswordServiceDep
+    body: ChangePasswordRequest, current: CurrentUser, passwords: PasswordServiceDep, limits: RateLimitsDep
 ) -> None:
+    await limits.enforce("confirm_password", user_id=current.user.id)
     await passwords.change(
         user_id=current.user.id,
         current_session_id=current.session.id,
@@ -135,6 +142,8 @@ async def delete_account(
     users: UserServiceDep,
     settings: AppSettings,
     response: Response,
+    limits: RateLimitsDep,
 ) -> None:
+    await limits.enforce("confirm_password", user_id=current.user.id)
     await users.delete_account(user_id=current.user.id, password=body.password.get_secret_value())
     clear_refresh_cookie(response, settings)

@@ -9,14 +9,17 @@ from datetime import timedelta
 from functools import lru_cache
 from typing import Annotated, Literal, Self
 
-from pydantic import AnyHttpUrl, Field, PostgresDsn, SecretStr, field_validator, model_validator
+from pydantic import AnyHttpUrl, Field, PostgresDsn, RedisDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from apps.api.email.transport import SmtpSecurity
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # env_ignore_empty: "KEY=" in a .env file means "use the default", as .env.example shows.
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", env_ignore_empty=True
+    )
 
     environment: Literal["development", "test", "production"] = "development"
 
@@ -24,6 +27,18 @@ class Settings(BaseSettings):
         description="Async SQLAlchemy URL, e.g. postgresql+asyncpg://user:pass@host:5432/db",
     )
     database_echo: bool = False
+
+    # Rate-limit counters. Unset: in-memory (single process only; refused in production).
+    redis_url: RedisDsn | None = None
+    rate_limit_enabled: bool = True
+
+    # Interactive API docs at /api/docs. Defaults to off in production (see _defaults).
+    api_docs_enabled: bool | None = None
+    # Largest accepted request body; JSON payloads here are small.
+    max_request_body_bytes: int = Field(default=64 * 1024, ge=1024)
+    # Concurrent Argon2 hashes per process (each ~64 MiB).
+    password_hash_concurrency: int = Field(default=4, ge=1, le=64)
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
 
     # The web app: CORS origin and the base of every link in emails.
     frontend_url: AnyHttpUrl = AnyHttpUrl("http://localhost:3000")
@@ -76,6 +91,12 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
+    @property
+    def docs_enabled(self) -> bool:
+        return (
+            self.api_docs_enabled if self.api_docs_enabled is not None else self.environment != "production"
+        )
+
     @model_validator(mode="after")
     def _production_guards(self) -> Self:
         if self.cookie_samesite == "none" and not self.cookie_secure:
@@ -84,6 +105,8 @@ class Settings(BaseSettings):
             return self
         if not self.cookie_secure:
             raise ValueError("COOKIE_SECURE must be true in production")
+        if self.rate_limit_enabled and self.redis_url is None:
+            raise ValueError("REDIS_URL is required in production: in-memory rate limits are per process")
         if self.smtp_security == "none":
             raise ValueError("SMTP_SECURITY must be starttls or tls in production")
         if self.frontend_url.scheme != "https":

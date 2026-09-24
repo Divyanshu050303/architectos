@@ -12,8 +12,8 @@ API_PORT ?= 8000
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
 
-db-up:              ## Start local Postgres and Mailpit and wait until they are ready
-	docker compose up -d --wait postgres mailpit
+db-up:              ## Start local Postgres, Redis and Mailpit and wait until they are ready
+	docker compose up -d --wait postgres redis mailpit
 
 db-down:            ## Stop local services (data volume is kept)
 	docker compose down
@@ -25,7 +25,7 @@ migration:          ## Create a migration from model changes: make migration m="
 	$(UV) alembic revision --autogenerate -m "$(m)"
 
 run:                ## Run the API with auto-reload on API_PORT (default 8000)
-	$(UV) uvicorn --factory apps.api.main:create_app --reload --port $(API_PORT)
+	$(UV) uvicorn --factory apps.api.main:create_app --reload --port $(API_PORT) --no-access-log
 
 lint:               ## Lint and check formatting
 	$(UV) ruff check $(PY_SOURCES)

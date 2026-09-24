@@ -10,7 +10,6 @@ Organizations: deletion is refused while the user is the only owner of an organi
 members; organizations the user is alone in are soft-deleted; other memberships are removed.
 """
 
-import asyncio
 import uuid
 
 from core.domain.audit.entities import AuditAction, AuditEvent
@@ -84,7 +83,7 @@ class UserService:
             user = await uow.users.get(user_id)
             if user is None or not user.can_sign_in:
                 raise SessionRevoked
-            matches = await asyncio.to_thread(self._hasher.verify, user.password_hash, password)
+            matches = await self._hasher.verify_async(user.password_hash, password)
             if not matches:
                 raise IncorrectPassword
             # First, so that being the sole owner of a shared organization aborts everything.

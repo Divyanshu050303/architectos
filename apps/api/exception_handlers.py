@@ -15,8 +15,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from apps.api.access_tokens import AccessTokenExpired, InvalidAccessToken, Unauthenticated
 from apps.api.dependencies.auth import CsrfRejected
+from apps.api.middleware.logging import route_template
+from apps.api.middleware.rate_limit import RateLimited
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import current_request_id
+from apps.api.middleware.security_headers import security_headers
 from core.domain.audit.errors import InvalidCursor
 from core.domain.errors import DomainError
 from core.domain.identity.errors import (
@@ -55,6 +58,11 @@ from core.domain.organizations.errors import (
 )
 
 logger = logging.getLogger("architectos.api")
+security_log = logging.getLogger("architectos.security")
+
+# Refusals worth observing (authentication, authorization, abuse). Logged with the error code and
+# route template only: no identifiers, tokens or personal data.
+_OBSERVED_STATUSES = {401, 403, 409, 429}
 
 # Domain error -> HTTP status. Errors not listed are 400.
 STATUS_BY_ERROR: dict[type[DomainError], int] = {
@@ -93,6 +101,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     AlreadyMember: 409,
     OwnerInvitationNotAllowed: 422,
     InvalidCursor: 422,
+    RateLimited: 429,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.
@@ -122,7 +131,9 @@ def error_response(
 
 def domain_error_response(error: DomainError) -> JSONResponse:
     challenge = BEARER_CHALLENGES.get(type(error))
-    headers = {"WWW-Authenticate": challenge} if challenge else None
+    headers = {"WWW-Authenticate": challenge} if challenge else {}
+    if isinstance(error, RateLimited):
+        headers["Retry-After"] = str(error.retry_after)
     return error_response(
         _status_for(error), error.code, error.detail_message, error.details, headers=headers
     )
@@ -135,8 +146,19 @@ def _status_for(error: DomainError) -> int:
     return 400
 
 
-async def _domain_error(_: Request, error: Exception) -> JSONResponse:
+async def _domain_error(request: Request, error: Exception) -> JSONResponse:
     assert isinstance(error, DomainError)  # noqa: S101 — registered for DomainError only
+    status = _status_for(error)
+    if status in _OBSERVED_STATUSES:
+        security_log.warning(
+            "request refused",
+            extra={
+                "code": error.code,
+                "status": status,
+                "method": request.method,
+                "route": route_template(request.scope),
+            },
+        )
     return domain_error_response(error)
 
 
@@ -167,7 +189,15 @@ async def _unexpected_error(request: Request, error: Exception) -> JSONResponse:
         exc_info=error,
         extra={"request_id": current_request_id(), "method": request.method, "path": request.url.path},
     )
-    return error_response(500, "internal_error", "Something went wrong on our side. Try again later.")
+    # Unhandled errors are answered by Starlette's outermost ServerErrorMiddleware, outside every
+    # user middleware, so the security headers are added here directly.
+    hsts = request.app.state.settings.environment == "production"
+    return error_response(
+        500,
+        "internal_error",
+        "Something went wrong on our side. Try again later.",
+        headers=security_headers(docs=False, hsts=hsts),
+    )
 
 
 def register_exception_handlers(app: FastAPI) -> None:

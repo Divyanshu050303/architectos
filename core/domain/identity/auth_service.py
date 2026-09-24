@@ -1,6 +1,5 @@
 """Authentication use cases: registration and email verification."""
 
-import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -74,7 +73,7 @@ class AuthService:
         self._policy.validate(password, email=normalized_email)
         # Always hash, including for an email that turns out to be taken: the response time
         # must not reveal which case happened.
-        password_hash = await asyncio.to_thread(self._hasher.hash, password)
+        password_hash = await self._hasher.hash_async(password)
 
         created: User | None = None
         async with self._uow as uow:

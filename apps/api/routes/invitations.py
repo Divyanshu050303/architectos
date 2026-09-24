@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Path
 
 from apps.api.dependencies.auth import CurrentUser
-from apps.api.dependencies.services import InvitationServiceDep
+from apps.api.dependencies.services import InvitationServiceDep, RateLimitsDep
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.organization import OrganizationResponse
 
@@ -31,7 +31,11 @@ TokenPath = Annotated[
     ),
 )
 async def accept_invitation(
-    invitation_token: TokenPath, current: CurrentUser, invitations: InvitationServiceDep
+    invitation_token: TokenPath,
+    current: CurrentUser,
+    invitations: InvitationServiceDep,
+    limits: RateLimitsDep,
 ) -> OrganizationResponse:
+    await limits.enforce("accept_invitation")
     joined = await invitations.accept(user=current.user, token=invitation_token)
     return OrganizationResponse.from_domain(joined)

@@ -11,6 +11,7 @@ from apps.api.dependencies.services import (
     InvitationServiceDep,
     MembershipServiceDep,
     OrganizationServiceDep,
+    RateLimitsDep,
 )
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.organization import (
@@ -59,8 +60,12 @@ async def list_organizations(current: CurrentUser, organizations: OrganizationSe
     description="You become its owner. Requires a verified email address.",
 )
 async def create_organization(
-    body: CreateOrganizationRequest, current: CurrentUser, organizations: OrganizationServiceDep
+    body: CreateOrganizationRequest,
+    current: CurrentUser,
+    organizations: OrganizationServiceDep,
+    limits: RateLimitsDep,
 ) -> OrganizationResponse:
+    await limits.enforce("create_organization", user_id=current.user.id)
     created = await organizations.create(user=current.user, name=body.name)
     return OrganizationResponse.from_domain(created)
 
@@ -214,7 +219,9 @@ async def create_invitation(
     scoped: CurrentMembership,
     current: CurrentUser,
     invitations: InvitationServiceDep,
+    limits: RateLimitsDep,
 ) -> InvitationResponse:
+    await limits.enforce("create_invitation", user_id=current.user.id)
     invitation = await invitations.invite(
         inviter=current.user, organization_id=scoped.organization.id, email=body.email, role=body.role
     )

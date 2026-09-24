@@ -10,7 +10,6 @@ Refresh strategy (see docs/security/authentication.md):
 Sessions expire ``refresh_ttl`` after login; refreshing does not extend them.
 """
 
-import asyncio
 import hmac
 import uuid
 from dataclasses import dataclass
@@ -82,7 +81,7 @@ class SessionService:
         async with self._uow as uow:
             user = await uow.users.get_by_email(normalized_email) if normalized_email else None
             password_hash = user.password_hash if user else self._hasher.dummy_hash
-            matches = await asyncio.to_thread(self._hasher.verify, password_hash, password)
+            matches = await self._hasher.verify_async(password_hash, password)
             if user is not None and (not matches or not user.can_sign_in):
                 # Failed attempts on real accounts are audited; the entry commits with this block
                 # and the refusal is raised after it. Unknown emails are not recorded.
@@ -99,7 +98,7 @@ class SessionService:
             elif user is not None:
                 if self._hasher.needs_rehash(user.password_hash):
                     # Parameters were strengthened since this hash was made; upgrade it transparently.
-                    new_hash = await asyncio.to_thread(self._hasher.hash, password)
+                    new_hash = await self._hasher.hash_async(password)
                     await uow.users.update_password_hash(user.id, new_hash)
 
                 now = self._clock()

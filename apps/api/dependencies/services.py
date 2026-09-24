@@ -10,6 +10,7 @@ from apps.api.config import Settings
 from apps.api.email.mailer import BackgroundMailer
 from apps.api.email.messages import Links
 from apps.api.email.transport import EmailTransport
+from apps.api.middleware.rate_limit import RateLimiter, RateLimits
 from core.domain.audit.audit_service import AuditService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
@@ -73,8 +74,8 @@ def get_mailer(
 
 
 @cache
-def _password_hasher() -> PasswordHasher:
-    return PasswordHasher()
+def _password_hasher(max_concurrency: int) -> PasswordHasher:
+    return PasswordHasher(max_concurrency=max_concurrency)
 
 
 @cache
@@ -92,7 +93,7 @@ def get_auth_service(
 ) -> AuthService:
     return AuthService(
         SqlAlchemyUnitOfWork(db, client),
-        hasher=_password_hasher(),
+        hasher=_password_hasher(settings.password_hash_concurrency),
         policy=_password_policy(settings.password_min_length),
         mailer=mailer,
         verification=VerificationSettings(
@@ -111,7 +112,7 @@ def get_session_service(
 ) -> SessionService:
     return SessionService(
         SqlAlchemyUnitOfWork(db, client),
-        hasher=_password_hasher(),
+        hasher=_password_hasher(settings.password_hash_concurrency),
         settings=SessionSettings(
             refresh_ttl=settings.refresh_token_ttl, reuse_grace=settings.refresh_reuse_grace
         ),
@@ -137,7 +138,7 @@ def get_password_service(
 ) -> PasswordService:
     return PasswordService(
         SqlAlchemyUnitOfWork(db, client),
-        hasher=_password_hasher(),
+        hasher=_password_hasher(settings.password_hash_concurrency),
         policy=_password_policy(settings.password_min_length),
         mailer=mailer,
         settings=ResetSettings(ttl=settings.password_reset_ttl, cooldown=settings.password_reset_cooldown),
@@ -153,7 +154,7 @@ def get_user_service(
 ) -> UserService:
     return UserService(
         SqlAlchemyUnitOfWork(db, client),
-        hasher=_password_hasher(),
+        hasher=_password_hasher(settings.password_hash_concurrency),
         avatar_hosts=frozenset(host.lower() for host in settings.avatar_url_allowed_hosts),
         clock=clock,
     )
@@ -201,3 +202,11 @@ def get_audit_service(db: DbSession) -> AuditService:
 
 
 AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
+
+
+def get_rate_limits(request: Request, settings: AppSettings, client: Client) -> RateLimits:
+    limiter: RateLimiter = request.app.state.rate_limiter
+    return RateLimits(limiter, client_ip=client.ip_address, enabled=settings.rate_limit_enabled)
+
+
+RateLimitsDep = Annotated[RateLimits, Depends(get_rate_limits)]

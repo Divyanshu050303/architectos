@@ -6,7 +6,6 @@ and a "password changed" notice to the account's email. They differ in which ses
 - change: the session making the change stays signed in; every other one is signed out.
 """
 
-import asyncio
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
@@ -103,7 +102,7 @@ class PasswordService:
                 raise InvalidToken
             # A weak password raises here, before the token is consumed: the link stays usable.
             self._policy.validate(new_password, email=user.email)
-            new_hash = await asyncio.to_thread(self._hasher.hash, new_password)
+            new_hash = await self._hasher.hash_async(new_password)
 
             await uow.users.update_password_hash(user.id, new_hash)
             await uow.password_reset_tokens.mark_consumed(stored.id, now)
@@ -134,11 +133,11 @@ class PasswordService:
             user = await uow.users.get(user_id)
             if user is None or not user.can_sign_in:
                 raise IncorrectPassword
-            matches = await asyncio.to_thread(self._hasher.verify, user.password_hash, current_password)
+            matches = await self._hasher.verify_async(user.password_hash, current_password)
             if not matches:
                 raise IncorrectPassword
             self._policy.validate(new_password, email=user.email)
-            new_hash = await asyncio.to_thread(self._hasher.hash, new_password)
+            new_hash = await self._hasher.hash_async(new_password)
 
             await uow.users.update_password_hash(user.id, new_hash)
             await uow.password_reset_tokens.revoke_outstanding(user.id, now)

@@ -8,6 +8,7 @@ Hashing: Argon2id with argon2-cffi's defaults (RFC 9106 low-memory profile). Has
 parameters, so ``needs_rehash`` lets login upgrade old hashes when parameters change.
 """
 
+import asyncio
 import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -82,10 +83,30 @@ def _contains_email(password: str, email: str) -> bool:
 
 
 class PasswordHasher:
-    """Argon2id. Hashing is CPU- and memory-heavy (~64 MiB); async callers run it in a thread."""
+    """Argon2id. Hashing is CPU- and memory-heavy (~64 MiB each). Async callers use the ``*_async``
+    methods: they run in a worker thread and at most ``max_concurrency`` at once, which bounds
+    memory under a burst of logins (4 x 64 MiB by default) instead of one hash per thread."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, max_concurrency: int = 4) -> None:
         self._argon2 = _Argon2(type=Type.ID)
+        self._max_concurrency = max_concurrency
+        self._gates: dict[int, asyncio.Semaphore] = {}
+
+    def _gate(self) -> asyncio.Semaphore:
+        # One semaphore per event loop (a semaphore is bound to the loop it is first used on).
+        loop_id = id(asyncio.get_running_loop())
+        gate = self._gates.get(loop_id)
+        if gate is None:
+            gate = self._gates[loop_id] = asyncio.Semaphore(self._max_concurrency)
+        return gate
+
+    async def hash_async(self, password: str) -> str:
+        async with self._gate():
+            return await asyncio.to_thread(self.hash, password)
+
+    async def verify_async(self, password_hash: str, password: str) -> bool:
+        async with self._gate():
+            return await asyncio.to_thread(self.verify, password_hash, password)
 
     def hash(self, password: str) -> str:
         return self._argon2.hash(normalize_password(password))

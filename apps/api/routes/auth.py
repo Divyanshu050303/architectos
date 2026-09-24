@@ -12,6 +12,7 @@ from apps.api.dependencies.services import (
     AuthServiceDep,
     Client,
     PasswordServiceDep,
+    RateLimitsDep,
     SessionServiceDep,
     get_access_token_codec,
     get_clock,
@@ -56,7 +57,8 @@ REGISTRATION_ACCEPTED = (
         "already registered, so the endpoint cannot be used to discover accounts."
     ),
 )
-async def register(body: RegisterRequest, auth: AuthServiceDep) -> MessageResponse:
+async def register(body: RegisterRequest, auth: AuthServiceDep, limits: RateLimitsDep) -> MessageResponse:
+    await limits.enforce("register")
     await auth.register(email=body.email, password=body.password.get_secret_value(), name=body.name)
     return MessageResponse(message=REGISTRATION_ACCEPTED)
 
@@ -68,7 +70,10 @@ async def register(body: RegisterRequest, auth: AuthServiceDep) -> MessageRespon
     summary="Confirm an email address with the emailed token",
     description="Tokens are single-use. Verifying also invalidates any other outstanding verification link.",
 )
-async def verify_email(body: VerifyEmailRequest, auth: AuthServiceDep) -> MessageResponse:
+async def verify_email(
+    body: VerifyEmailRequest, auth: AuthServiceDep, limits: RateLimitsDep
+) -> MessageResponse:
+    await limits.enforce("verify_email")
     await auth.verify_email(token=body.token)
     return MessageResponse(message=EMAIL_VERIFIED)
 
@@ -83,7 +88,10 @@ async def verify_email(body: VerifyEmailRequest, auth: AuthServiceDep) -> Messag
         "once per cooldown period; the previous link stops working."
     ),
 )
-async def resend_verification(body: ResendVerificationRequest, auth: AuthServiceDep) -> MessageResponse:
+async def resend_verification(
+    body: ResendVerificationRequest, auth: AuthServiceDep, limits: RateLimitsDep
+) -> MessageResponse:
+    await limits.enforce("resend_verification", email=body.email)
     await auth.resend_verification(email=body.email)
     return MessageResponse(message=VERIFICATION_SENT)
 
@@ -135,7 +143,9 @@ async def login(
     codec: Codec,
     settings: AppSettings,
     clock: ClockDep,
+    limits: RateLimitsDep,
 ) -> SessionResponse:
+    await limits.enforce("login", email=body.email)
     signed_in = await sessions.login(
         email=body.email, password=body.password.get_secret_value(), client=client
     )
@@ -169,7 +179,9 @@ async def refresh(
     codec: Codec,
     settings: AppSettings,
     clock: ClockDep,
+    limits: RateLimitsDep,
 ) -> SessionResponse | JSONResponse:
+    await limits.enforce("refresh")
     token = request.cookies.get(refresh_cookie_name(settings))
     try:
         if not token:
@@ -214,7 +226,10 @@ async def logout(
         "account at most once per cooldown period; the previous link stops working."
     ),
 )
-async def forgot_password(body: ForgotPasswordRequest, passwords: PasswordServiceDep) -> MessageResponse:
+async def forgot_password(
+    body: ForgotPasswordRequest, passwords: PasswordServiceDep, limits: RateLimitsDep
+) -> MessageResponse:
+    await limits.enforce("forgot_password", email=body.email)
     await passwords.request_reset(email=body.email)
     return MessageResponse(message=RESET_REQUESTED)
 
@@ -229,6 +244,9 @@ async def forgot_password(body: ForgotPasswordRequest, passwords: PasswordServic
     summary="Choose a new password with the emailed token",
     description="Single-use. Signs the account out of every session and invalidates other reset links.",
 )
-async def reset_password(body: ResetPasswordRequest, passwords: PasswordServiceDep) -> MessageResponse:
+async def reset_password(
+    body: ResetPasswordRequest, passwords: PasswordServiceDep, limits: RateLimitsDep
+) -> MessageResponse:
+    await limits.enforce("reset_password")
     await passwords.reset(token=body.token, new_password=body.password.get_secret_value())
     return MessageResponse(message=RESET_COMPLETE)

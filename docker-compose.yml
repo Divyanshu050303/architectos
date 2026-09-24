@@ -19,6 +19,18 @@ services:
       timeout: 3s
       retries: 30
 
+  # Rate-limit counters. Port 6380 on the host to avoid a Redis already on 6379.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   # Catches all outgoing email in development. Web UI: http://127.0.0.1:8025
   mailpit:
     image: axllent/mailpit:v1.27
