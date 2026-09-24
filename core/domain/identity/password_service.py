@@ -11,6 +11,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
+from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.notifications import Mailer
 from core.domain.unit_of_work import UnitOfWork
@@ -107,8 +108,17 @@ class PasswordService:
             await uow.users.update_password_hash(user.id, new_hash)
             await uow.password_reset_tokens.mark_consumed(stored.id, now)
             await uow.password_reset_tokens.revoke_outstanding(user.id, now)
-            await uow.sessions.revoke_all_for_user(
+            revoked = await uow.sessions.revoke_all_for_user(
                 user.id, reason=SessionRevocationReason.PASSWORD_RESET, at=now
+            )
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.USER_PASSWORD_RESET,
+                    actor_user_id=user.id,
+                    resource_type="user",
+                    resource_id=user.id,
+                    metadata={"sessionsRevoked": revoked},
+                )
             )
             if not user.is_email_verified:
                 # Following the emailed link proves control of the inbox.
@@ -132,8 +142,17 @@ class PasswordService:
 
             await uow.users.update_password_hash(user.id, new_hash)
             await uow.password_reset_tokens.revoke_outstanding(user.id, now)
-            await uow.sessions.revoke_all_for_user(
+            revoked = await uow.sessions.revoke_all_for_user(
                 user.id, reason=SessionRevocationReason.PASSWORD_CHANGED, at=now, keep=current_session_id
+            )
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.USER_PASSWORD_CHANGED,
+                    actor_user_id=user.id,
+                    resource_type="user",
+                    resource_id=user.id,
+                    metadata={"sessionsRevoked": revoked},
+                )
             )
             notice = _Notice(user.email, user.name)
         await self._mailer.send_password_changed(to=notice.to, name=notice.name)

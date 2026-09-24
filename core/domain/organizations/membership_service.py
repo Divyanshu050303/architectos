@@ -8,6 +8,7 @@ data: two owners demoting each other at the same moment cannot leave the organiz
 import uuid
 from datetime import datetime
 
+from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.unit_of_work import UnitOfWork
 
 from .entities import Membership, MemberView
@@ -40,7 +41,18 @@ class MembershipService:
             )
             if target.role is role:
                 return target
-            return await uow.memberships.update_role(target.id, role)
+            updated = await uow.memberships.update_role(target.id, role)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.MEMBER_ROLE_CHANGED,
+                    actor_user_id=actor_user_id,
+                    organization_id=organization_id,
+                    resource_type="member",
+                    resource_id=target.id,
+                    metadata={"userId": str(target.user_id), "from": target.role.value, "to": role.value},
+                )
+            )
+            return updated
 
     async def remove(
         self, *, organization_id: uuid.UUID, actor_user_id: uuid.UUID, member_id: uuid.UUID
@@ -54,6 +66,20 @@ class MembershipService:
                 owner_count=await uow.memberships.count_owners(organization_id),
             )
             await uow.memberships.delete(target.id)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.MEMBER_REMOVED,
+                    actor_user_id=actor_user_id,
+                    organization_id=organization_id,
+                    resource_type="member",
+                    resource_id=target.id,
+                    metadata={
+                        "userId": str(target.user_id),
+                        "role": target.role.value,
+                        "left": actor.id == target.id,
+                    },
+                )
+            )
 
     @staticmethod
     async def _lock_and_load(
@@ -80,7 +106,34 @@ async def release_memberships(uow: UnitOfWork, *, user_id: uuid.UUID, at: dateti
     blocking = [o for o in owned if o.owner_count == 1 and o.member_count > 1]
     if blocking:
         raise SoleOwnerOfOrganization(details={"organizationIds": [str(o.organization_id) for o in blocking]})
-    for organization in owned:
-        if organization.member_count == 1:
-            await uow.organizations.soft_delete(organization.organization_id, at)
+    solo = {o.organization_id for o in owned if o.member_count == 1}
+    for organization_id in sorted(solo):
+        await uow.organizations.soft_delete(organization_id, at)
+        await uow.audit.record(
+            AuditEvent(
+                AuditAction.ORGANIZATION_DELETED,
+                actor_user_id=user_id,
+                organization_id=organization_id,
+                resource_type="organization",
+                resource_id=organization_id,
+                metadata={"reason": "account_deleted"},
+            )
+        )
+    for scoped in await uow.memberships.list_for_user(user_id):
+        if scoped.organization.id in solo:
+            continue
+        await uow.audit.record(
+            AuditEvent(
+                AuditAction.MEMBER_REMOVED,
+                actor_user_id=user_id,
+                organization_id=scoped.organization.id,
+                resource_type="member",
+                resource_id=scoped.membership.id,
+                metadata={
+                    "userId": str(user_id),
+                    "role": scoped.membership.role.value,
+                    "reason": "account_deleted",
+                },
+            )
+        )
     await uow.memberships.delete_all_for_user(user_id)

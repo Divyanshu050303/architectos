@@ -1,5 +1,6 @@
 import pytest
 
+from core.domain.client import ClientInfo
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.entities import NewUser, User
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
@@ -13,7 +14,7 @@ from core.domain.identity.errors import (
 )
 from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
-from core.domain.identity.session_service import ClientInfo, SessionService, SessionSettings
+from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
 from core.domain.identity.value_objects import normalize_avatar_url, tombstone_email
 

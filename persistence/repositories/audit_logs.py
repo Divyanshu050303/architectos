@@ -1,0 +1,68 @@
+import uuid
+
+from sqlalchemy import and_, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
+from core.domain.client import ClientInfo
+from persistence.models import AuditLogRecord
+
+MAX_USER_AGENT_LENGTH = 512
+
+
+def to_entry(record: AuditLogRecord) -> AuditEntry:
+    return AuditEntry(
+        id=record.id,
+        organization_id=record.organization_id,
+        actor_user_id=record.actor_user_id,
+        action=record.action,
+        resource_type=record.resource_type,
+        resource_id=record.resource_id,
+        metadata=dict(record.event_metadata),
+        ip_address=str(record.ip_address) if record.ip_address is not None else None,
+        user_agent=record.user_agent,
+        created_at=record.created_at,
+    )
+
+
+class SqlAlchemyAuditRepository:
+    """Append-only (the table's trigger rejects UPDATE/DELETE). The request's origin is attached
+    here, from the ClientInfo the unit of work was built with."""
+
+    def __init__(self, session: AsyncSession, client: ClientInfo) -> None:
+        self._session = session
+        self._client = client
+
+    async def record(self, event: AuditEvent) -> None:
+        user_agent = self._client.user_agent
+        self._session.add(
+            AuditLogRecord(
+                organization_id=event.organization_id,
+                actor_user_id=event.actor_user_id,
+                action=event.action.value,
+                resource_type=event.resource_type,
+                resource_id=str(event.resource_id) if event.resource_id is not None else None,
+                event_metadata=event.metadata,
+                ip_address=self._client.ip_address,
+                user_agent=user_agent[:MAX_USER_AGENT_LENGTH] if user_agent else None,
+            )
+        )
+        await self._session.flush()
+
+    async def list_for_organization(
+        self, organization_id: uuid.UUID, *, after: AuditCursor | None, limit: int
+    ) -> list[AuditEntry]:
+        # Keyset pagination on (created_at, id), served by the partial index
+        # ix_audit_logs_organization_id_created_at (organization_id, created_at, id).
+        query = select(AuditLogRecord).where(AuditLogRecord.organization_id == organization_id)
+        if after is not None:
+            query = query.where(
+                or_(
+                    AuditLogRecord.created_at < after.created_at,
+                    and_(AuditLogRecord.created_at == after.created_at, AuditLogRecord.id < after.id),
+                )
+            )
+        records = await self._session.scalars(
+            query.order_by(AuditLogRecord.created_at.desc(), AuditLogRecord.id.desc()).limit(limit)
+        )
+        return [to_entry(r) for r in records]

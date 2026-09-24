@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Self
 
+from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.identity.entities import (
     DeletedUserValues,
     NewSession,
@@ -346,6 +347,25 @@ class FakeInvitationRepository:
         self.by_id[invitation_id] = replace(self.by_id[invitation_id], accepted_at=at)
 
 
+class FakeAuditRepository:
+    """Records events in order; committed and rolled-back events are tracked separately."""
+
+    def __init__(self) -> None:
+        self.pending: list[AuditEvent] = []
+        self.events: list[AuditEvent] = []
+
+    async def record(self, event: AuditEvent) -> None:
+        self.pending.append(event)
+
+    async def list_for_organization(
+        self, organization_id: uuid.UUID, *, after: AuditCursor | None, limit: int
+    ) -> list[AuditEntry]:
+        return []
+
+    def actions(self) -> list[str]:
+        return [event.action.value for event in self.events]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -355,6 +375,7 @@ class FakeUnitOfWork:
         self._organizations = FakeOrganizationRepository(clock)
         self._memberships = FakeMembershipRepository(self._organizations, clock)
         self._invitations = FakeInvitationRepository()
+        self._audit = FakeAuditRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -386,16 +407,23 @@ class FakeUnitOfWork:
     def invitations(self) -> FakeInvitationRepository:
         return self._invitations
 
+    @property
+    def audit(self) -> FakeAuditRepository:
+        return self._audit
+
     async def __aenter__(self) -> Self:
         return self
 
     async def __aexit__(
         self, exc_type: type[BaseException] | None, exc: BaseException | None, tb: TracebackType | None
     ) -> None:
+        # Audit entries share the transaction: kept on commit, discarded on rollback.
         if exc_type is None:
             self.commits += 1
+            self._audit.events.extend(self._audit.pending)
         else:
             self.rollbacks += 1
+        self._audit.pending.clear()
 
 
 @dataclass(frozen=True)

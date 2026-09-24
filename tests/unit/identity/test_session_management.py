@@ -2,11 +2,12 @@ from datetime import timedelta
 
 import pytest
 
+from core.domain.client import ClientInfo
 from core.domain.identity.entities import NewUser, User
 from core.domain.identity.enums import SessionRevocationReason
 from core.domain.identity.errors import InvalidRefreshToken, SessionNotFound
 from core.domain.identity.passwords import PasswordHasher
-from core.domain.identity.session_service import ClientInfo, SessionService, SessionSettings, SignedIn
+from core.domain.identity.session_service import SessionService, SessionSettings, SignedIn
 from core.domain.identity.tokens import format_refresh_token
 
 from .fakes import FakeClock, FakeUnitOfWork

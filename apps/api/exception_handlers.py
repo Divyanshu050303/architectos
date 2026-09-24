@@ -17,6 +17,7 @@ from apps.api.access_tokens import AccessTokenExpired, InvalidAccessToken, Unaut
 from apps.api.dependencies.auth import CsrfRejected
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import current_request_id
+from core.domain.audit.errors import InvalidCursor
 from core.domain.errors import DomainError
 from core.domain.identity.errors import (
     AccountDisabled,
@@ -91,6 +92,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvitationEmailMismatch: 403,
     AlreadyMember: 409,
     OwnerInvitationNotAllowed: 422,
+    InvalidCursor: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

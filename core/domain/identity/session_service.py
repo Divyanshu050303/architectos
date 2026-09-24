@@ -16,6 +16,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
+from core.domain.audit.entities import AuditAction, AuditEvent
+from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
 from core.domain.unit_of_work import UnitOfWork
 
@@ -47,12 +49,6 @@ class SessionSettings:
 
 
 @dataclass(frozen=True, slots=True)
-class ClientInfo:
-    user_agent: str | None = None
-    ip_address: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class SignedIn:
     """``refresh_token`` is the raw secret for the client; it is stored only as a hash."""
 
@@ -81,32 +77,57 @@ class SessionService:
         except InvalidEmail:
             normalized_email = None
 
+        signed_in: SignedIn | None = None
+        refusal: type[InvalidCredentials | AccountDisabled] = InvalidCredentials
         async with self._uow as uow:
             user = await uow.users.get_by_email(normalized_email) if normalized_email else None
             password_hash = user.password_hash if user else self._hasher.dummy_hash
             matches = await asyncio.to_thread(self._hasher.verify, password_hash, password)
-            if user is None or not matches:
-                raise InvalidCredentials
-            if not user.can_sign_in:
-                raise AccountDisabled
-            if self._hasher.needs_rehash(user.password_hash):
-                # Parameters were strengthened since this hash was made; upgrade it transparently.
-                new_hash = await asyncio.to_thread(self._hasher.hash, password)
-                await uow.users.update_password_hash(user.id, new_hash)
-
-            now = self._clock()
-            secret = generate_token()
-            session = await uow.sessions.add(
-                NewSession(
-                    user_id=user.id,
-                    refresh_token_hash=hash_token(secret),
-                    expires_at=now + self._settings.refresh_ttl,
-                    created_at=now,
-                    user_agent=(client.user_agent or None) and client.user_agent[:MAX_USER_AGENT_LENGTH],
-                    ip_address=client.ip_address,
+            if user is not None and (not matches or not user.can_sign_in):
+                # Failed attempts on real accounts are audited; the entry commits with this block
+                # and the refusal is raised after it. Unknown emails are not recorded.
+                refusal = InvalidCredentials if not matches else AccountDisabled
+                await uow.audit.record(
+                    AuditEvent(
+                        AuditAction.USER_LOGIN_FAILED,
+                        actor_user_id=None,
+                        resource_type="user",
+                        resource_id=user.id,
+                        metadata={"reason": "wrong_password" if not matches else "account_disabled"},
+                    )
                 )
-            )
-        return SignedIn(user=user, session=session, refresh_token=format_refresh_token(session.id, secret))
+            elif user is not None:
+                if self._hasher.needs_rehash(user.password_hash):
+                    # Parameters were strengthened since this hash was made; upgrade it transparently.
+                    new_hash = await asyncio.to_thread(self._hasher.hash, password)
+                    await uow.users.update_password_hash(user.id, new_hash)
+
+                now = self._clock()
+                secret = generate_token()
+                session = await uow.sessions.add(
+                    NewSession(
+                        user_id=user.id,
+                        refresh_token_hash=hash_token(secret),
+                        expires_at=now + self._settings.refresh_ttl,
+                        created_at=now,
+                        user_agent=(client.user_agent or None) and client.user_agent[:MAX_USER_AGENT_LENGTH],
+                        ip_address=client.ip_address,
+                    )
+                )
+                await uow.audit.record(
+                    AuditEvent(
+                        AuditAction.USER_LOGIN,
+                        actor_user_id=user.id,
+                        resource_type="session",
+                        resource_id=session.id,
+                    )
+                )
+                signed_in = SignedIn(
+                    user=user, session=session, refresh_token=format_refresh_token(session.id, secret)
+                )
+        if signed_in is None:
+            raise refusal
+        return signed_in
 
     async def refresh(self, *, refresh_token: str) -> SignedIn:
         parsed = parse_refresh_token(refresh_token)
@@ -144,6 +165,18 @@ class SessionService:
                 raise RefreshConflict
             # A rotated-out token came back after the grace window: two parties hold this session.
             await uow.sessions.revoke(session.id, reason=SessionRevocationReason.TOKEN_REUSE, at=now)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.SESSION_REVOKED,
+                    actor_user_id=None,
+                    resource_type="session",
+                    resource_id=session.id,
+                    metadata={
+                        "reason": SessionRevocationReason.TOKEN_REUSE.value,
+                        "userId": str(session.user_id),
+                    },
+                )
+            )
         # Raised outside the block so the revocation is committed rather than rolled back.
         raise InvalidRefreshToken
 
@@ -163,6 +196,14 @@ class SessionService:
             known = [session.refresh_token_hash, session.previous_refresh_token_hash]
             if any(h is not None and hmac.compare_digest(presented, h) for h in known):
                 await uow.sessions.revoke(session.id, reason=SessionRevocationReason.LOGOUT, at=self._clock())
+                await uow.audit.record(
+                    AuditEvent(
+                        AuditAction.USER_LOGOUT,
+                        actor_user_id=session.user_id,
+                        resource_type="session",
+                        resource_id=session.id,
+                    )
+                )
 
     async def list_sessions(self, *, user_id: uuid.UUID) -> list[Session]:
         async with self._uow as uow:
@@ -175,6 +216,15 @@ class SessionService:
             )
             if not revoked:
                 raise SessionNotFound
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.SESSION_REVOKED,
+                    actor_user_id=user_id,
+                    resource_type="session",
+                    resource_id=session_id,
+                    metadata={"reason": SessionRevocationReason.USER_REVOKED.value},
+                )
+            )
 
     async def authenticate(self, *, session_id: uuid.UUID, user_id: uuid.UUID) -> tuple[User, Session]:
         """Checks the session behind an access token is still live. One indexed read per request."""

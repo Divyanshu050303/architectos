@@ -3,7 +3,9 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from core.domain.client import ClientInfo
 from persistence.models import EmailVerificationTokenRecord, PasswordResetTokenRecord
+from persistence.repositories.audit_logs import SqlAlchemyAuditRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
@@ -20,7 +22,7 @@ class SqlAlchemyUnitOfWork:
     The session must not be in a transaction already: each ``async with`` is one transaction.
     """
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, client: ClientInfo | None = None) -> None:
         self._session = session
         self._transaction: AsyncSessionTransaction | None = None
         self.users = SqlAlchemyUserRepository(session)
@@ -32,6 +34,7 @@ class SqlAlchemyUnitOfWork:
         self.organizations = SqlAlchemyOrganizationRepository(session)
         self.memberships = SqlAlchemyMembershipRepository(session)
         self.invitations = SqlAlchemyInvitationRepository(session)
+        self.audit = SqlAlchemyAuditRepository(session, client or ClientInfo())
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

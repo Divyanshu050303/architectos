@@ -13,6 +13,7 @@ members; organizations the user is alone in are soft-deleted; other memberships 
 import asyncio
 import uuid
 
+from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.organizations.membership_service import release_memberships
 from core.domain.unit_of_work import UnitOfWork
@@ -61,8 +62,21 @@ class UserService:
             ),
             keep_avatar=not set_avatar,
         )
+        fields = [
+            name for name, changed in (("name", name is not None), ("avatarUrl", set_avatar)) if changed
+        ]
         async with self._uow as uow:
-            return await uow.users.update_profile(user_id, changes)
+            updated = await uow.users.update_profile(user_id, changes)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.USER_PROFILE_UPDATED,
+                    actor_user_id=user_id,
+                    resource_type="user",
+                    resource_id=user_id,
+                    metadata={"fields": fields},
+                )
+            )
+            return updated
 
     async def delete_account(self, *, user_id: uuid.UUID, password: str) -> None:
         now = self._clock()
@@ -89,3 +103,8 @@ class UserService:
             )
             await uow.email_verification_tokens.revoke_outstanding(user.id, now)
             await uow.password_reset_tokens.revoke_outstanding(user.id, now)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.USER_DELETED, actor_user_id=user.id, resource_type="user", resource_id=user.id
+                )
+            )

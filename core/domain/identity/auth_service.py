@@ -4,6 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 
+from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.notifications import Mailer
 from core.domain.unit_of_work import UnitOfWork
@@ -81,6 +82,14 @@ class AuthService:
                 created = await uow.users.add(
                     NewUser(email=normalized_email, name=clean_name, password_hash=password_hash)
                 )
+                await uow.audit.record(
+                    AuditEvent(
+                        AuditAction.USER_REGISTERED,
+                        actor_user_id=created.id,
+                        resource_type="user",
+                        resource_id=created.id,
+                    )
+                )
                 outgoing = await self._issue_verification(uow, created)
             except EmailAlreadyRegistered:
                 existing = await uow.users.get_by_email_for_update(normalized_email)
@@ -131,6 +140,14 @@ class AuthService:
             await uow.email_verification_tokens.revoke_outstanding(user.id, now)
             if not user.is_email_verified:
                 await uow.users.mark_email_verified(user.id, now)
+                await uow.audit.record(
+                    AuditEvent(
+                        AuditAction.USER_EMAIL_VERIFIED,
+                        actor_user_id=user.id,
+                        resource_type="user",
+                        resource_id=user.id,
+                    )
+                )
 
     async def _issue_verification(self, uow: UnitOfWork, user: User) -> _Outgoing:
         """Replaces any outstanding verification token with a new one, unless the last was

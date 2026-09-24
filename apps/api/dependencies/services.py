@@ -10,6 +10,8 @@ from apps.api.config import Settings
 from apps.api.email.mailer import BackgroundMailer
 from apps.api.email.messages import Links
 from apps.api.email.transport import EmailTransport
+from core.domain.audit.audit_service import AuditService
+from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
@@ -35,6 +37,18 @@ AppSettings = Annotated[Settings, Depends(get_app_settings)]
 
 def get_clock() -> Clock:
     return utc_now
+
+
+def get_client_info(request: Request) -> ClientInfo:
+    """Request origin for sessions and audit entries. Behind a proxy, run uvicorn with
+    --proxy-headers and --forwarded-allow-ips so request.client is the real client."""
+    return ClientInfo(
+        user_agent=request.headers.get("user-agent"),
+        ip_address=request.client.host if request.client else None,
+    )
+
+
+Client = Annotated[ClientInfo, Depends(get_client_info)]
 
 
 def get_email_transport(request: Request) -> EmailTransport:
@@ -71,12 +85,13 @@ def _password_policy(min_length: int) -> PasswordPolicy:
 
 def get_auth_service(
     db: DbSession,
+    client: Client,
     settings: AppSettings,
     mailer: Annotated[Mailer, Depends(get_mailer)],
     clock: Annotated[Clock, Depends(get_clock)],
 ) -> AuthService:
     return AuthService(
-        SqlAlchemyUnitOfWork(db),
+        SqlAlchemyUnitOfWork(db, client),
         hasher=_password_hasher(),
         policy=_password_policy(settings.password_min_length),
         mailer=mailer,
@@ -92,10 +107,10 @@ AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
 
 
 def get_session_service(
-    db: DbSession, settings: AppSettings, clock: Annotated[Clock, Depends(get_clock)]
+    db: DbSession, client: Client, settings: AppSettings, clock: Annotated[Clock, Depends(get_clock)]
 ) -> SessionService:
     return SessionService(
-        SqlAlchemyUnitOfWork(db),
+        SqlAlchemyUnitOfWork(db, client),
         hasher=_password_hasher(),
         settings=SessionSettings(
             refresh_ttl=settings.refresh_token_ttl, reuse_grace=settings.refresh_reuse_grace
@@ -115,12 +130,13 @@ def get_access_token_codec(settings: AppSettings) -> AccessTokenCodec:
 
 def get_password_service(
     db: DbSession,
+    client: Client,
     settings: AppSettings,
     mailer: Annotated[Mailer, Depends(get_mailer)],
     clock: Annotated[Clock, Depends(get_clock)],
 ) -> PasswordService:
     return PasswordService(
-        SqlAlchemyUnitOfWork(db),
+        SqlAlchemyUnitOfWork(db, client),
         hasher=_password_hasher(),
         policy=_password_policy(settings.password_min_length),
         mailer=mailer,
@@ -133,10 +149,10 @@ PasswordServiceDep = Annotated[PasswordService, Depends(get_password_service)]
 
 
 def get_user_service(
-    db: DbSession, settings: AppSettings, clock: Annotated[Clock, Depends(get_clock)]
+    db: DbSession, client: Client, settings: AppSettings, clock: Annotated[Clock, Depends(get_clock)]
 ) -> UserService:
     return UserService(
-        SqlAlchemyUnitOfWork(db),
+        SqlAlchemyUnitOfWork(db, client),
         hasher=_password_hasher(),
         avatar_hosts=frozenset(host.lower() for host in settings.avatar_url_allowed_hosts),
         clock=clock,
@@ -147,16 +163,16 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 
 
 def get_organization_service(
-    db: DbSession, clock: Annotated[Clock, Depends(get_clock)]
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
 ) -> OrganizationService:
-    return OrganizationService(SqlAlchemyUnitOfWork(db), clock=clock)
+    return OrganizationService(SqlAlchemyUnitOfWork(db, client), clock=clock)
 
 
 OrganizationServiceDep = Annotated[OrganizationService, Depends(get_organization_service)]
 
 
-def get_membership_service(db: DbSession) -> MembershipService:
-    return MembershipService(SqlAlchemyUnitOfWork(db))
+def get_membership_service(db: DbSession, client: Client) -> MembershipService:
+    return MembershipService(SqlAlchemyUnitOfWork(db, client))
 
 
 MembershipServiceDep = Annotated[MembershipService, Depends(get_membership_service)]
@@ -164,12 +180,13 @@ MembershipServiceDep = Annotated[MembershipService, Depends(get_membership_servi
 
 def get_invitation_service(
     db: DbSession,
+    client: Client,
     settings: AppSettings,
     mailer: Annotated[Mailer, Depends(get_mailer)],
     clock: Annotated[Clock, Depends(get_clock)],
 ) -> InvitationService:
     return InvitationService(
-        SqlAlchemyUnitOfWork(db),
+        SqlAlchemyUnitOfWork(db, client),
         mailer=mailer,
         settings=InvitationSettings(ttl=settings.invitation_ttl),
         clock=clock,
@@ -177,3 +194,10 @@ def get_invitation_service(
 
 
 InvitationServiceDep = Annotated[InvitationService, Depends(get_invitation_service)]
+
+
+def get_audit_service(db: DbSession) -> AuditService:
+    return AuditService(SqlAlchemyUnitOfWork(db))
+
+
+AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]

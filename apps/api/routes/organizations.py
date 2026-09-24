@@ -1,13 +1,21 @@
 import uuid
 from dataclasses import replace
+from typing import Annotated
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Query, status
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.permissions import CurrentMembership, require_permission
-from apps.api.dependencies.services import InvitationServiceDep, MembershipServiceDep, OrganizationServiceDep
+from apps.api.dependencies.services import (
+    AuditServiceDep,
+    InvitationServiceDep,
+    MembershipServiceDep,
+    OrganizationServiceDep,
+)
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.organization import (
+    AuditEntryResponse,
+    AuditLogPage,
     ChangeRoleRequest,
     CreateInvitationRequest,
     CreateOrganizationRequest,
@@ -20,6 +28,7 @@ from apps.api.schemas.organization import (
     OrganizationResponse,
     UpdateOrganizationRequest,
 )
+from core.domain.audit.audit_service import encode_cursor
 from core.domain.organizations.permissions import Permission
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -227,4 +236,30 @@ async def revoke_invitation(
         organization_id=scoped.organization.id,
         actor_user_id=scoped.membership.user_id,
         invitation_id=invitation_id,
+    )
+
+
+# --- audit log ----------------------------------------------------------------------------------
+
+
+@router.get(
+    "/{organization_id}/audit-log",
+    response_model=AuditLogPage,
+    responses=SCOPED_ERRORS | {422: {"model": ErrorResponse, "description": "invalid_cursor"}},
+    dependencies=[require_permission(Permission.AUDIT_READ)],
+    summary="Security audit trail of an organization",
+    description=(
+        "Owners and admins. Newest first; follow nextCursor for older entries. Entries are append-only."
+    ),
+)
+async def audit_log(
+    scoped: CurrentMembership,
+    audit: AuditServiceDep,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> AuditLogPage:
+    page = await audit.organization_log(membership=scoped.membership, cursor=cursor, limit=limit)
+    return AuditLogPage(
+        entries=[AuditEntryResponse.from_entry(e) for e in page.entries],
+        next_cursor=encode_cursor(page.next_cursor) if page.next_cursor else None,
     )

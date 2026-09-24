@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 
+from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.identity.entities import User
 from core.domain.identity.tokens import MAX_TOKEN_LENGTH, generate_token, hash_token
@@ -94,6 +95,16 @@ class InvitationService:
                 expires_at=now + self._settings.ttl,
                 created_at=now,
             )
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.MEMBER_INVITED,
+                    actor_user_id=inviter.id,
+                    organization_id=organization_id,
+                    resource_type="invitation",
+                    resource_id=invitation.id,
+                    metadata={"email": invitee_email, "role": role.value},
+                )
+            )
             outgoing = _InvitationEmail(invitee_email, inviter.name, organization.name, role, token)
         await self._mailer.send_invitation(
             to=outgoing.to,
@@ -121,6 +132,16 @@ class InvitationService:
                 raise InvitationNotFound
             check_invitation(actor=actor.role, role=invitation.role)
             await uow.invitations.revoke(invitation.id, now)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.MEMBER_INVITATION_REVOKED,
+                    actor_user_id=actor_user_id,
+                    organization_id=organization_id,
+                    resource_type="invitation",
+                    resource_id=invitation.id,
+                    metadata={"email": invitation.email, "role": invitation.role.value},
+                )
+            )
 
     async def accept(self, *, user: User, token: str) -> OrganizationWithRole:
         if not user.is_email_verified:
@@ -146,6 +167,16 @@ class InvitationService:
                 organization_id=invitation.organization_id, user_id=user.id, role=invitation.role
             )
             await uow.invitations.mark_accepted(invitation.id, user_id=user.id, at=now)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.MEMBER_INVITATION_ACCEPTED,
+                    actor_user_id=user.id,
+                    organization_id=invitation.organization_id,
+                    resource_type="invitation",
+                    resource_id=invitation.id,
+                    metadata={"role": invitation.role.value},
+                )
+            )
             joined = await uow.memberships.get_in_active_organization(
                 organization_id=invitation.organization_id, user_id=user.id
             )

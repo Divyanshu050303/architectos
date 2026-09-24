@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import Field
 
+from core.domain.audit.entities import AuditEntry
 from core.domain.organizations.entities import Invitation, Membership, MemberView, OrganizationWithRole
 from core.domain.organizations.enums import Role
 
@@ -111,3 +113,38 @@ class InvitationResponse(ApiModel):
 
 class InvitationList(ApiModel):
     invitations: list[InvitationResponse]
+
+
+class AuditEntryResponse(ApiModel):
+    id: uuid.UUID
+    action: str = Field(examples=["member.role_changed"])
+    actor_user_id: uuid.UUID | None = Field(
+        description="Null for system actions, e.g. token-reuse revocation."
+    )
+    resource_type: str | None
+    resource_id: str | None
+    metadata: dict[str, Any]
+    ip_address: str | None
+    user_agent: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_entry(cls, entry: AuditEntry) -> AuditEntryResponse:
+        return cls(
+            id=entry.id,
+            action=entry.action,
+            actor_user_id=entry.actor_user_id,
+            resource_type=entry.resource_type,
+            resource_id=entry.resource_id,
+            metadata=entry.metadata,
+            ip_address=entry.ip_address,
+            user_agent=entry.user_agent,
+            created_at=entry.created_at,
+        )
+
+
+class AuditLogPage(ApiModel):
+    entries: list[AuditEntryResponse]
+    next_cursor: str | None = Field(
+        description="Pass as ?cursor= for the next (older) page; null at the end."
+    )

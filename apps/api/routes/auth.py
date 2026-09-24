@@ -10,6 +10,7 @@ from apps.api.dependencies.auth import require_same_origin
 from apps.api.dependencies.services import (
     AppSettings,
     AuthServiceDep,
+    Client,
     PasswordServiceDep,
     SessionServiceDep,
     get_access_token_codec,
@@ -29,7 +30,7 @@ from apps.api.schemas.common import ErrorResponse, MessageResponse
 from apps.api.schemas.users import UserResponse
 from core.domain.clock import Clock
 from core.domain.identity.errors import InvalidRefreshToken, SessionExpired
-from core.domain.identity.session_service import ClientInfo, SignedIn
+from core.domain.identity.session_service import SignedIn
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -109,13 +110,6 @@ def _session_response(
     )
 
 
-def _client_info(request: Request) -> ClientInfo:
-    return ClientInfo(
-        user_agent=request.headers.get("user-agent"),
-        ip_address=request.client.host if request.client else None,
-    )
-
-
 @router.post(
     "/login",
     response_model=SessionResponse,
@@ -135,7 +129,7 @@ def _client_info(request: Request) -> ClientInfo:
 )
 async def login(
     body: LoginRequest,
-    request: Request,
+    client: Client,
     response: Response,
     sessions: SessionServiceDep,
     codec: Codec,
@@ -143,7 +137,7 @@ async def login(
     clock: ClockDep,
 ) -> SessionResponse:
     signed_in = await sessions.login(
-        email=body.email, password=body.password.get_secret_value(), client=_client_info(request)
+        email=body.email, password=body.password.get_secret_value(), client=client
     )
     return _session_response(signed_in, response, codec=codec, settings=settings, clock=clock)
 

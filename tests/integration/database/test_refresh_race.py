@@ -10,9 +10,10 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from core.domain.client import ClientInfo
 from core.domain.identity.errors import RefreshConflict
 from core.domain.identity.passwords import PasswordHasher
-from core.domain.identity.session_service import ClientInfo, SessionService, SessionSettings
+from core.domain.identity.session_service import SessionService, SessionSettings
 from persistence.database import create_session_factory
 from persistence.models import SessionRecord, UserRecord
 from persistence.unit_of_work import SqlAlchemyUnitOfWork

@@ -7,6 +7,7 @@ can skip it.
 
 import uuid
 
+from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.identity.entities import User
 from core.domain.unit_of_work import UnitOfWork
@@ -34,6 +35,16 @@ class OrganizationService:
             membership = await uow.memberships.add(
                 organization_id=organization.id, user_id=user.id, role=Role.OWNER
             )
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.ORGANIZATION_CREATED,
+                    actor_user_id=user.id,
+                    organization_id=organization.id,
+                    resource_type="organization",
+                    resource_id=organization.id,
+                    metadata={"name": organization.name},
+                )
+            )
         return OrganizationWithRole(organization=organization, membership=membership)
 
     async def list_for_user(self, *, user_id: uuid.UUID) -> list[OrganizationWithRole]:
@@ -54,7 +65,18 @@ class OrganizationService:
         membership.require(Permission.ORGANIZATION_UPDATE)
         clean_name = normalize_organization_name(name)
         async with self._uow as uow:
-            return await uow.organizations.rename(membership.organization_id, clean_name)
+            renamed = await uow.organizations.rename(membership.organization_id, clean_name)
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.ORGANIZATION_UPDATED,
+                    actor_user_id=membership.user_id,
+                    organization_id=membership.organization_id,
+                    resource_type="organization",
+                    resource_id=membership.organization_id,
+                    metadata={"name": renamed.name},
+                )
+            )
+            return renamed
 
     async def delete(self, *, membership: Membership) -> None:
         """Soft delete: the tenant disappears for everyone (every lookup filters deleted
@@ -62,3 +84,12 @@ class OrganizationService:
         membership.require(Permission.ORGANIZATION_DELETE)
         async with self._uow as uow:
             await uow.organizations.soft_delete(membership.organization_id, self._clock())
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.ORGANIZATION_DELETED,
+                    actor_user_id=membership.user_id,
+                    organization_id=membership.organization_id,
+                    resource_type="organization",
+                    resource_id=membership.organization_id,
+                )
+            )

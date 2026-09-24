@@ -5,6 +5,7 @@ from datetime import timedelta
 import pytest
 from argon2 import PasswordHasher as Argon2
 
+from core.domain.client import ClientInfo
 from core.domain.identity.entities import NewUser, User
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import (
@@ -16,7 +17,7 @@ from core.domain.identity.errors import (
     SessionRevoked,
 )
 from core.domain.identity.passwords import PasswordHasher
-from core.domain.identity.session_service import ClientInfo, SessionService, SessionSettings
+from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.tokens import format_refresh_token, parse_refresh_token
 
 from .fakes import FakeClock, FakeUnitOfWork
