@@ -17,6 +17,8 @@ from core.domain.identity.entities import (
 )
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
+from core.domain.organizations.entities import Membership, Organization, OrganizationWithRole
+from core.domain.organizations.enums import Role
 
 
 class FakeClock:
@@ -194,12 +196,67 @@ class FakeSessionRepository:
         return len(targets)
 
 
+class FakeOrganizationRepository:
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, Organization] = {}
+        self.deleted: set[uuid.UUID] = set()
+
+    async def add(self, *, name: str) -> Organization:
+        now = self._clock()
+        organization = Organization(id=uuid.uuid7(), name=name, created_at=now, updated_at=now)
+        self.by_id[organization.id] = organization
+        return organization
+
+    async def rename(self, organization_id: uuid.UUID, name: str) -> Organization:
+        self.by_id[organization_id] = replace(
+            self.by_id[organization_id], name=name, updated_at=self._clock()
+        )
+        return self.by_id[organization_id]
+
+    async def soft_delete(self, organization_id: uuid.UUID, at: datetime) -> None:
+        self.deleted.add(organization_id)
+
+
+class FakeMembershipRepository:
+    def __init__(self, organizations: FakeOrganizationRepository, clock: FakeClock) -> None:
+        self._organizations = organizations
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, Membership] = {}
+
+    async def add(self, *, organization_id: uuid.UUID, user_id: uuid.UUID, role: Role) -> Membership:
+        membership = Membership(uuid.uuid7(), organization_id, user_id, role, self._clock())
+        self.by_id[membership.id] = membership
+        return membership
+
+    def _live(self, membership: Membership) -> bool:
+        return membership.organization_id not in self._organizations.deleted
+
+    async def get_in_active_organization(
+        self, *, organization_id: uuid.UUID, user_id: uuid.UUID
+    ) -> OrganizationWithRole | None:
+        for m in self.by_id.values():
+            if m.organization_id == organization_id and m.user_id == user_id and self._live(m):
+                return OrganizationWithRole(self._organizations.by_id[organization_id], m)
+        return None
+
+    async def list_for_user(self, user_id: uuid.UUID) -> list[OrganizationWithRole]:
+        found = [
+            OrganizationWithRole(self._organizations.by_id[m.organization_id], m)
+            for m in self.by_id.values()
+            if m.user_id == user_id and self._live(m)
+        ]
+        return sorted(found, key=lambda o: o.organization.name.lower())
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
         self._email_verification_tokens = FakeTokenRepository()
         self._sessions = FakeSessionRepository()
         self._password_reset_tokens = FakeTokenRepository()
+        self._organizations = FakeOrganizationRepository(clock)
+        self._memberships = FakeMembershipRepository(self._organizations, clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -218,6 +275,14 @@ class FakeUnitOfWork:
     @property
     def password_reset_tokens(self) -> FakeTokenRepository:
         return self._password_reset_tokens
+
+    @property
+    def organizations(self) -> FakeOrganizationRepository:
+        return self._organizations
+
+    @property
+    def memberships(self) -> FakeMembershipRepository:
+        return self._memberships
 
     async def __aenter__(self) -> Self:
         return self

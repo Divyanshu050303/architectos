@@ -10,7 +10,7 @@ from apps.api.exception_handlers import register_exception_handlers
 from apps.api.lifespan import lifespan
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import RequestIdMiddleware
-from apps.api.routes import auth, users
+from apps.api.routes import auth, organizations, users
 
 API_PREFIX = "/api/v1"
 
@@ -50,4 +50,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth.router, prefix=API_PREFIX)
     app.include_router(users.router, prefix=API_PREFIX)
+    app.include_router(organizations.router, prefix=API_PREFIX)
     return app

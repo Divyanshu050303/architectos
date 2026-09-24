@@ -35,6 +35,12 @@ from core.domain.identity.errors import (
     TokenExpired,
     WeakPassword,
 )
+from core.domain.organizations.errors import (
+    EmailNotVerified,
+    InvalidOrganizationName,
+    OrganizationNotFound,
+    PermissionDenied,
+)
 
 logger = logging.getLogger("architectos.api")
 
@@ -59,6 +65,10 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     IncorrectPassword: 400,
     InvalidAvatarUrl: 422,
     NothingToUpdate: 422,
+    OrganizationNotFound: 404,
+    PermissionDenied: 403,
+    EmailNotVerified: 403,
+    InvalidOrganizationName: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

@@ -17,6 +17,7 @@ from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
 from core.domain.notifications import Mailer
+from core.domain.organizations.organization_service import OrganizationService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 from .database import DbSession
@@ -140,3 +141,12 @@ def get_user_service(
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+
+
+def get_organization_service(
+    db: DbSession, clock: Annotated[Clock, Depends(get_clock)]
+) -> OrganizationService:
+    return OrganizationService(SqlAlchemyUnitOfWork(db), clock=clock)
+
+
+OrganizationServiceDep = Annotated[OrganizationService, Depends(get_organization_service)]

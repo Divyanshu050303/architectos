@@ -9,6 +9,7 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
+from core.domain.organizations.repository import MembershipRepository, OrganizationRepository
 
 
 class UnitOfWork(Protocol):
@@ -23,6 +24,12 @@ class UnitOfWork(Protocol):
 
     @property
     def password_reset_tokens(self) -> SingleUseTokenRepository: ...
+
+    @property
+    def organizations(self) -> OrganizationRepository: ...
+
+    @property
+    def memberships(self) -> MembershipRepository: ...
 
     async def __aenter__(self) -> Self: ...
 
