@@ -5,7 +5,8 @@ from pydantic import Field
 
 from core.domain.identity.entities import Session, User
 
-from .common import ApiModel
+from .common import ApiModel, RequestModel
+from .fields import PasswordInput
 
 
 class UserResponse(ApiModel):
@@ -57,3 +58,15 @@ class SessionItem(ApiModel):
 
 class SessionList(ApiModel):
     sessions: list[SessionItem]
+
+
+class UpdateProfileRequest(RequestModel):
+    """Only the fields present are changed. ``avatarUrl: null`` removes the avatar. Email cannot be
+    changed here (unknown fields are rejected)."""
+
+    name: str | None = Field(default=None, max_length=200)
+    avatar_url: str | None = Field(default=None, max_length=4096)
+
+
+class DeleteAccountRequest(RequestModel):
+    password: PasswordInput = Field(description="Your current password, to confirm.")

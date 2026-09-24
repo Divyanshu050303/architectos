@@ -4,10 +4,16 @@ from fastapi import APIRouter, Response, status
 
 from apps.api.cookies import clear_refresh_cookie
 from apps.api.dependencies.auth import CurrentUser
-from apps.api.dependencies.services import AppSettings, PasswordServiceDep, SessionServiceDep
+from apps.api.dependencies.services import AppSettings, PasswordServiceDep, SessionServiceDep, UserServiceDep
 from apps.api.schemas.auth import ChangePasswordRequest
 from apps.api.schemas.common import ErrorResponse
-from apps.api.schemas.users import SessionItem, SessionList, UserResponse
+from apps.api.schemas.users import (
+    DeleteAccountRequest,
+    SessionItem,
+    SessionList,
+    UpdateProfileRequest,
+    UserResponse,
+)
 
 router = APIRouter(prefix="/me", tags=["users"])
 
@@ -84,3 +90,51 @@ async def change_password(
         current_password=body.current_password.get_secret_value(),
         new_password=body.new_password.get_secret_value(),
     )
+
+
+@router.patch(
+    "",
+    response_model=UserResponse,
+    responses={
+        401: {"model": ErrorResponse},
+        422: {"model": ErrorResponse, "description": "invalid_name, invalid_avatar_url, nothing_to_update"},
+    },
+    summary="Update your profile",
+    description=(
+        "Name and avatar only. Email changes need a dedicated verified workflow and are rejected here."
+    ),
+)
+async def update_profile(
+    body: UpdateProfileRequest, current: CurrentUser, users: UserServiceDep
+) -> UserResponse:
+    user = await users.update_profile(
+        user_id=current.user.id,
+        name=body.name,
+        avatar_url=body.avatar_url,
+        set_avatar="avatar_url" in body.model_fields_set,
+    )
+    return UserResponse.from_user(user)
+
+
+@router.delete(
+    "",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        400: {"model": ErrorResponse, "description": "incorrect_password"},
+        401: {"model": ErrorResponse},
+    },
+    summary="Delete your account",
+    description=(
+        "Requires your current password. The account is deactivated and its personal data replaced "
+        "immediately; every session ends. The email address can be registered again."
+    ),
+)
+async def delete_account(
+    body: DeleteAccountRequest,
+    current: CurrentUser,
+    users: UserServiceDep,
+    settings: AppSettings,
+    response: Response,
+) -> None:
+    await users.delete_account(user_id=current.user.id, password=body.password.get_secret_value())
+    clear_refresh_cookie(response, settings)

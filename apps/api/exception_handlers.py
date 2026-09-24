@@ -21,11 +21,13 @@ from core.domain.errors import DomainError
 from core.domain.identity.errors import (
     AccountDisabled,
     IncorrectPassword,
+    InvalidAvatarUrl,
     InvalidCredentials,
     InvalidEmail,
     InvalidName,
     InvalidRefreshToken,
     InvalidToken,
+    NothingToUpdate,
     RefreshConflict,
     SessionExpired,
     SessionNotFound,
@@ -55,6 +57,8 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     CsrfRejected: 403,
     SessionNotFound: 404,
     IncorrectPassword: 400,
+    InvalidAvatarUrl: 422,
+    NothingToUpdate: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

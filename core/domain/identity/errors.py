@@ -88,3 +88,13 @@ class IncorrectPassword(DomainError):
 
     code = "incorrect_password"
     message = "Your current password is incorrect."
+
+
+class InvalidAvatarUrl(DomainError):
+    code = "invalid_avatar_url"
+    message = "The avatar must be an https URL from an allowed image host."
+
+
+class NothingToUpdate(DomainError):
+    code = "nothing_to_update"
+    message = "Provide at least one field to update."

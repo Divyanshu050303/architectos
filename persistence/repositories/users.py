@@ -5,7 +5,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.domain.identity.entities import NewUser, User
+from core.domain.identity.entities import DeletedUserValues, NewUser, ProfileChanges, User
 from core.domain.identity.enums import UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
 from persistence.models import UserRecord
@@ -61,6 +61,36 @@ class SqlAlchemyUserRepository:
             update(UserRecord)
             .where(UserRecord.id == user_id)
             .values(password_hash=password_hash, updated_at=func.now())
+        )
+
+    async def update_profile(self, user_id: uuid.UUID, changes: ProfileChanges) -> User:
+        values: dict[str, object] = {"updated_at": func.now()}
+        if changes.name is not None:
+            values["name"] = changes.name
+        if not changes.keep_avatar:
+            values["avatar_url"] = changes.avatar_url
+        record = await self._session.scalar(
+            update(UserRecord).where(UserRecord.id == user_id).values(**values).returning(UserRecord)
+        )
+        if record is None:
+            msg = f"user {user_id} vanished inside its own request"
+            raise LookupError(msg)
+        return to_user(record)
+
+    async def soft_delete(self, user_id: uuid.UUID, *, tombstone: DeletedUserValues, at: datetime) -> None:
+        await self._session.execute(
+            update(UserRecord)
+            .where(UserRecord.id == user_id)
+            .values(
+                status=UserStatus.DELETED.value,
+                deleted_at=at,
+                email=tombstone.email,
+                name=tombstone.name,
+                password_hash=tombstone.password_hash,
+                avatar_url=None,
+                email_verified_at=None,
+                updated_at=func.now(),
+            )
         )
 
     async def add(self, user: NewUser) -> User:

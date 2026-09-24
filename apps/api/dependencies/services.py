@@ -15,6 +15,7 @@ from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
+from core.domain.identity.user_service import UserService
 from core.domain.notifications import Mailer
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -125,3 +126,17 @@ def get_password_service(
 
 
 PasswordServiceDep = Annotated[PasswordService, Depends(get_password_service)]
+
+
+def get_user_service(
+    db: DbSession, settings: AppSettings, clock: Annotated[Clock, Depends(get_clock)]
+) -> UserService:
+    return UserService(
+        SqlAlchemyUnitOfWork(db),
+        hasher=_password_hasher(),
+        avatar_hosts=frozenset(host.lower() for host in settings.avatar_url_allowed_hosts),
+        clock=clock,
+    )
+
+
+UserServiceDep = Annotated[UserService, Depends(get_user_service)]

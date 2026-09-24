@@ -15,6 +15,25 @@ class NewUser:
 
 
 @dataclass(frozen=True, slots=True)
+class ProfileChanges:
+    """Only the fields to change. ``avatar_url`` distinguishes "unchanged" (``keep_avatar``) from
+    "remove" (None)."""
+
+    name: str | None = None
+    avatar_url: str | None = None
+    keep_avatar: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class DeletedUserValues:
+    """What a deleted account's personal fields are replaced with."""
+
+    email: str
+    name: str
+    password_hash: str
+
+
+@dataclass(frozen=True, slots=True)
 class User:
     id: uuid.UUID
     email: str

@@ -6,7 +6,15 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Self
 
-from core.domain.identity.entities import NewSession, NewUser, Session, SingleUseToken, User
+from core.domain.identity.entities import (
+    DeletedUserValues,
+    NewSession,
+    NewUser,
+    ProfileChanges,
+    Session,
+    SingleUseToken,
+    User,
+)
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
 
@@ -43,6 +51,27 @@ class FakeUserRepository:
 
     async def update_password_hash(self, user_id: uuid.UUID, password_hash: str) -> None:
         self.by_id[user_id] = replace(self.by_id[user_id], password_hash=password_hash)
+
+    async def update_profile(self, user_id: uuid.UUID, changes: ProfileChanges) -> User:
+        user = self.by_id[user_id]
+        if changes.name is not None:
+            user = replace(user, name=changes.name)
+        if not changes.keep_avatar:
+            user = replace(user, avatar_url=changes.avatar_url)
+        self.by_id[user_id] = replace(user, updated_at=self._clock())
+        return self.by_id[user_id]
+
+    async def soft_delete(self, user_id: uuid.UUID, *, tombstone: DeletedUserValues, at: datetime) -> None:
+        self.by_id[user_id] = replace(
+            self.by_id[user_id],
+            status=UserStatus.DELETED,
+            deleted_at=at,
+            email=tombstone.email,
+            name=tombstone.name,
+            password_hash=tombstone.password_hash,
+            avatar_url=None,
+            email_verified_at=None,
+        )
 
     async def add(self, user: NewUser) -> User:
         if await self.get_by_email(user.email.lower()):

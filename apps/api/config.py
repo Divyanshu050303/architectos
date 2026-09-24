@@ -32,6 +32,10 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:3000"]
     )
 
+    # Hosts avatar URLs may point to (comma-separated), e.g. your image CDN. Empty: any https host.
+    # Recommended in production: third-party image URLs can track who views a profile.
+    avatar_url_allowed_hosts: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
     # NIST SP 800-63B allows 8; ASVS 5 recommends 12. Upper bound is fixed by the policy (128).
     password_min_length: int = Field(default=12, ge=8, le=128)
 
@@ -64,7 +68,7 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_timeout_seconds: float = Field(default=10, gt=0)
 
-    @field_validator("cors_allowed_origins", mode="before")
+    @field_validator("cors_allowed_origins", "avatar_url_allowed_hosts", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):

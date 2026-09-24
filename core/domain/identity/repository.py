@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from .entities import NewSession, NewUser, Session, SingleUseToken, User
+from .entities import DeletedUserValues, NewSession, NewUser, ProfileChanges, Session, SingleUseToken, User
 from .enums import SessionRevocationReason
 
 
@@ -21,6 +21,12 @@ class UserRepository(Protocol):
     async def mark_email_verified(self, user_id: uuid.UUID, at: datetime) -> None: ...
 
     async def update_password_hash(self, user_id: uuid.UUID, password_hash: str) -> None: ...
+
+    async def update_profile(self, user_id: uuid.UUID, changes: ProfileChanges) -> User: ...
+
+    async def soft_delete(self, user_id: uuid.UUID, *, tombstone: DeletedUserValues, at: datetime) -> None:
+        """Marks the account deleted and replaces its personal data in one UPDATE."""
+        ...
 
     async def add(self, user: NewUser) -> User:
         """Raises EmailAlreadyRegistered on a duplicate; the surrounding transaction stays usable."""
