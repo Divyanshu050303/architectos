@@ -12,8 +12,8 @@ API_PORT ?= 8000
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
 
-db-up:              ## Start local Postgres and wait until it accepts connections
-	docker compose up -d --wait postgres
+db-up:              ## Start local Postgres and Mailpit and wait until they are ready
+	docker compose up -d --wait postgres mailpit
 
 db-down:            ## Stop local services (data volume is kept)
 	docker compose down

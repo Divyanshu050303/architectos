@@ -14,3 +14,11 @@ class RegisterRequest(RequestModel):
     email: EmailInput
     password: PasswordInput
     name: Annotated[str, Field(max_length=200, examples=["Ada Lovelace"])]
+
+
+class VerifyEmailRequest(RequestModel):
+    token: Annotated[str, Field(min_length=1, max_length=256, description="The token from the emailed link.")]
+
+
+class ResendVerificationRequest(RequestModel):
+    email: EmailInput

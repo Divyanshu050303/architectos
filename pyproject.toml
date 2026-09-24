@@ -43,6 +43,10 @@ ignore = [
 "tests/**" = ["S101", "PLR2004", "S105", "S106"]
 "persistence/migrations/versions/**" = ["E501"]
 
+[tool.ruff.lint.pylint]
+# Services and adapters take their dependencies as keyword-only constructor arguments.
+max-args = 8
+
 [tool.ruff.lint.isort]
 known-first-party = ["apps", "core", "persistence"]
 

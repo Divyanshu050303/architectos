@@ -10,11 +10,12 @@ import pytest
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from core.domain.identity.auth_service import AuthService
+from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from persistence.database import create_session_factory
 from persistence.models import UserRecord
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
+from tests.unit.identity.fakes import RecordingMailer
 
 pytestmark = pytest.mark.integration
 
@@ -27,7 +28,13 @@ async def test_concurrent_duplicate_registrations_create_one_user(engine: AsyncE
 
     async def register(name: str) -> bool:
         async with sessions() as session:
-            service = AuthService(SqlAlchemyUnitOfWork(session), hasher=hasher, policy=policy)
+            service = AuthService(
+                SqlAlchemyUnitOfWork(session),
+                hasher=hasher,
+                policy=policy,
+                mailer=RecordingMailer(),
+                verification=VerificationSettings(),
+            )
             result = await service.register(email=EMAIL, password="correct horse battery staple", name=name)
             return result.user is not None
 

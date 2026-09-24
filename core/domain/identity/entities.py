@@ -34,3 +34,20 @@ class User:
     @property
     def can_sign_in(self) -> bool:
         return self.status is UserStatus.ACTIVE
+
+
+@dataclass(frozen=True, slots=True)
+class SingleUseToken:
+    """An emailed token (verification or password reset), as stored: only its hash."""
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    token_hash: bytes
+    expires_at: datetime
+    consumed_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime
+
+    @property
+    def is_spent(self) -> bool:
+        return self.consumed_at is not None or self.revoked_at is not None

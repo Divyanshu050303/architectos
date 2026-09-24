@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,6 +42,19 @@ class SqlAlchemyUserRepository:
         # lower(email) matches the functional unique index, so this is an index lookup.
         record = await self._session.scalar(select(UserRecord).where(func.lower(UserRecord.email) == email))
         return to_user(record) if record else None
+
+    async def get_by_email_for_update(self, email: str) -> User | None:
+        record = await self._session.scalar(
+            select(UserRecord).where(func.lower(UserRecord.email) == email).with_for_update()
+        )
+        return to_user(record) if record else None
+
+    async def mark_email_verified(self, user_id: uuid.UUID, at: datetime) -> None:
+        await self._session.execute(
+            update(UserRecord)
+            .where(UserRecord.id == user_id, UserRecord.email_verified_at.is_(None))
+            .values(email_verified_at=at, updated_at=func.now())
+        )
 
     async def add(self, user: NewUser) -> User:
         record = UserRecord(email=user.email, name=user.name, password_hash=user.password_hash)

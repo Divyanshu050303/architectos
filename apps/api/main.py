@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.config import Settings, get_settings
+from apps.api.email.transport import SmtpTransport
 from apps.api.exception_handlers import register_exception_handlers
 from apps.api.lifespan import lifespan
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
@@ -22,12 +23,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
         openapi_url="/api/openapi.json",
     )
-    app.state.settings = settings or get_settings()
+    settings = settings or get_settings()
+    app.state.settings = settings
+    app.state.email_transport = SmtpTransport(
+        host=settings.smtp_host,
+        port=settings.smtp_port,
+        security=settings.smtp_security,
+        username=settings.smtp_username,
+        password=settings.smtp_password.get_secret_value() if settings.smtp_password else None,
+        timeout_seconds=settings.smtp_timeout_seconds,
+    )
 
     register_exception_handlers(app)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=app.state.settings.cors_allowed_origins,
+        allow_origins=settings.cors_allowed_origins,
         allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "Authorization", REQUEST_ID_HEADER],
         expose_headers=[REQUEST_ID_HEADER],

@@ -16,7 +16,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import current_request_id
 from core.domain.errors import DomainError
-from core.domain.identity.errors import InvalidEmail, InvalidName, WeakPassword
+from core.domain.identity.errors import InvalidEmail, InvalidName, InvalidToken, TokenExpired, WeakPassword
 
 logger = logging.getLogger("architectos.api")
 
@@ -25,6 +25,8 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidEmail: 422,
     InvalidName: 422,
     WeakPassword: 422,
+    InvalidToken: 400,
+    TokenExpired: 400,
 }
 
 HTTP_CODES: dict[int, tuple[str, str]] = {

@@ -3,6 +3,8 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
+from persistence.models import EmailVerificationTokenRecord
+from persistence.repositories.single_use_tokens import SqlAlchemySingleUseTokenRepository
 from persistence.repositories.users import SqlAlchemyUserRepository
 
 
@@ -16,6 +18,9 @@ class SqlAlchemyUnitOfWork:
         self._session = session
         self._transaction: AsyncSessionTransaction | None = None
         self.users = SqlAlchemyUserRepository(session)
+        self.email_verification_tokens = SqlAlchemySingleUseTokenRepository(
+            session, EmailVerificationTokenRecord
+        )
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

@@ -23,3 +23,15 @@ class EmailAlreadyRegistered(DomainError):
 
     code = "email_taken"
     message = "An account with this email already exists."
+
+
+class InvalidToken(DomainError):
+    """Unknown, already used or superseded. Deliberately does not say which."""
+
+    code = "invalid_token"
+    message = "This link is invalid or has already been used."
+
+
+class TokenExpired(DomainError):
+    code = "token_expired"
+    message = "This link has expired. Request a new one."
