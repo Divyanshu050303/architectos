@@ -36,10 +36,15 @@ from core.domain.identity.errors import (
     WeakPassword,
 )
 from core.domain.organizations.errors import (
+    CannotChangeOwnRole,
     EmailNotVerified,
     InvalidOrganizationName,
+    LastOwner,
+    MemberNotFound,
     OrganizationNotFound,
     PermissionDenied,
+    RoleNotManageable,
+    SoleOwnerOfOrganization,
 )
 
 logger = logging.getLogger("architectos.api")
@@ -69,6 +74,11 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     PermissionDenied: 403,
     EmailNotVerified: 403,
     InvalidOrganizationName: 422,
+    MemberNotFound: 404,
+    CannotChangeOwnRole: 403,
+    RoleNotManageable: 403,
+    LastOwner: 409,
+    SoleOwnerOfOrganization: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

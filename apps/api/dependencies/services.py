@@ -17,6 +17,7 @@ from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
 from core.domain.notifications import Mailer
+from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -150,3 +151,10 @@ def get_organization_service(
 
 
 OrganizationServiceDep = Annotated[OrganizationService, Depends(get_organization_service)]
+
+
+def get_membership_service(db: DbSession) -> MembershipService:
+    return MembershipService(SqlAlchemyUnitOfWork(db))
+
+
+MembershipServiceDep = Annotated[MembershipService, Depends(get_membership_service)]

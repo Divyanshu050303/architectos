@@ -17,7 +17,13 @@ from core.domain.identity.entities import (
 )
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
-from core.domain.organizations.entities import Membership, Organization, OrganizationWithRole
+from core.domain.organizations.entities import (
+    Membership,
+    MemberView,
+    Organization,
+    OrganizationWithRole,
+    OwnedOrganization,
+)
 from core.domain.organizations.enums import Role
 
 
@@ -217,6 +223,9 @@ class FakeOrganizationRepository:
     async def soft_delete(self, organization_id: uuid.UUID, at: datetime) -> None:
         self.deleted.add(organization_id)
 
+    async def lock_active(self, organization_id: uuid.UUID) -> bool:
+        return organization_id in self.by_id and organization_id not in self.deleted
+
 
 class FakeMembershipRepository:
     def __init__(self, organizations: FakeOrganizationRepository, clock: FakeClock) -> None:
@@ -247,6 +256,44 @@ class FakeMembershipRepository:
             if m.user_id == user_id and self._live(m)
         ]
         return sorted(found, key=lambda o: o.organization.name.lower())
+
+    def _in(self, organization_id: uuid.UUID) -> list[Membership]:
+        return [m for m in self.by_id.values() if m.organization_id == organization_id]
+
+    async def get_for_user(self, *, organization_id: uuid.UUID, user_id: uuid.UUID) -> Membership | None:
+        return next((m for m in self._in(organization_id) if m.user_id == user_id), None)
+
+    async def get(self, *, organization_id: uuid.UUID, membership_id: uuid.UUID) -> Membership | None:
+        found = self.by_id.get(membership_id)
+        return found if found and found.organization_id == organization_id else None
+
+    async def count_owners(self, organization_id: uuid.UUID) -> int:
+        return sum(1 for m in self._in(organization_id) if m.role is Role.OWNER)
+
+    async def list_members(self, organization_id: uuid.UUID) -> list[MemberView]:
+        return [MemberView(m, "Someone", "someone@example.com", None) for m in self._in(organization_id)]
+
+    async def update_role(self, membership_id: uuid.UUID, role: Role) -> Membership:
+        self.by_id[membership_id] = replace(self.by_id[membership_id], role=role)
+        return self.by_id[membership_id]
+
+    async def delete(self, membership_id: uuid.UUID) -> None:
+        del self.by_id[membership_id]
+
+    async def owned_by(self, user_id: uuid.UUID) -> list[OwnedOrganization]:
+        owned = {
+            m.organization_id
+            for m in self.by_id.values()
+            if m.user_id == user_id and m.role is Role.OWNER and self._live(m)
+        }
+        return [
+            OwnedOrganization(org, sum(1 for m in self._in(org) if m.role is Role.OWNER), len(self._in(org)))
+            for org in sorted(owned)
+        ]
+
+    async def delete_all_for_user(self, user_id: uuid.UUID) -> None:
+        for membership_id in [m.id for m in self.by_id.values() if m.user_id == user_id]:
+            del self.by_id[membership_id]
 
 
 class FakeUnitOfWork:

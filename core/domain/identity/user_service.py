@@ -6,13 +6,15 @@ Deletion is soft, with personal data scrubbed in the same transaction:
 - email replaced with an undeliverable tombstone (the address can be registered again), name
   replaced, avatar removed, password hash replaced with a value no password verifies against;
 - every session and every outstanding verification or reset link revoked.
-Organization rules (e.g. the last owner cannot leave) are enforced by the organization domain.
+Organizations: deletion is refused while the user is the only owner of an organization with other
+members; organizations the user is alone in are soft-deleted; other memberships are removed.
 """
 
 import asyncio
 import uuid
 
 from core.domain.clock import Clock, utc_now
+from core.domain.organizations.membership_service import release_memberships
 from core.domain.unit_of_work import UnitOfWork
 
 from .entities import DeletedUserValues, ProfileChanges, User
@@ -71,6 +73,8 @@ class UserService:
             matches = await asyncio.to_thread(self._hasher.verify, user.password_hash, password)
             if not matches:
                 raise IncorrectPassword
+            # First, so that being the sole owner of a shared organization aborts everything.
+            await release_memberships(uow, user_id=user.id, at=now)
             await uow.users.soft_delete(
                 user.id,
                 tombstone=DeletedUserValues(

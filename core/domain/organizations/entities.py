@@ -38,3 +38,22 @@ class Membership:
 class OrganizationWithRole:
     organization: Organization
     membership: Membership
+
+
+@dataclass(frozen=True, slots=True)
+class MemberView:
+    """A membership with the member's public profile, as listed to the organization."""
+
+    membership: Membership
+    name: str
+    email: str
+    avatar_url: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class OwnedOrganization:
+    """For account deletion: an organization the user owns, and whether others depend on it."""
+
+    organization_id: uuid.UUID
+    owner_count: int
+    member_count: int
