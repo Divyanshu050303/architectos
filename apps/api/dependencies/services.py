@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import BackgroundTasks, Depends, Request
 
+from apps.api.access_tokens import AccessTokenCodec
 from apps.api.config import Settings
 from apps.api.email.mailer import BackgroundMailer
 from apps.api.email.messages import Links
@@ -12,6 +13,7 @@ from apps.api.email.transport import EmailTransport
 from core.domain.clock import Clock, utc_now
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
+from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.notifications import Mailer
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -80,3 +82,25 @@ def get_auth_service(
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_session_service(
+    db: DbSession, settings: AppSettings, clock: Annotated[Clock, Depends(get_clock)]
+) -> SessionService:
+    return SessionService(
+        SqlAlchemyUnitOfWork(db),
+        hasher=_password_hasher(),
+        settings=SessionSettings(
+            refresh_ttl=settings.refresh_token_ttl, reuse_grace=settings.refresh_reuse_grace
+        ),
+        clock=clock,
+    )
+
+
+SessionServiceDep = Annotated[SessionService, Depends(get_session_service)]
+
+
+def get_access_token_codec(settings: AppSettings) -> AccessTokenCodec:
+    return AccessTokenCodec(
+        secret=settings.access_token_secret.get_secret_value(), ttl=settings.access_token_ttl
+    )

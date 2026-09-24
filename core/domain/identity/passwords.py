@@ -11,7 +11,7 @@ parameters, so ``needs_rehash`` lets login upgrade old hashes when parameters ch
 import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
-from functools import cache
+from functools import cache, cached_property
 from importlib.resources import files
 
 from argon2 import PasswordHasher as _Argon2
@@ -19,6 +19,7 @@ from argon2 import Type
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 from .errors import WeakPassword
+from .tokens import generate_token
 
 ABSOLUTE_MAX_LENGTH = 128
 MIN_PERSONAL_FRAGMENT = 4
@@ -100,3 +101,9 @@ class PasswordHasher:
 
     def needs_rehash(self, password_hash: str) -> bool:
         return self._argon2.check_needs_rehash(password_hash)
+
+    @cached_property
+    def dummy_hash(self) -> str:
+        """A valid hash of a random secret, for verifying against when no account exists, so that
+        "unknown email" costs the same Argon2 work as "wrong password". Computed once."""
+        return self.hash(generate_token())

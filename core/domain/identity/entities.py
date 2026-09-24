@@ -2,7 +2,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-from .enums import UserStatus
+from .enums import SessionRevocationReason, UserStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,3 +51,32 @@ class SingleUseToken:
     @property
     def is_spent(self) -> bool:
         return self.consumed_at is not None or self.revoked_at is not None
+
+
+@dataclass(frozen=True, slots=True)
+class NewSession:
+    user_id: uuid.UUID
+    refresh_token_hash: bytes
+    expires_at: datetime
+    created_at: datetime
+    user_agent: str | None
+    ip_address: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class Session:
+    id: uuid.UUID
+    user_id: uuid.UUID
+    refresh_token_hash: bytes
+    previous_refresh_token_hash: bytes | None
+    refreshed_at: datetime | None
+    expires_at: datetime
+    last_used_at: datetime | None
+    revoked_at: datetime | None
+    revoked_reason: SessionRevocationReason | None
+    user_agent: str | None
+    ip_address: str | None
+    created_at: datetime
+
+    def is_active(self, now: datetime) -> bool:
+        return self.revoked_at is None and now < self.expires_at

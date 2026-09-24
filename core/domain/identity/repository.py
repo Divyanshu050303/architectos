@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from .entities import NewUser, SingleUseToken, User
+from .entities import NewSession, NewUser, Session, SingleUseToken, User
+from .enums import SessionRevocationReason
 
 
 class UserRepository(Protocol):
@@ -18,6 +19,8 @@ class UserRepository(Protocol):
         ...
 
     async def mark_email_verified(self, user_id: uuid.UUID, at: datetime) -> None: ...
+
+    async def update_password_hash(self, user_id: uuid.UUID, password_hash: str) -> None: ...
 
     async def add(self, user: NewUser) -> User:
         """Raises EmailAlreadyRegistered on a duplicate; the surrounding transaction stays usable."""
@@ -40,3 +43,21 @@ class SingleUseTokenRepository(Protocol):
     async def revoke_outstanding(self, user_id: uuid.UUID, at: datetime) -> None: ...
 
     async def mark_consumed(self, token_id: uuid.UUID, at: datetime) -> None: ...
+
+
+class SessionRepository(Protocol):
+    async def add(self, session: NewSession) -> Session: ...
+
+    async def get(self, session_id: uuid.UUID) -> Session | None: ...
+
+    async def get_for_update(self, session_id: uuid.UUID) -> Session | None:
+        """Locks the row: concurrent refreshes of one session are serialized."""
+        ...
+
+    async def rotate(
+        self, session_id: uuid.UUID, *, new_hash: bytes, previous_hash: bytes, at: datetime
+    ) -> None: ...
+
+    async def revoke(
+        self, session_id: uuid.UUID, *, reason: SessionRevocationReason, at: datetime
+    ) -> None: ...

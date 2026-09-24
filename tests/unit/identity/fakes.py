@@ -6,8 +6,8 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Self
 
-from core.domain.identity.entities import NewUser, SingleUseToken, User
-from core.domain.identity.enums import UserStatus
+from core.domain.identity.entities import NewSession, NewUser, Session, SingleUseToken, User
+from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
 
 
@@ -40,6 +40,9 @@ class FakeUserRepository:
         user = self.by_id[user_id]
         if user.email_verified_at is None:
             self.by_id[user_id] = replace(user, email_verified_at=at)
+
+    async def update_password_hash(self, user_id: uuid.UUID, password_hash: str) -> None:
+        self.by_id[user_id] = replace(self.by_id[user_id], password_hash=password_hash)
 
     async def add(self, user: NewUser) -> User:
         if await self.get_by_email(user.email.lower()):
@@ -88,10 +91,56 @@ class FakeTokenRepository:
         self.tokens[token_id] = replace(self.tokens[token_id], consumed_at=at)
 
 
+class FakeSessionRepository:
+    def __init__(self) -> None:
+        self.by_id: dict[uuid.UUID, Session] = {}
+
+    async def add(self, session: NewSession) -> Session:
+        stored = Session(
+            id=uuid.uuid7(),
+            user_id=session.user_id,
+            refresh_token_hash=session.refresh_token_hash,
+            previous_refresh_token_hash=None,
+            refreshed_at=None,
+            expires_at=session.expires_at,
+            last_used_at=session.created_at,
+            revoked_at=None,
+            revoked_reason=None,
+            user_agent=session.user_agent,
+            ip_address=session.ip_address,
+            created_at=session.created_at,
+        )
+        self.by_id[stored.id] = stored
+        return stored
+
+    async def get(self, session_id: uuid.UUID) -> Session | None:
+        return self.by_id.get(session_id)
+
+    async def get_for_update(self, session_id: uuid.UUID) -> Session | None:
+        return self.by_id.get(session_id)
+
+    async def rotate(
+        self, session_id: uuid.UUID, *, new_hash: bytes, previous_hash: bytes, at: datetime
+    ) -> None:
+        self.by_id[session_id] = replace(
+            self.by_id[session_id],
+            refresh_token_hash=new_hash,
+            previous_refresh_token_hash=previous_hash,
+            refreshed_at=at,
+            last_used_at=at,
+        )
+
+    async def revoke(self, session_id: uuid.UUID, *, reason: SessionRevocationReason, at: datetime) -> None:
+        session = self.by_id[session_id]
+        if session.revoked_at is None:
+            self.by_id[session_id] = replace(session, revoked_at=at, revoked_reason=reason)
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
         self._email_verification_tokens = FakeTokenRepository()
+        self._sessions = FakeSessionRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -102,6 +151,10 @@ class FakeUnitOfWork:
     @property
     def email_verification_tokens(self) -> FakeTokenRepository:
         return self._email_verification_tokens
+
+    @property
+    def sessions(self) -> FakeSessionRepository:
+        return self._sessions
 
     async def __aenter__(self) -> Self:
         return self

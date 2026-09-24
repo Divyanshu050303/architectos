@@ -1,8 +1,9 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr
 
-from .common import RequestModel
+from .common import ApiModel, RequestModel
+from .users import UserResponse
 
 # Input caps bound the work done before validation (Argon2 on megabyte-long strings is a DoS).
 # The real rules live in the domain (core/domain/identity); these only reject absurd input.
@@ -22,3 +23,17 @@ class VerifyEmailRequest(RequestModel):
 
 class ResendVerificationRequest(RequestModel):
     email: EmailInput
+
+
+class LoginRequest(RequestModel):
+    email: EmailInput
+    password: PasswordInput
+
+
+class SessionResponse(ApiModel):
+    """Returned by login and refresh. The refresh token is only ever in the HttpOnly cookie."""
+
+    access_token: str
+    token_type: Literal["Bearer"] = "Bearer"  # noqa: S105 — OAuth token type name, not a secret
+    expires_in: int = Field(description="Access token lifetime in seconds.")
+    user: UserResponse

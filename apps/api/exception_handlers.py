@@ -13,10 +13,24 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from apps.api.access_tokens import AccessTokenExpired, InvalidAccessToken, Unauthenticated
+from apps.api.dependencies.auth import CsrfRejected
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import current_request_id
 from core.domain.errors import DomainError
-from core.domain.identity.errors import InvalidEmail, InvalidName, InvalidToken, TokenExpired, WeakPassword
+from core.domain.identity.errors import (
+    AccountDisabled,
+    InvalidCredentials,
+    InvalidEmail,
+    InvalidName,
+    InvalidRefreshToken,
+    InvalidToken,
+    RefreshConflict,
+    SessionExpired,
+    SessionRevoked,
+    TokenExpired,
+    WeakPassword,
+)
 
 logger = logging.getLogger("architectos.api")
 
@@ -27,6 +41,24 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     WeakPassword: 422,
     InvalidToken: 400,
     TokenExpired: 400,
+    InvalidCredentials: 401,
+    AccountDisabled: 403,
+    InvalidRefreshToken: 401,
+    SessionExpired: 401,
+    RefreshConflict: 409,
+    SessionRevoked: 401,
+    Unauthenticated: 401,
+    InvalidAccessToken: 401,
+    AccessTokenExpired: 401,
+    CsrfRejected: 403,
+}
+
+# RFC 6750: 401s for Bearer-protected resources say how to authenticate.
+BEARER_CHALLENGES: dict[type[DomainError], str] = {
+    Unauthenticated: 'Bearer realm="architectos"',
+    InvalidAccessToken: 'Bearer realm="architectos", error="invalid_token"',
+    AccessTokenExpired: 'Bearer realm="architectos", error="invalid_token", error_description="expired"',
+    SessionRevoked: 'Bearer realm="architectos", error="invalid_token"',
 }
 
 HTTP_CODES: dict[int, tuple[str, str]] = {
@@ -35,11 +67,23 @@ HTTP_CODES: dict[int, tuple[str, str]] = {
 }
 
 
-def error_response(status: int, code: str, message: str, details: Any = None) -> JSONResponse:
+def error_response(
+    status: int, code: str, message: str, details: Any = None, *, headers: dict[str, str] | None = None
+) -> JSONResponse:
     request_id = current_request_id()
     body = {"error": {"code": code, "message": message, "details": details, "request_id": request_id}}
-    headers = {REQUEST_ID_HEADER: request_id} if request_id else None
-    return JSONResponse(status_code=status, content=body, headers=headers)
+    all_headers = dict(headers or {})
+    if request_id:
+        all_headers[REQUEST_ID_HEADER] = request_id
+    return JSONResponse(status_code=status, content=body, headers=all_headers or None)
+
+
+def domain_error_response(error: DomainError) -> JSONResponse:
+    challenge = BEARER_CHALLENGES.get(type(error))
+    headers = {"WWW-Authenticate": challenge} if challenge else None
+    return error_response(
+        _status_for(error), error.code, error.detail_message, error.details, headers=headers
+    )
 
 
 def _status_for(error: DomainError) -> int:
@@ -51,7 +95,7 @@ def _status_for(error: DomainError) -> int:
 
 async def _domain_error(_: Request, error: Exception) -> JSONResponse:
     assert isinstance(error, DomainError)  # noqa: S101 — registered for DomainError only
-    return error_response(_status_for(error), error.code, error.detail_message, error.details)
+    return domain_error_response(error)
 
 
 async def _validation_error(_: Request, error: Exception) -> JSONResponse:

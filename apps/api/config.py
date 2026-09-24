@@ -39,6 +39,21 @@ class Settings(BaseSettings):
     email_verification_ttl: timedelta = Field(default=timedelta(hours=24), gt=timedelta(0))
     email_verification_resend_cooldown: timedelta = Field(default=timedelta(seconds=60), ge=timedelta(0))
 
+    # Signs access tokens (HS256). At least 32 characters; generate with
+    # python -c "import secrets; print(secrets.token_urlsafe(48))". Required: no default.
+    access_token_secret: SecretStr = Field(min_length=32)
+    access_token_ttl: timedelta = Field(default=timedelta(minutes=15), gt=timedelta(0))
+    # Absolute session lifetime from sign-in; refreshing does not extend it.
+    refresh_token_ttl: timedelta = Field(default=timedelta(days=30), gt=timedelta(0))
+    # A rotated-out refresh token presented within this window is a concurrent refresh
+    # (another tab), not theft.
+    refresh_reuse_grace: timedelta = Field(default=timedelta(seconds=10), ge=timedelta(0))
+
+    cookie_secure: bool = True
+    cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+    # Unset: the cookie belongs to the API host only (recommended).
+    cookie_domain: str | None = None
+
     email_from: str = "ArchitectOS <no-reply@localhost>"
     smtp_host: str = "127.0.0.1"
     smtp_port: int = 1025
@@ -56,8 +71,12 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _production_guards(self) -> Self:
+        if self.cookie_samesite == "none" and not self.cookie_secure:
+            raise ValueError("COOKIE_SAMESITE=none requires COOKIE_SECURE=true")
         if self.environment != "production":
             return self
+        if not self.cookie_secure:
+            raise ValueError("COOKIE_SECURE must be true in production")
         if self.smtp_security == "none":
             raise ValueError("SMTP_SECURITY must be starttls or tls in production")
         if self.frontend_url.scheme != "https":

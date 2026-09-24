@@ -19,6 +19,7 @@ from core.domain.clock import Clock
 from tests.integration.conftest import joined_session
 from tests.unit.identity.fakes import FakeClock
 
+TEST_SECRET = "test-access-token-secret-" + "x" * 32
 TOKEN_IN_LINK = re.compile(r"[?&]token=([A-Za-z0-9_-]+)")
 
 
@@ -48,6 +49,7 @@ def settings(migrated_database_url: str) -> Settings:
         environment="test",
         database_url=migrated_database_url,
         cors_allowed_origins=["http://localhost:3000"],
+        access_token_secret=TEST_SECRET,
     )
 
 
@@ -88,5 +90,5 @@ def app(
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+    async with AsyncClient(transport=transport, base_url="https://testserver") as client:
         yield client

@@ -35,7 +35,7 @@ class SqlAlchemyUserRepository:
         self._session = session
 
     async def get(self, user_id: uuid.UUID) -> User | None:
-        record = await self._session.get(UserRecord, user_id)
+        record = await self._session.get(UserRecord, user_id, populate_existing=True)
         return to_user(record) if record else None
 
     async def get_by_email(self, email: str) -> User | None:
@@ -54,6 +54,13 @@ class SqlAlchemyUserRepository:
             update(UserRecord)
             .where(UserRecord.id == user_id, UserRecord.email_verified_at.is_(None))
             .values(email_verified_at=at, updated_at=func.now())
+        )
+
+    async def update_password_hash(self, user_id: uuid.UUID, password_hash: str) -> None:
+        await self._session.execute(
+            update(UserRecord)
+            .where(UserRecord.id == user_id)
+            .values(password_hash=password_hash, updated_at=func.now())
         )
 
     async def add(self, user: NewUser) -> User:
