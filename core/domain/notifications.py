@@ -13,3 +13,9 @@ class Mailer(Protocol):
     async def send_account_exists(self, *, to: str, name: str) -> None:
         """Someone tried to register an email that already has a verified account."""
         ...
+
+    async def send_password_reset(self, *, to: str, name: str, token: str) -> None: ...
+
+    async def send_password_changed(self, *, to: str, name: str) -> None:
+        """Security notice after a password change or reset, so an unexpected one is noticed."""
+        ...

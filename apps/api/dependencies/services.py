@@ -12,6 +12,7 @@ from apps.api.email.messages import Links
 from apps.api.email.transport import EmailTransport
 from core.domain.clock import Clock, utc_now
 from core.domain.identity.auth_service import AuthService, VerificationSettings
+from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.notifications import Mailer
@@ -48,6 +49,7 @@ def get_mailer(
         sender=settings.email_from,
         links=Links(str(settings.frontend_url)),
         verification_ttl=settings.email_verification_ttl,
+        password_reset_ttl=settings.password_reset_ttl,
     )
 
 
@@ -104,3 +106,22 @@ def get_access_token_codec(settings: AppSettings) -> AccessTokenCodec:
     return AccessTokenCodec(
         secret=settings.access_token_secret.get_secret_value(), ttl=settings.access_token_ttl
     )
+
+
+def get_password_service(
+    db: DbSession,
+    settings: AppSettings,
+    mailer: Annotated[Mailer, Depends(get_mailer)],
+    clock: Annotated[Clock, Depends(get_clock)],
+) -> PasswordService:
+    return PasswordService(
+        SqlAlchemyUnitOfWork(db),
+        hasher=_password_hasher(),
+        policy=_password_policy(settings.password_min_length),
+        mailer=mailer,
+        settings=ResetSettings(ttl=settings.password_reset_ttl, cooldown=settings.password_reset_cooldown),
+        clock=clock,
+    )
+
+
+PasswordServiceDep = Annotated[PasswordService, Depends(get_password_service)]

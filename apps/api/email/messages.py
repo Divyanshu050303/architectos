@@ -19,6 +19,9 @@ class Links:
     def verify_email(self, token: str) -> str:
         return self._page(f"/verify-email?token={token}")
 
+    def reset_password(self, token: str) -> str:
+        return self._page(f"/reset-password?token={token}")
+
     def sign_in(self) -> str:
         return self._page("/login")
 
@@ -90,3 +93,43 @@ def account_exists_email(
     return _message(
         sender=sender, to=to, subject="You already have an ArchitectOS account", text=text, html=html
     )
+
+
+def password_reset_email(*, sender: str, to: str, name: str, url: str, valid_minutes: int) -> EmailMessage:
+    text = (
+        f"Hi {name},\n\n"
+        "Someone asked to reset the password of your ArchitectOS account. To choose a new one:\n\n"
+        f"{url}\n\n"
+        f"The link works once and expires in {valid_minutes} minutes. Resetting signs you out everywhere.\n"
+        "If you did not ask for this, ignore this email; your password stays the same.\n"
+    )
+    html = _html(
+        [
+            f"Hi {escape(name)},",
+            "Someone asked to reset the password of your ArchitectOS account.",
+            f"The link works once and expires in {valid_minutes} minutes. "
+            "Resetting signs you out everywhere.",
+            "If you did not ask for this, ignore this email; your password stays the same.",
+        ],
+        button=("Choose a new password", url),
+    )
+    return _message(sender=sender, to=to, subject="Reset your password", text=text, html=html)
+
+
+def password_changed_email(*, sender: str, to: str, name: str, reset_url: str) -> EmailMessage:
+    text = (
+        f"Hi {name},\n\n"
+        "The password of your ArchitectOS account was just changed.\n\n"
+        "If this was you, there is nothing to do. If it was not, reset your password now and "
+        f"review your active sessions: {reset_url}\n"
+    )
+    html = _html(
+        [
+            f"Hi {escape(name)},",
+            "The password of your ArchitectOS account was just changed.",
+            "If this was you, there is nothing to do. If it was not, reset your password now "
+            "and review your active sessions.",
+        ],
+        button=("Reset password", reset_url),
+    )
+    return _message(sender=sender, to=to, subject="Your password was changed", text=text, html=html)

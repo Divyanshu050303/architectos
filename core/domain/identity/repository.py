@@ -72,3 +72,14 @@ class SessionRepository(Protocol):
         """Revokes the session only if it is active and belongs to ``user_id`` (one scoped UPDATE).
         Returns whether anything was revoked."""
         ...
+
+    async def revoke_all_for_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        reason: SessionRevocationReason,
+        at: datetime,
+        keep: uuid.UUID | None = None,
+    ) -> int:
+        """Revokes every active session of the user except ``keep``. Returns how many."""
+        ...

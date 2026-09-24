@@ -81,3 +81,10 @@ class SessionNotFound(DomainError):
 
     code = "session_not_found"
     message = "Session not found."
+
+
+class IncorrectPassword(DomainError):
+    """The current password given to confirm a sensitive change is wrong."""
+
+    code = "incorrect_password"
+    message = "Your current password is incorrect."

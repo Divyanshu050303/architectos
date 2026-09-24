@@ -149,12 +149,28 @@ class FakeSessionRepository:
         await self.revoke(session_id, reason=reason, at=at)
         return True
 
+    async def revoke_all_for_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        reason: SessionRevocationReason,
+        at: datetime,
+        keep: uuid.UUID | None = None,
+    ) -> int:
+        targets = [
+            s for s in self.by_id.values() if s.user_id == user_id and s.revoked_at is None and s.id != keep
+        ]
+        for session in targets:
+            await self.revoke(session.id, reason=reason, at=at)
+        return len(targets)
+
 
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
         self._email_verification_tokens = FakeTokenRepository()
         self._sessions = FakeSessionRepository()
+        self._password_reset_tokens = FakeTokenRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -169,6 +185,10 @@ class FakeUnitOfWork:
     @property
     def sessions(self) -> FakeSessionRepository:
         return self._sessions
+
+    @property
+    def password_reset_tokens(self) -> FakeTokenRepository:
+        return self._password_reset_tokens
 
     async def __aenter__(self) -> Self:
         return self
@@ -198,3 +218,9 @@ class RecordingMailer:
 
     async def send_account_exists(self, *, to: str, name: str) -> None:
         self.sent.append(SentEmail("account_exists", to))
+
+    async def send_password_reset(self, *, to: str, name: str, token: str) -> None:
+        self.sent.append(SentEmail("password_reset", to, token))
+
+    async def send_password_changed(self, *, to: str, name: str) -> None:
+        self.sent.append(SentEmail("password_changed", to))

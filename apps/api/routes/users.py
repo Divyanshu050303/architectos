@@ -4,7 +4,8 @@ from fastapi import APIRouter, Response, status
 
 from apps.api.cookies import clear_refresh_cookie
 from apps.api.dependencies.auth import CurrentUser
-from apps.api.dependencies.services import AppSettings, SessionServiceDep
+from apps.api.dependencies.services import AppSettings, PasswordServiceDep, SessionServiceDep
+from apps.api.schemas.auth import ChangePasswordRequest
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.users import SessionItem, SessionList, UserResponse
 
@@ -58,3 +59,28 @@ async def revoke_session(
     await sessions.revoke_session(user_id=current.user.id, session_id=session_id)
     if session_id == current.session.id:
         clear_refresh_cookie(response, settings)
+
+
+@router.patch(
+    "/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        400: {"model": ErrorResponse, "description": "incorrect_password"},
+        401: {"model": ErrorResponse},
+        422: {"model": ErrorResponse, "description": "weak_password"},
+    },
+    summary="Change your password",
+    description=(
+        "Requires the current password. This session stays signed in (its refresh token is unchanged); "
+        "every other session is signed out."
+    ),
+)
+async def change_password(
+    body: ChangePasswordRequest, current: CurrentUser, passwords: PasswordServiceDep
+) -> None:
+    await passwords.change(
+        user_id=current.user.id,
+        current_session_id=current.session.id,
+        current_password=body.current_password.get_secret_value(),
+        new_password=body.new_password.get_secret_value(),
+    )

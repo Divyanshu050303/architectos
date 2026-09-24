@@ -10,15 +10,18 @@ from apps.api.dependencies.auth import require_same_origin
 from apps.api.dependencies.services import (
     AppSettings,
     AuthServiceDep,
+    PasswordServiceDep,
     SessionServiceDep,
     get_access_token_codec,
     get_clock,
 )
 from apps.api.exception_handlers import domain_error_response
 from apps.api.schemas.auth import (
+    ForgotPasswordRequest,
     LoginRequest,
     RegisterRequest,
     ResendVerificationRequest,
+    ResetPasswordRequest,
     SessionResponse,
     VerifyEmailRequest,
 )
@@ -30,6 +33,8 @@ from core.domain.identity.session_service import ClientInfo, SignedIn
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
+RESET_REQUESTED = "If an account exists for this email, we sent it a link to reset the password."
+RESET_COMPLETE = "Your password was changed. Sign in with your new password."
 VERIFICATION_SENT = "If this address has an unverified account, we sent it a new verification link."
 EMAIL_VERIFIED = "Your email address is verified."
 
@@ -200,3 +205,36 @@ async def logout(
 ) -> None:
     await sessions.logout(refresh_token=request.cookies.get(refresh_cookie_name(settings)))
     clear_refresh_cookie(response, settings)
+
+
+# --- passwords ----------------------------------------------------------------------------------
+
+
+@router.post(
+    "/forgot-password",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=MessageResponse,
+    summary="Email a password reset link",
+    description=(
+        "Always 202 with the same body, whether or not an account exists. A link is sent to an active "
+        "account at most once per cooldown period; the previous link stops working."
+    ),
+)
+async def forgot_password(body: ForgotPasswordRequest, passwords: PasswordServiceDep) -> MessageResponse:
+    await passwords.request_reset(email=body.email)
+    return MessageResponse(message=RESET_REQUESTED)
+
+
+@router.post(
+    "/reset-password",
+    response_model=MessageResponse,
+    responses={
+        400: {"model": ErrorResponse, "description": "invalid_token, token_expired"},
+        422: {"model": ErrorResponse, "description": "weak_password (the link stays usable)"},
+    },
+    summary="Choose a new password with the emailed token",
+    description="Single-use. Signs the account out of every session and invalidates other reset links.",
+)
+async def reset_password(body: ResetPasswordRequest, passwords: PasswordServiceDep) -> MessageResponse:
+    await passwords.reset(token=body.token, new_password=body.password.get_secret_value())
+    return MessageResponse(message=RESET_COMPLETE)

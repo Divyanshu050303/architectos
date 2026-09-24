@@ -108,3 +108,19 @@ class SqlAlchemySessionRepository:
             .values(revoked_at=at, revoked_reason=reason.value)
         )
         return result.rowcount == 1
+
+    async def revoke_all_for_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        reason: SessionRevocationReason,
+        at: datetime,
+        keep: uuid.UUID | None = None,
+    ) -> int:
+        conditions = [SessionRecord.user_id == user_id, SessionRecord.revoked_at.is_(None)]
+        if keep is not None:
+            conditions.append(SessionRecord.id != keep)
+        result: CursorResult[tuple[()]] = await self._session.execute(  # type: ignore[assignment]
+            update(SessionRecord).where(*conditions).values(revoked_at=at, revoked_reason=reason.value)
+        )
+        return result.rowcount

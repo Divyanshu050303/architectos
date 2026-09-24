@@ -40,12 +40,14 @@ class BackgroundMailer:
         sender: str,
         links: messages.Links,
         verification_ttl: timedelta,
+        password_reset_ttl: timedelta,
     ) -> None:
         self._transport = transport
         self._background = background
         self._sender = sender
         self._links = links
         self._verification_hours = max(1, int(verification_ttl.total_seconds() // 3600))
+        self._reset_minutes = max(1, int(password_reset_ttl.total_seconds() // 60))
 
     def _queue(self, message: EmailMessage, kind: str) -> None:
         self._background.add_task(deliver, self._transport, message, kind)
@@ -69,3 +71,19 @@ class BackgroundMailer:
             reset_url=self._links.forgot_password(),
         )
         self._queue(message, "account_exists")
+
+    async def send_password_reset(self, *, to: str, name: str, token: str) -> None:
+        message = messages.password_reset_email(
+            sender=self._sender,
+            to=to,
+            name=name,
+            url=self._links.reset_password(token),
+            valid_minutes=self._reset_minutes,
+        )
+        self._queue(message, "password_reset")
+
+    async def send_password_changed(self, *, to: str, name: str) -> None:
+        message = messages.password_changed_email(
+            sender=self._sender, to=to, name=name, reset_url=self._links.forgot_password()
+        )
+        self._queue(message, "password_changed")

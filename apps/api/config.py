@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     # Durations: ISO 8601 ("PT24H", "PT60S") or [HH:MM:]SS in the environment.
     email_verification_ttl: timedelta = Field(default=timedelta(hours=24), gt=timedelta(0))
     email_verification_resend_cooldown: timedelta = Field(default=timedelta(seconds=60), ge=timedelta(0))
+    password_reset_ttl: timedelta = Field(default=timedelta(minutes=30), gt=timedelta(0))
+    password_reset_cooldown: timedelta = Field(default=timedelta(seconds=60), ge=timedelta(0))
 
     # Signs access tokens (HS256). At least 32 characters; generate with
     # python -c "import secrets; print(secrets.token_urlsafe(48))". Required: no default.

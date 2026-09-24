@@ -21,6 +21,9 @@ class UnitOfWork(Protocol):
     @property
     def sessions(self) -> SessionRepository: ...
 
+    @property
+    def password_reset_tokens(self) -> SingleUseTokenRepository: ...
+
     async def __aenter__(self) -> Self: ...
 
     async def __aexit__(

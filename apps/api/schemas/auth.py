@@ -37,3 +37,17 @@ class SessionResponse(ApiModel):
     token_type: Literal["Bearer"] = "Bearer"  # noqa: S105 — OAuth token type name, not a secret
     expires_in: int = Field(description="Access token lifetime in seconds.")
     user: UserResponse
+
+
+class ForgotPasswordRequest(RequestModel):
+    email: EmailInput
+
+
+class ResetPasswordRequest(RequestModel):
+    token: Annotated[str, Field(min_length=1, max_length=256, description="The token from the emailed link.")]
+    password: PasswordInput
+
+
+class ChangePasswordRequest(RequestModel):
+    current_password: PasswordInput
+    new_password: PasswordInput

@@ -20,6 +20,7 @@ from apps.api.middleware.request_id import current_request_id
 from core.domain.errors import DomainError
 from core.domain.identity.errors import (
     AccountDisabled,
+    IncorrectPassword,
     InvalidCredentials,
     InvalidEmail,
     InvalidName,
@@ -53,6 +54,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     AccessTokenExpired: 401,
     CsrfRejected: 403,
     SessionNotFound: 404,
+    IncorrectPassword: 400,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.
