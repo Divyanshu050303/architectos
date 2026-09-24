@@ -7,7 +7,7 @@ UV := uv run
 API_PORT ?= 8000
 
 .PHONY: install db-up db-down migrate migration run lint format typecheck test test-unit \
-        test-integration test-api migrate-check check
+        test-integration test-api test-security coverage migrate-check check
 
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
@@ -46,6 +46,12 @@ test-integration:   ## Tests against a real, migrated Postgres database
 
 test-api:           ## HTTP-level tests of every endpoint (subset of test-integration)
 	$(UV) pytest tests/integration/api
+
+test-security:      ## Security suite: endpoint sweeps, tenant isolation, leaks, traceability
+	$(UV) pytest tests/security
+
+coverage:           ## Full suite with line coverage of the API, domain and persistence code
+	$(UV) pytest --cov=apps/api --cov=core --cov=persistence --cov-report=term-missing:skip-covered
 
 migrate-check:      ## Migrations on clean databases: upgrade, downgrade, re-upgrade, no model drift
 	$(UV) pytest tests/integration/database/test_migrations.py

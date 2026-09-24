@@ -1,0 +1,111 @@
+"""Every endpoint, taken from the OpenAPI document, is either deliberately public or refuses
+requests that are not properly authenticated."""
+
+from datetime import timedelta
+
+import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient
+
+from apps.api.email.transport import InMemoryTransport
+from tests.unit.identity.fakes import FakeClock
+
+from .support import WEB, assert_error_envelope, forged_token, inventory, signed_in
+
+# Changing this set is a security decision: every other endpoint must require a Bearer token.
+PUBLIC = {
+    ("POST", "/api/v1/auth/register"),
+    ("POST", "/api/v1/auth/verify-email"),
+    ("POST", "/api/v1/auth/resend-verification"),
+    ("POST", "/api/v1/auth/login"),
+    ("POST", "/api/v1/auth/refresh"),
+    ("POST", "/api/v1/auth/logout"),
+    ("POST", "/api/v1/auth/forgot-password"),
+    ("POST", "/api/v1/auth/reset-password"),
+}
+
+
+def test_the_public_surface_is_exactly_the_expected_one(app: FastAPI) -> None:
+    public = {(op.method, op.path) for op in inventory(app) if not op.protected}
+    assert public == PUBLIC
+
+
+# The endpoint list of the authentication specification, exactly: nothing missing, nothing extra.
+SPECIFIED = PUBLIC | {
+    ("GET", "/api/v1/me"),
+    ("PATCH", "/api/v1/me"),
+    ("PATCH", "/api/v1/me/password"),
+    ("DELETE", "/api/v1/me"),
+    ("GET", "/api/v1/me/sessions"),
+    ("DELETE", "/api/v1/me/sessions/{session_id}"),
+    ("GET", "/api/v1/organizations"),
+    ("POST", "/api/v1/organizations"),
+    ("GET", "/api/v1/organizations/{organization_id}"),
+    ("PATCH", "/api/v1/organizations/{organization_id}"),
+    ("DELETE", "/api/v1/organizations/{organization_id}"),
+    ("GET", "/api/v1/organizations/{organization_id}/members"),
+    ("PATCH", "/api/v1/organizations/{organization_id}/members/{member_id}"),
+    ("DELETE", "/api/v1/organizations/{organization_id}/members/{member_id}"),
+    ("GET", "/api/v1/organizations/{organization_id}/invitations"),
+    ("POST", "/api/v1/organizations/{organization_id}/invitations"),
+    ("DELETE", "/api/v1/organizations/{organization_id}/invitations/{invitation_id}"),
+    ("POST", "/api/v1/invitations/{invitation_token}/accept"),
+    ("GET", "/api/v1/organizations/{organization_id}/audit-log"),
+}
+
+
+def test_the_api_is_exactly_the_specified_endpoint_list(app: FastAPI) -> None:
+    assert {(op.method, op.path) for op in inventory(app)} == SPECIFIED
+    assert len(SPECIFIED) == 27
+
+
+@pytest.mark.parametrize(
+    ("label", "header"),
+    [
+        ("missing", None),
+        ("empty", "Bearer "),
+        ("wrong-scheme", "Basic YWRhOnB3"),
+        ("garbage", "Bearer not-a-jwt"),
+        ("forged", f"Bearer {forged_token(secret='a-different-secret-' + 'y' * 32)}"),
+    ],
+)
+async def test_every_protected_endpoint_refuses_bad_credentials(
+    app: FastAPI, client: AsyncClient, label: str, header: str | None
+) -> None:
+    headers = {"Authorization": header} if header else {}
+    for op in (o for o in inventory(app) if o.protected):
+        response = await client.request(
+            op.method, op.url(), headers=headers, json={} if op.has_body else None
+        )
+        assert_error_envelope(response, 401)
+        assert response.headers["www-authenticate"].startswith("Bearer"), (label, op)
+
+
+async def test_every_protected_endpoint_refuses_an_expired_token(
+    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport, clock: FakeClock
+) -> None:
+    auth = await signed_in(client, outbox, "ada@example.com")
+    clock.advance(timedelta(minutes=15))
+    for op in (o for o in inventory(app) if o.protected):
+        response = await client.request(op.method, op.url(), headers=auth, json={} if op.has_body else None)
+        assert_error_envelope(response, 401, "access_token_expired")
+
+
+async def test_every_protected_endpoint_refuses_a_token_whose_session_ended(
+    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport
+) -> None:
+    auth = await signed_in(client, outbox, "ada@example.com")
+    client.cookies.clear()
+    # Log out by revoking this session through the API itself.
+    sessions = (await client.get("/api/v1/me/sessions", headers=auth)).json()["sessions"]
+    assert (await client.delete(f"/api/v1/me/sessions/{sessions[0]['id']}", headers=auth)).status_code == 204
+    for op in (o for o in inventory(app) if o.protected):
+        response = await client.request(op.method, op.url(), headers=auth, json={} if op.has_body else None)
+        assert_error_envelope(response, 401, "session_revoked")
+
+
+async def test_cookie_endpoints_refuse_cross_site_requests(app: FastAPI, client: AsyncClient) -> None:
+    for path in ("/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/logout"):
+        response = await client.post(path, json={}, headers={"Origin": "https://evil.example"})
+        assert_error_envelope(response, 403, "csrf_rejected")
+    assert WEB  # the web app's headers are what makes these pass elsewhere

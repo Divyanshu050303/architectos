@@ -1,0 +1,57 @@
+"""A member of one organization cannot reach any organization-scoped endpoint of another, and
+probing leaves the target's members, invitations and audit trail untouched."""
+
+import pytest
+from fastapi import FastAPI
+from httpx import AsyncClient
+
+from apps.api.email.transport import InMemoryTransport
+
+from .support import assert_error_envelope, inventory, signed_in
+
+
+@pytest.fixture
+async def acme(client: AsyncClient, outbox: InMemoryTransport) -> tuple[str, dict[str, str]]:
+    ada = await signed_in(client, outbox, "ada@example.com")
+    org_id: str = (await client.post("/api/v1/organizations", json={"name": "Acme"}, headers=ada)).json()[
+        "id"
+    ]
+    await client.post(
+        f"/api/v1/organizations/{org_id}/invitations",
+        json={"email": "bob@example.com", "role": "member"},
+        headers=ada,
+    )
+    return org_id, ada
+
+
+async def snapshot(client: AsyncClient, org_id: str, owner: dict[str, str]) -> tuple[object, ...]:
+    base = f"/api/v1/organizations/{org_id}"
+    return (
+        (await client.get(base, headers=owner)).json(),
+        (await client.get(f"{base}/members", headers=owner)).json(),
+        (await client.get(f"{base}/invitations", headers=owner)).json(),
+        (await client.get(f"{base}/audit-log", headers=owner)).json(),
+    )
+
+
+async def test_a_stranger_gets_404_everywhere_and_changes_nothing(
+    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport, acme: tuple[str, dict[str, str]]
+) -> None:
+    org_id, ada = acme
+    members = (await client.get(f"/api/v1/organizations/{org_id}/members", headers=ada)).json()["members"]
+    invitations = (await client.get(f"/api/v1/organizations/{org_id}/invitations", headers=ada)).json()[
+        "invitations"
+    ]
+    before = await snapshot(client, org_id, ada)
+    grace = await signed_in(client, outbox, "grace@example.com")
+    await client.post("/api/v1/organizations", json={"name": "Globex"}, headers=grace)  # she owns something
+
+    scoped = [op for op in inventory(app) if "{organization_id}" in op.path]
+    assert len(scoped) >= 10
+    for op in scoped:
+        url = op.url(organization_id=org_id, member_id=members[0]["id"], invitation_id=invitations[0]["id"])
+        body = {"name": "Hijacked", "role": "owner", "email": "mallory@example.com"} if op.has_body else None
+        response = await client.request(op.method, url, headers=grace, json=body)
+        assert_error_envelope(response, 404, "organization_not_found")
+
+    assert await snapshot(client, org_id, ada) == before
