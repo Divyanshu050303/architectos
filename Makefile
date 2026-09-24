@@ -4,8 +4,10 @@
 PY_SOURCES := apps/api core persistence tests
 UV := uv run
 
-.PHONY: install db-up db-down migrate migration lint format typecheck test test-unit \
-        test-integration migrate-check check
+API_PORT ?= 8000
+
+.PHONY: install db-up db-down migrate migration run lint format typecheck test test-unit \
+        test-integration test-api migrate-check check
 
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
@@ -21,6 +23,9 @@ migrate:            ## Apply all migrations to DATABASE_URL
 
 migration:          ## Create a migration from model changes: make migration m="describe change"
 	$(UV) alembic revision --autogenerate -m "$(m)"
+
+run:                ## Run the API with auto-reload on API_PORT (default 8000)
+	$(UV) uvicorn --factory apps.api.main:create_app --reload --port $(API_PORT)
 
 lint:               ## Lint and check formatting
 	$(UV) ruff check $(PY_SOURCES)
@@ -38,6 +43,9 @@ test-unit:          ## Pure logic tests; no database needed
 
 test-integration:   ## Tests against a real, migrated Postgres database
 	$(UV) pytest tests/integration -m integration
+
+test-api:           ## HTTP-level tests of every endpoint (subset of test-integration)
+	$(UV) pytest tests/integration/api
 
 migrate-check:      ## Migrations on clean databases: upgrade, downgrade, re-upgrade, no model drift
 	$(UV) pytest tests/integration/database/test_migrations.py

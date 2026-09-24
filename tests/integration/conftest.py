@@ -15,7 +15,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 from persistence.database import create_engine
 
@@ -75,19 +75,27 @@ async def engine(migrated_database_url: str) -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.fixture
-async def db(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
-    """A session inside an outer transaction that is always rolled back.
-
-    Code under test may commit: with ``create_savepoint`` those commits only release a
-    savepoint, and the outer rollback still discards everything.
-    """
+async def connection(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
+    """One connection per test, inside an outer transaction that is always rolled back."""
     async with engine.connect() as connection:
         transaction = await connection.begin()
-        session = AsyncSession(
-            bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
-        )
         try:
-            yield session
+            yield connection
         finally:
-            await session.close()
             await transaction.rollback()
+
+
+def joined_session(connection: AsyncConnection) -> AsyncSession:
+    """A session on the test's connection. Code under test may begin and commit transactions:
+    with ``create_savepoint`` those only open and release savepoints, and the outer rollback
+    still discards everything."""
+    return AsyncSession(bind=connection, expire_on_commit=False, join_transaction_mode="create_savepoint")
+
+
+@pytest.fixture
+async def db(connection: AsyncConnection) -> AsyncIterator[AsyncSession]:
+    session = joined_session(connection)
+    try:
+        yield session
+    finally:
+        await session.close()
