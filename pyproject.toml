@@ -1,0 +1,64 @@
+[project]
+name = "architectos"
+version = "0.1.0"
+description = "ArchitectOS backend: API, domain, persistence and engines"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "alembic>=1.16",
+    "asyncpg>=0.30",
+    "pydantic-settings>=2.10",
+    "sqlalchemy[asyncio]>=2.0.43",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18",
+    "pytest>=8.4",
+    "pytest-asyncio>=1.2",
+    "ruff>=0.13",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py314"
+extend-exclude = ["apps/web"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "S", "ASYNC", "SIM", "RUF", "PL", "PT", "DTZ", "T20"]
+ignore = [
+    "PLR2004", # magic values are fine in comparisons against documented constants
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "PLR2004", "S105", "S106"]
+"persistence/migrations/versions/**" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "core", "persistence"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["apps/api", "core", "persistence", "tests"]
+exclude = ["^apps/web/"]
+explicit_package_bases = true
+namespace_packages = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --import-mode=importlib"
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+markers = [
+    "integration: needs the Postgres test database (make db-up)",
+]
