@@ -1,0 +1,188 @@
+@import "@xyflow/react/dist/base.css";
+
+/*
+ * React Flow skin. Everything visual about nodes lives in ArchitectureNode (Tailwind);
+ * this file only restyles React Flow's own chrome so it uses design tokens.
+ */
+
+.architecture-canvas {
+  --xy-background-color: var(--background);
+  --xy-edge-stroke: var(--border-control);
+  --xy-edge-stroke-selected: var(--accent-strong);
+  --xy-connectionline-stroke: var(--accent-strong);
+  --xy-selection-background-color: color-mix(in srgb, var(--accent) 10%, transparent);
+  --xy-selection-border: 1px solid var(--accent-strong);
+  --xy-minimap-background-color: var(--surface);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--background) 70%, transparent);
+  --xy-minimap-node-background-color: var(--border-strong);
+  --xy-handle-background-color: var(--surface);
+  --xy-handle-border-color: var(--border-control);
+  --xy-attribution-background-color: transparent;
+}
+
+.architecture-canvas .react-flow__handle {
+  width: 8px;
+  height: 8px;
+  border-width: 1px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.architecture-canvas .react-flow__node:hover .react-flow__handle,
+.architecture-canvas .react-flow__node.selected .react-flow__handle,
+.architecture-canvas.is-connecting .react-flow__handle {
+  opacity: 1;
+}
+
+.architecture-canvas .react-flow__node:focus-visible {
+  outline: none;
+}
+
+.architecture-canvas .react-flow__edge-path {
+  stroke-width: 1.25;
+}
+
+.architecture-canvas .react-flow__edge.selected .react-flow__edge-path,
+.architecture-canvas .react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.architecture-canvas .react-flow__edge[data-emphasis="critical"] .react-flow__edge-path {
+  stroke: var(--danger);
+}
+
+.architecture-canvas .react-flow__edge[data-emphasis="dimmed"] .react-flow__edge-path {
+  opacity: 0.25;
+}
+
+.architecture-canvas .react-flow__minimap {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+}
+
+/* Locate / simulation highlight: subtle, and neutralised under reduced motion (globals.css). */
+@keyframes arch-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--warning) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 25%, transparent);
+  }
+}
+
+.arch-node-highlighted {
+  animation: arch-pulse 1.6s ease-in-out 2;
+}
+
+/* Simulation propagation (spec §41, §72): a quiet colour change, no motion. */
+.architecture-canvas .react-flow__edge[data-emphasis="propagation"] .react-flow__edge-path {
+  stroke: var(--danger);
+  stroke-dasharray: 6 4;
+}
+
+/* Trust boundary backdrops are visual only: clicks fall through to the pane. */
+.architecture-canvas .react-flow__node-boundary {
+  pointer-events: none !important;
+}
+
+/* Collapsed domains get the pointer cursor of a button. */
+.architecture-canvas .react-flow__node-domain {
+  cursor: pointer;
+}
+
+/*
+ * Meaningful motion (spec §100–101). CSS only, driven by classes and data-state, and
+ * only where it explains a change: panels opening/closing, proposal diff lines
+ * appearing, a new version loading and the conflict dialog. Nothing animates on hover
+ * and no card animates by default. Everything here is opt-in to motion: under
+ * prefers-reduced-motion the rules below never apply (and globals.css neutralises the
+ * rest), so state changes still happen, just without movement.
+ */
+@keyframes motion-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes motion-rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@keyframes motion-panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes motion-panel-out {
+  to {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+@keyframes motion-dialog-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+@keyframes motion-dialog-out {
+  to {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+}
+
+/* Only a `from` frame, so the node settles on its own opacity (e.g. dimmed). */
+@keyframes arch-version-changed {
+  from {
+    opacity: 0.35;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /*
+   * Content appearing, e.g. proposal diff lines or a new finding. Stagger a list by
+   * setting --motion-index on each item (0, 1, 2…).
+   */
+  .motion-appear {
+    animation: motion-rise-in 180ms ease-out backwards;
+    animation-delay: calc(min(var(--motion-index, 0), 12) * 30ms);
+  }
+
+  /* Side panels (inspector): slide in from the edge they are docked to, and back out. */
+  .motion-panel[data-state="open"] {
+    animation: motion-panel-in 180ms ease-out;
+  }
+
+  .motion-panel[data-state="closed"] {
+    animation: motion-panel-out 140ms ease-in forwards;
+  }
+
+  /* Radix dialogs keep closed content mounted until this animation ends. */
+  .motion-dialog[data-state="open"] {
+    animation: motion-dialog-in 160ms ease-out;
+  }
+
+  .motion-dialog[data-state="closed"] {
+    animation: motion-dialog-out 120ms ease-in forwards;
+  }
+
+  .motion-fade[data-state="open"] {
+    animation: motion-fade-in 160ms ease-out;
+  }
+
+  /* Version transition: components that changed in the version that just loaded fade in once. */
+  .arch-node-version-changed {
+    animation: arch-version-changed 900ms ease-out;
+  }
+}

@@ -1,0 +1,96 @@
+/*
+ * ArchitectOS design tokens (spec §13–18).
+ *
+ * Fill colours follow the spec. The spec's accent/warning/danger/info fail WCAG AA
+ * as text on light surfaces (1.8–3.9:1), so each has a darker `*-fg` companion for
+ * text and icons (4.7–6.0:1). Muted text was darkened from #747c76 to #666e68 to pass
+ * 4.5:1 on --surface-secondary.
+ */
+
+:root {
+  color-scheme: light;
+
+  --background: #f7f8f6;
+  --surface: #ffffff;
+  --surface-secondary: #f1f3f0;
+  --surface-sunken: #eceee9;
+
+  --border: #e2e5e1;
+  --border-strong: #cfd4cf;
+  --border-control: #8f978f;
+
+  --text-primary: #171a18;
+  --text-secondary: #4f5752;
+  --text-muted: #666e68;
+
+  /* AI proposals, primary actions, selection, healthy state */
+  --accent: #63d7a1;
+  --accent-strong: #35bd7d;
+  --accent-soft: #e5f8ee;
+  --accent-fg: #1b7a4f;
+  --on-accent: #0b2a1c;
+
+  --warning: #d99b35;
+  --warning-soft: #fff4dc;
+  --warning-fg: #8a5a10;
+
+  --danger: #d95757;
+  --danger-soft: #fdeaea;
+  --danger-fg: #b23a3a;
+
+  /* Deterministic calculations (spec §124: blue/technical) */
+  --info: #5c8edb;
+  --info-soft: #eaf2ff;
+  --info-fg: #2d62b0;
+
+  --ring: #35bd7d;
+  --overlay: rgb(11 14 13 / 0.32);
+
+  --shadow-subtle: 0 1px 2px rgb(23 26 24 / 0.05);
+  --shadow-raised: 0 4px 16px rgb(23 26 24 / 0.08), 0 1px 2px rgb(23 26 24 / 0.06);
+
+  --canvas-grid: #e3e6e2;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0b0e0d;
+  --surface: #111513;
+  --surface-secondary: #171c19;
+  --surface-sunken: #0e1210;
+
+  --border: #252c28;
+  --border-strong: #333c37;
+  --border-control: #5d6761;
+
+  --text-primary: #e8ece9;
+  --text-secondary: #aab2ad;
+  --text-muted: #7e8882;
+
+  --accent: #63d7a1;
+  --accent-strong: #4cc991;
+  --accent-soft: #10271c;
+  --accent-fg: #63d7a1;
+  --on-accent: #0b2a1c;
+
+  --warning: #d99b35;
+  --warning-soft: #2a2112;
+  --warning-fg: #e6b566;
+
+  --danger: #d95757;
+  --danger-soft: #2c1616;
+  --danger-fg: #f08a8a;
+
+  --info: #5c8edb;
+  --info-soft: #131d2c;
+  --info-fg: #8fb3ec;
+
+  --ring: #63d7a1;
+  --overlay: rgb(0 0 0 / 0.55);
+
+  --shadow-subtle: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-raised: 0 8px 24px rgb(0 0 0 / 0.45), 0 1px 2px rgb(0 0 0 / 0.4);
+
+  --canvas-grid: #1b211e;
+}
