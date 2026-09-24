@@ -53,3 +53,35 @@ class SoleOwnerOfOrganization(DomainError):
 
     code = "sole_owner_of_organization"
     message = "You are the only owner of an organization that has other members. Transfer ownership first."
+
+
+class InvitationNotFound(DomainError):
+    code = "invitation_not_found"
+    message = "Invitation not found."
+
+
+class InvalidInvitation(DomainError):
+    """Unknown, revoked, already accepted, or its organization was deleted. Deliberately vague."""
+
+    code = "invalid_invitation"
+    message = "This invitation is invalid or has already been used."
+
+
+class InvitationExpired(DomainError):
+    code = "invitation_expired"
+    message = "This invitation has expired. Ask for a new one."
+
+
+class InvitationEmailMismatch(DomainError):
+    code = "invitation_email_mismatch"
+    message = "This invitation was sent to a different email address. Sign in with that address."
+
+
+class AlreadyMember(DomainError):
+    code = "already_member"
+    message = "This person is already a member of the organization."
+
+
+class OwnerInvitationNotAllowed(DomainError):
+    code = "owner_invitation_not_allowed"
+    message = "Invite as admin, member or viewer. Ownership is granted by changing a member's role."

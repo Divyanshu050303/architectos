@@ -5,11 +5,14 @@ from fastapi import APIRouter, status
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.permissions import CurrentMembership, require_permission
-from apps.api.dependencies.services import MembershipServiceDep, OrganizationServiceDep
+from apps.api.dependencies.services import InvitationServiceDep, MembershipServiceDep, OrganizationServiceDep
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.organization import (
     ChangeRoleRequest,
+    CreateInvitationRequest,
     CreateOrganizationRequest,
+    InvitationList,
+    InvitationResponse,
     MemberList,
     MemberResponse,
     MembershipResponse,
@@ -161,4 +164,67 @@ async def remove_member(
 ) -> None:
     await members.remove(
         organization_id=scoped.organization.id, actor_user_id=scoped.membership.user_id, member_id=member_id
+    )
+
+
+# --- invitations --------------------------------------------------------------------------------
+
+
+@router.get(
+    "/{organization_id}/invitations",
+    response_model=InvitationList,
+    responses=SCOPED_ERRORS,
+    dependencies=[require_permission(Permission.MEMBER_INVITE)],
+    summary="Pending invitations",
+    description="Unaccepted, unrevoked invitations, newest first (expired ones included; see expiresAt).",
+)
+async def list_invitations(scoped: CurrentMembership, invitations: InvitationServiceDep) -> InvitationList:
+    found = await invitations.list_pending(membership=scoped.membership)
+    return InvitationList(invitations=[InvitationResponse.from_invitation(i) for i in found])
+
+
+@router.post(
+    "/{organization_id}/invitations",
+    status_code=status.HTTP_201_CREATED,
+    response_model=InvitationResponse,
+    responses=SCOPED_ERRORS
+    | {
+        403: {"model": ErrorResponse, "description": "permission_denied, role_not_manageable"},
+        409: {"model": ErrorResponse, "description": "already_member"},
+        422: {"model": ErrorResponse, "description": "invalid_email, owner_invitation_not_allowed"},
+    },
+    dependencies=[require_permission(Permission.MEMBER_INVITE)],
+    summary="Invite someone by email",
+    description=(
+        "Emails a single-use link valid for INVITATION_TTL. Inviting an address with a pending "
+        "invitation replaces it (the previous link stops working)."
+    ),
+)
+async def create_invitation(
+    body: CreateInvitationRequest,
+    scoped: CurrentMembership,
+    current: CurrentUser,
+    invitations: InvitationServiceDep,
+) -> InvitationResponse:
+    invitation = await invitations.invite(
+        inviter=current.user, organization_id=scoped.organization.id, email=body.email, role=body.role
+    )
+    return InvitationResponse.from_invitation(invitation)
+
+
+@router.delete(
+    "/{organization_id}/invitations/{invitation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=SCOPED_ERRORS
+    | {404: {"model": ErrorResponse, "description": "organization_not_found, invitation_not_found"}},
+    dependencies=[require_permission(Permission.MEMBER_INVITE)],
+    summary="Revoke a pending invitation",
+)
+async def revoke_invitation(
+    invitation_id: uuid.UUID, scoped: CurrentMembership, invitations: InvitationServiceDep
+) -> None:
+    await invitations.revoke(
+        organization_id=scoped.organization.id,
+        actor_user_id=scoped.membership.user_id,
+        invitation_id=invitation_id,
     )

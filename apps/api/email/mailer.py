@@ -41,6 +41,7 @@ class BackgroundMailer:
         links: messages.Links,
         verification_ttl: timedelta,
         password_reset_ttl: timedelta,
+        invitation_ttl: timedelta,
     ) -> None:
         self._transport = transport
         self._background = background
@@ -48,6 +49,7 @@ class BackgroundMailer:
         self._links = links
         self._verification_hours = max(1, int(verification_ttl.total_seconds() // 3600))
         self._reset_minutes = max(1, int(password_reset_ttl.total_seconds() // 60))
+        self._invitation_days = max(1, invitation_ttl.days)
 
     def _queue(self, message: EmailMessage, kind: str) -> None:
         self._background.add_task(deliver, self._transport, message, kind)
@@ -87,3 +89,17 @@ class BackgroundMailer:
             sender=self._sender, to=to, name=name, reset_url=self._links.forgot_password()
         )
         self._queue(message, "password_changed")
+
+    async def send_invitation(
+        self, *, to: str, inviter_name: str, organization_name: str, role: str, token: str
+    ) -> None:
+        message = messages.invitation_email(
+            sender=self._sender,
+            to=to,
+            inviter_name=inviter_name,
+            organization_name=organization_name,
+            role=role,
+            url=self._links.accept_invitation(token),
+            valid_days=self._invitation_days,
+        )
+        self._queue(message, "invitation")

@@ -11,7 +11,13 @@ that depend on the target:
 """
 
 from .enums import Role
-from .errors import CannotChangeOwnRole, LastOwner, PermissionDenied, RoleNotManageable
+from .errors import (
+    CannotChangeOwnRole,
+    LastOwner,
+    OwnerInvitationNotAllowed,
+    PermissionDenied,
+    RoleNotManageable,
+)
 from .permissions import Permission, has_permission
 
 RANK: dict[Role, int] = {Role.VIEWER: 0, Role.MEMBER: 1, Role.ADMIN: 2, Role.OWNER: 3}
@@ -40,3 +46,14 @@ def check_removal(*, actor: Role, target: Role, is_self: bool, owner_count: int)
             raise RoleNotManageable
     if target is Role.OWNER and owner_count <= 1:
         raise LastOwner
+
+
+def check_invitation(*, actor: Role, role: Role) -> None:
+    """Inviting (and revoking an invitation) follows the same hierarchy as assigning a role, and
+    nobody is invited straight in as an owner."""
+    if not has_permission(actor, Permission.MEMBER_INVITE):
+        raise PermissionDenied
+    if role is Role.OWNER:
+        raise OwnerInvitationNotAllowed
+    if not _outranks(actor, role):
+        raise RoleNotManageable

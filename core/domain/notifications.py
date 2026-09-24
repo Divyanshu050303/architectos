@@ -16,6 +16,10 @@ class Mailer(Protocol):
 
     async def send_password_reset(self, *, to: str, name: str, token: str) -> None: ...
 
+    async def send_invitation(
+        self, *, to: str, inviter_name: str, organization_name: str, role: str, token: str
+    ) -> None: ...
+
     async def send_password_changed(self, *, to: str, name: str) -> None:
         """Security notice after a password change or reset, so an unexpected one is noticed."""
         ...

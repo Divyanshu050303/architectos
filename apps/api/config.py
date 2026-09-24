@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     email_verification_resend_cooldown: timedelta = Field(default=timedelta(seconds=60), ge=timedelta(0))
     password_reset_ttl: timedelta = Field(default=timedelta(minutes=30), gt=timedelta(0))
     password_reset_cooldown: timedelta = Field(default=timedelta(seconds=60), ge=timedelta(0))
+    invitation_ttl: timedelta = Field(default=timedelta(days=7), ge=timedelta(hours=1))
 
     # Signs access tokens (HS256). At least 32 characters; generate with
     # python -c "import secrets; print(secrets.token_urlsafe(48))". Required: no default.

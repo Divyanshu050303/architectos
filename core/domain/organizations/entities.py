@@ -57,3 +57,21 @@ class OwnedOrganization:
     organization_id: uuid.UUID
     owner_count: int
     member_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class Invitation:
+    """Stored invitation; the token itself exists only in the email."""
+
+    id: uuid.UUID
+    organization_id: uuid.UUID
+    email: str
+    role: Role
+    invited_by_user_id: uuid.UUID | None
+    expires_at: datetime
+    accepted_at: datetime | None
+    revoked_at: datetime | None
+    created_at: datetime
+
+    def is_pending(self) -> bool:
+        return self.accepted_at is None and self.revoked_at is None

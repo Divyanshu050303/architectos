@@ -17,6 +17,7 @@ from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
 from core.domain.notifications import Mailer
+from core.domain.organizations.invitation_service import InvitationService, InvitationSettings
 from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
@@ -53,6 +54,7 @@ def get_mailer(
         links=Links(str(settings.frontend_url)),
         verification_ttl=settings.email_verification_ttl,
         password_reset_ttl=settings.password_reset_ttl,
+        invitation_ttl=settings.invitation_ttl,
     )
 
 
@@ -158,3 +160,20 @@ def get_membership_service(db: DbSession) -> MembershipService:
 
 
 MembershipServiceDep = Annotated[MembershipService, Depends(get_membership_service)]
+
+
+def get_invitation_service(
+    db: DbSession,
+    settings: AppSettings,
+    mailer: Annotated[Mailer, Depends(get_mailer)],
+    clock: Annotated[Clock, Depends(get_clock)],
+) -> InvitationService:
+    return InvitationService(
+        SqlAlchemyUnitOfWork(db),
+        mailer=mailer,
+        settings=InvitationSettings(ttl=settings.invitation_ttl),
+        clock=clock,
+    )
+
+
+InvitationServiceDep = Annotated[InvitationService, Depends(get_invitation_service)]

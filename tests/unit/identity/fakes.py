@@ -18,6 +18,7 @@ from core.domain.identity.entities import (
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
 from core.domain.organizations.entities import (
+    Invitation,
     Membership,
     MemberView,
     Organization,
@@ -226,6 +227,9 @@ class FakeOrganizationRepository:
     async def lock_active(self, organization_id: uuid.UUID) -> bool:
         return organization_id in self.by_id and organization_id not in self.deleted
 
+    async def get_active(self, organization_id: uuid.UUID) -> Organization | None:
+        return self.by_id.get(organization_id) if organization_id not in self.deleted else None
+
 
 class FakeMembershipRepository:
     def __init__(self, organizations: FakeOrganizationRepository, clock: FakeClock) -> None:
@@ -296,6 +300,52 @@ class FakeMembershipRepository:
             del self.by_id[membership_id]
 
 
+class FakeInvitationRepository:
+    def __init__(self) -> None:
+        self.by_id: dict[uuid.UUID, Invitation] = {}
+        self.hashes: dict[bytes, uuid.UUID] = {}
+
+    async def add(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        email: str,
+        role: Role,
+        token_hash: bytes,
+        invited_by_user_id: uuid.UUID,
+        expires_at: datetime,
+        created_at: datetime,
+    ) -> Invitation:
+        invitation = Invitation(
+            uuid.uuid7(), organization_id, email, role, invited_by_user_id, expires_at, None, None, created_at
+        )
+        self.by_id[invitation.id] = invitation
+        self.hashes[token_hash] = invitation.id
+        return invitation
+
+    async def list_pending(self, organization_id: uuid.UUID) -> list[Invitation]:
+        return [i for i in self.by_id.values() if i.organization_id == organization_id and i.is_pending()]
+
+    async def get_pending(self, *, organization_id: uuid.UUID, invitation_id: uuid.UUID) -> Invitation | None:
+        found = self.by_id.get(invitation_id)
+        return found if found and found.organization_id == organization_id and found.is_pending() else None
+
+    async def get_by_hash_for_update(self, token_hash: bytes) -> Invitation | None:
+        invitation_id = self.hashes.get(token_hash)
+        return self.by_id.get(invitation_id) if invitation_id else None
+
+    async def revoke_pending_for_email(self, *, organization_id: uuid.UUID, email: str, at: datetime) -> None:
+        for invitation in await self.list_pending(organization_id):
+            if invitation.email == email:
+                self.by_id[invitation.id] = replace(invitation, revoked_at=at)
+
+    async def revoke(self, invitation_id: uuid.UUID, at: datetime) -> None:
+        self.by_id[invitation_id] = replace(self.by_id[invitation_id], revoked_at=at)
+
+    async def mark_accepted(self, invitation_id: uuid.UUID, *, user_id: uuid.UUID, at: datetime) -> None:
+        self.by_id[invitation_id] = replace(self.by_id[invitation_id], accepted_at=at)
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -304,6 +354,7 @@ class FakeUnitOfWork:
         self._password_reset_tokens = FakeTokenRepository()
         self._organizations = FakeOrganizationRepository(clock)
         self._memberships = FakeMembershipRepository(self._organizations, clock)
+        self._invitations = FakeInvitationRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -330,6 +381,10 @@ class FakeUnitOfWork:
     @property
     def memberships(self) -> FakeMembershipRepository:
         return self._memberships
+
+    @property
+    def invitations(self) -> FakeInvitationRepository:
+        return self._invitations
 
     async def __aenter__(self) -> Self:
         return self
@@ -365,3 +420,8 @@ class RecordingMailer:
 
     async def send_password_changed(self, *, to: str, name: str) -> None:
         self.sent.append(SentEmail("password_changed", to))
+
+    async def send_invitation(
+        self, *, to: str, inviter_name: str, organization_name: str, role: str, token: str
+    ) -> None:
+        self.sent.append(SentEmail("invitation", to, token))

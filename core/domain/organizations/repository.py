@@ -2,7 +2,14 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from .entities import Membership, MemberView, Organization, OrganizationWithRole, OwnedOrganization
+from .entities import (
+    Invitation,
+    Membership,
+    MemberView,
+    Organization,
+    OrganizationWithRole,
+    OwnedOrganization,
+)
 from .enums import Role
 
 
@@ -13,10 +20,42 @@ class OrganizationRepository(Protocol):
 
     async def soft_delete(self, organization_id: uuid.UUID, at: datetime) -> None: ...
 
+    async def get_active(self, organization_id: uuid.UUID) -> Organization | None: ...
+
     async def lock_active(self, organization_id: uuid.UUID) -> bool:
         """SELECT ... FOR UPDATE on the organization row. Every membership change takes this lock
         first, so changes to one organization's members are serialized. False if deleted/missing."""
         ...
+
+
+class InvitationRepository(Protocol):
+    async def add(
+        self,
+        *,
+        organization_id: uuid.UUID,
+        email: str,
+        role: Role,
+        token_hash: bytes,
+        invited_by_user_id: uuid.UUID,
+        expires_at: datetime,
+        created_at: datetime,
+    ) -> Invitation: ...
+
+    async def list_pending(self, organization_id: uuid.UUID) -> list[Invitation]: ...
+
+    async def get_pending(self, *, organization_id: uuid.UUID, invitation_id: uuid.UUID) -> Invitation | None:
+        """Scoped by organization: another tenant's invitation id is not found."""
+        ...
+
+    async def get_by_hash_for_update(self, token_hash: bytes) -> Invitation | None: ...
+
+    async def revoke_pending_for_email(
+        self, *, organization_id: uuid.UUID, email: str, at: datetime
+    ) -> None: ...
+
+    async def revoke(self, invitation_id: uuid.UUID, at: datetime) -> None: ...
+
+    async def mark_accepted(self, invitation_id: uuid.UUID, *, user_id: uuid.UUID, at: datetime) -> None: ...
 
 
 class MembershipRepository(Protocol):

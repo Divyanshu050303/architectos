@@ -61,6 +61,14 @@ class SqlAlchemyOrganizationRepository:
             .values(deleted_at=at, updated_at=func.now())
         )
 
+    async def get_active(self, organization_id: uuid.UUID) -> Organization | None:
+        record = await self._session.scalar(
+            select(OrganizationRecord).where(
+                OrganizationRecord.id == organization_id, OrganizationRecord.deleted_at.is_(None)
+            )
+        )
+        return to_organization(record) if record else None
+
     async def lock_active(self, organization_id: uuid.UUID) -> bool:
         locked = await self._session.scalar(
             select(OrganizationRecord.id)

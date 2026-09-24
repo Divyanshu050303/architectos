@@ -4,6 +4,7 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from persistence.models import EmailVerificationTokenRecord, PasswordResetTokenRecord
+from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
     SqlAlchemyOrganizationRepository,
@@ -30,6 +31,7 @@ class SqlAlchemyUnitOfWork:
         self.password_reset_tokens = SqlAlchemySingleUseTokenRepository(session, PasswordResetTokenRecord)
         self.organizations = SqlAlchemyOrganizationRepository(session)
         self.memberships = SqlAlchemyMembershipRepository(session)
+        self.invitations = SqlAlchemyInvitationRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

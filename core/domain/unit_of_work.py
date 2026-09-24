@@ -9,7 +9,11 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
-from core.domain.organizations.repository import MembershipRepository, OrganizationRepository
+from core.domain.organizations.repository import (
+    InvitationRepository,
+    MembershipRepository,
+    OrganizationRepository,
+)
 
 
 class UnitOfWork(Protocol):
@@ -30,6 +34,9 @@ class UnitOfWork(Protocol):
 
     @property
     def memberships(self) -> MembershipRepository: ...
+
+    @property
+    def invitations(self) -> InvitationRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

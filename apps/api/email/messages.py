@@ -22,6 +22,9 @@ class Links:
     def reset_password(self, token: str) -> str:
         return self._page(f"/reset-password?token={token}")
 
+    def accept_invitation(self, token: str) -> str:
+        return self._page(f"/accept-invitation?token={token}")
+
     def sign_in(self) -> str:
         return self._page("/login")
 
@@ -133,3 +136,28 @@ def password_changed_email(*, sender: str, to: str, name: str, reset_url: str) -
         button=("Reset password", reset_url),
     )
     return _message(sender=sender, to=to, subject="Your password was changed", text=text, html=html)
+
+
+def invitation_email(
+    *, sender: str, to: str, inviter_name: str, organization_name: str, role: str, url: str, valid_days: int
+) -> EmailMessage:
+    text = (
+        f"{inviter_name} invited you to join {organization_name} on ArchitectOS as {role}.\n\n"
+        f"Accept the invitation: {url}\n\n"
+        f"Sign in (or create an account) with this email address, {to}, to accept. "
+        f"The link works once and expires in {valid_days} days. "
+        "If you were not expecting it, ignore this email.\n"
+    )
+    html = _html(
+        [
+            f"{escape(inviter_name)} invited you to join <strong>{escape(organization_name)}</strong> "
+            f"on ArchitectOS as {escape(role)}.",
+            f"Sign in (or create an account) with this email address, {escape(to)}, to accept. "
+            f"The link works once and expires in {valid_days} days.",
+            "If you were not expecting it, ignore this email.",
+        ],
+        button=("Accept invitation", url),
+    )
+    return _message(
+        sender=sender, to=to, subject=f"Join {organization_name} on ArchitectOS", text=text, html=html
+    )

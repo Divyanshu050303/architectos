@@ -36,12 +36,18 @@ from core.domain.identity.errors import (
     WeakPassword,
 )
 from core.domain.organizations.errors import (
+    AlreadyMember,
     CannotChangeOwnRole,
     EmailNotVerified,
+    InvalidInvitation,
     InvalidOrganizationName,
+    InvitationEmailMismatch,
+    InvitationExpired,
+    InvitationNotFound,
     LastOwner,
     MemberNotFound,
     OrganizationNotFound,
+    OwnerInvitationNotAllowed,
     PermissionDenied,
     RoleNotManageable,
     SoleOwnerOfOrganization,
@@ -79,6 +85,12 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     RoleNotManageable: 403,
     LastOwner: 409,
     SoleOwnerOfOrganization: 409,
+    InvitationNotFound: 404,
+    InvalidInvitation: 404,
+    InvitationExpired: 410,
+    InvitationEmailMismatch: 403,
+    AlreadyMember: 409,
+    OwnerInvitationNotAllowed: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.
