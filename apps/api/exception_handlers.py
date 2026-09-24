@@ -27,6 +27,7 @@ from core.domain.identity.errors import (
     InvalidToken,
     RefreshConflict,
     SessionExpired,
+    SessionNotFound,
     SessionRevoked,
     TokenExpired,
     WeakPassword,
@@ -51,6 +52,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidAccessToken: 401,
     AccessTokenExpired: 401,
     CsrfRejected: 403,
+    SessionNotFound: 404,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

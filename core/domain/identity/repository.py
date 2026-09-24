@@ -61,3 +61,14 @@ class SessionRepository(Protocol):
     async def revoke(
         self, session_id: uuid.UUID, *, reason: SessionRevocationReason, at: datetime
     ) -> None: ...
+
+    async def list_active(self, user_id: uuid.UUID, *, now: datetime, limit: int) -> list[Session]:
+        """Unrevoked, unexpired sessions of one user, most recently used first."""
+        ...
+
+    async def revoke_owned(
+        self, session_id: uuid.UUID, *, user_id: uuid.UUID, reason: SessionRevocationReason, at: datetime
+    ) -> bool:
+        """Revokes the session only if it is active and belongs to ``user_id`` (one scoped UPDATE).
+        Returns whether anything was revoked."""
+        ...

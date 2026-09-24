@@ -182,3 +182,21 @@ async def refresh(
         clear_refresh_cookie(failure, settings)
         return failure
     return _session_response(signed_in, response, codec=codec, settings=settings, clock=clock)
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=SAME_ORIGIN,
+    responses={403: {"model": ErrorResponse, "description": "csrf_rejected"}},
+    summary="Sign out this browser",
+    description=(
+        "Revokes the session behind the refresh cookie and clears the cookie. Always 204, "
+        "including when the session was already revoked, so repeating it is harmless."
+    ),
+)
+async def logout(
+    request: Request, response: Response, sessions: SessionServiceDep, settings: AppSettings
+) -> None:
+    await sessions.logout(refresh_token=request.cookies.get(refresh_cookie_name(settings)))
+    clear_refresh_cookie(response, settings)

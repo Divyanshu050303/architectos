@@ -74,3 +74,10 @@ class RefreshConflict(DomainError):
 
     code = "refresh_conflict"
     message = "Your session was refreshed by another request. Retry."
+
+
+class SessionNotFound(DomainError):
+    """No active session with this id belongs to the caller (someone else's id looks the same)."""
+
+    code = "session_not_found"
+    message = "Session not found."

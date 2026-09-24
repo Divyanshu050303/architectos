@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import CursorResult, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.domain.identity.entities import NewSession, Session
@@ -78,3 +78,33 @@ class SqlAlchemySessionRepository:
             .where(SessionRecord.id == session_id, SessionRecord.revoked_at.is_(None))
             .values(revoked_at=at, revoked_reason=reason.value)
         )
+
+    async def list_active(self, user_id: uuid.UUID, *, now: datetime, limit: int) -> list[Session]:
+        # Uses the partial index ix_sessions_user_id_active (revoked_at IS NULL).
+        records = await self._session.scalars(
+            select(SessionRecord)
+            .where(
+                SessionRecord.user_id == user_id,
+                SessionRecord.revoked_at.is_(None),
+                SessionRecord.expires_at > now,
+            )
+            .order_by(SessionRecord.last_used_at.desc().nulls_last(), SessionRecord.id.desc())
+            .limit(limit)
+        )
+        return [to_session(record) for record in records]
+
+    async def revoke_owned(
+        self, session_id: uuid.UUID, *, user_id: uuid.UUID, reason: SessionRevocationReason, at: datetime
+    ) -> bool:
+        # Tenant scope is part of the statement itself: another user's id simply matches no row.
+        result: CursorResult[tuple[()]] = await self._session.execute(  # type: ignore[assignment]
+            update(SessionRecord)
+            .where(
+                SessionRecord.id == session_id,
+                SessionRecord.user_id == user_id,
+                SessionRecord.revoked_at.is_(None),
+                SessionRecord.expires_at > at,
+            )
+            .values(revoked_at=at, revoked_reason=reason.value)
+        )
+        return result.rowcount == 1

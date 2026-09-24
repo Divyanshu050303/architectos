@@ -28,6 +28,7 @@ from .errors import (
     InvalidRefreshToken,
     RefreshConflict,
     SessionExpired,
+    SessionNotFound,
     SessionRevoked,
 )
 from .passwords import PasswordHasher
@@ -35,6 +36,8 @@ from .tokens import format_refresh_token, generate_token, hash_token, parse_refr
 from .value_objects import normalize_email
 
 MAX_USER_AGENT_LENGTH = 512
+# Upper bound for GET /me/sessions; each sign-in creates a session and expired ones are skipped.
+MAX_LISTED_SESSIONS = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +146,35 @@ class SessionService:
             await uow.sessions.revoke(session.id, reason=SessionRevocationReason.TOKEN_REUSE, at=now)
         # Raised outside the block so the revocation is committed rather than rolled back.
         raise InvalidRefreshToken
+
+    async def logout(self, *, refresh_token: str | None) -> None:
+        """Revokes the session behind a refresh cookie. Idempotent: a missing, malformed, forged or
+        already-revoked token is a no-op, so logging out twice (or with a stale cookie) succeeds.
+        The secret must match the current or previous hash: a session id alone cannot sign anyone out."""
+        parsed = parse_refresh_token(refresh_token) if refresh_token else None
+        if parsed is None:
+            return
+        session_id, secret = parsed
+        presented = hash_token(secret)
+        async with self._uow as uow:
+            session = await uow.sessions.get_for_update(session_id)
+            if session is None or session.revoked_at is not None:
+                return
+            known = [session.refresh_token_hash, session.previous_refresh_token_hash]
+            if any(h is not None and hmac.compare_digest(presented, h) for h in known):
+                await uow.sessions.revoke(session.id, reason=SessionRevocationReason.LOGOUT, at=self._clock())
+
+    async def list_sessions(self, *, user_id: uuid.UUID) -> list[Session]:
+        async with self._uow as uow:
+            return await uow.sessions.list_active(user_id, now=self._clock(), limit=MAX_LISTED_SESSIONS)
+
+    async def revoke_session(self, *, user_id: uuid.UUID, session_id: uuid.UUID) -> None:
+        async with self._uow as uow:
+            revoked = await uow.sessions.revoke_owned(
+                session_id, user_id=user_id, reason=SessionRevocationReason.USER_REVOKED, at=self._clock()
+            )
+            if not revoked:
+                raise SessionNotFound
 
     async def authenticate(self, *, session_id: uuid.UUID, user_id: uuid.UUID) -> tuple[User, Session]:
         """Checks the session behind an access token is still live. One indexed read per request."""

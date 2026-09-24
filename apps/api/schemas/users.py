@@ -1,7 +1,9 @@
 import uuid
 from datetime import datetime
 
-from core.domain.identity.entities import User
+from pydantic import Field
+
+from core.domain.identity.entities import Session, User
 
 from .common import ApiModel
 
@@ -27,3 +29,31 @@ class UserResponse(ApiModel):
             email_verified=user.is_email_verified,
             created_at=user.created_at,
         )
+
+
+class SessionItem(ApiModel):
+    """A signed-in device, as shown to its owner."""
+
+    id: uuid.UUID
+    created_at: datetime
+    last_used_at: datetime | None
+    expires_at: datetime
+    user_agent: str | None
+    ip_address: str | None
+    current: bool = Field(description="True for the session making this request.")
+
+    @classmethod
+    def from_session(cls, session: Session, *, current_session_id: uuid.UUID) -> SessionItem:
+        return cls(
+            id=session.id,
+            created_at=session.created_at,
+            last_used_at=session.last_used_at,
+            expires_at=session.expires_at,
+            user_agent=session.user_agent,
+            ip_address=session.ip_address,
+            current=session.id == current_session_id,
+        )
+
+
+class SessionList(ApiModel):
+    sessions: list[SessionItem]

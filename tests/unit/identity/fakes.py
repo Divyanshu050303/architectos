@@ -135,6 +135,20 @@ class FakeSessionRepository:
         if session.revoked_at is None:
             self.by_id[session_id] = replace(session, revoked_at=at, revoked_reason=reason)
 
+    async def list_active(self, user_id: uuid.UUID, *, now: datetime, limit: int) -> list[Session]:
+        active = [s for s in self.by_id.values() if s.user_id == user_id and s.is_active(now)]
+        active.sort(key=lambda s: (s.last_used_at or s.created_at, s.id), reverse=True)
+        return active[:limit]
+
+    async def revoke_owned(
+        self, session_id: uuid.UUID, *, user_id: uuid.UUID, reason: SessionRevocationReason, at: datetime
+    ) -> bool:
+        session = self.by_id.get(session_id)
+        if session is None or session.user_id != user_id or not session.is_active(at):
+            return False
+        await self.revoke(session_id, reason=reason, at=at)
+        return True
+
 
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
