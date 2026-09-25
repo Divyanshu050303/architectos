@@ -11,6 +11,7 @@ from apps.api.email.mailer import BackgroundMailer
 from apps.api.email.messages import Links
 from apps.api.email.transport import EmailTransport
 from apps.api.middleware.rate_limit import RateLimiter, RateLimits
+from apps.api.middleware.request_id import current_request_id
 from core.domain.audit.audit_service import AuditService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
@@ -23,6 +24,9 @@ from core.domain.notifications import Mailer
 from core.domain.organizations.invitation_service import InvitationService, InvitationSettings
 from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
+from core.domain.projects.project_service import ProjectService
+from core.domain.requirements.requirement_service import RequirementService
+from core.domain.requirements.requirement_set_service import RequirementSetService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 from .database import DbSession
@@ -46,6 +50,7 @@ def get_client_info(request: Request) -> ClientInfo:
     return ClientInfo(
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
+        request_id=current_request_id(),
     )
 
 
@@ -210,3 +215,30 @@ def get_rate_limits(request: Request, settings: AppSettings, client: Client) -> 
 
 
 RateLimitsDep = Annotated[RateLimits, Depends(get_rate_limits)]
+
+
+def get_project_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> ProjectService:
+    return ProjectService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+
+
+def get_requirement_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> RequirementService:
+    return RequirementService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+RequirementServiceDep = Annotated[RequirementService, Depends(get_requirement_service)]
+
+
+def get_requirement_set_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> RequirementSetService:
+    return RequirementSetService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+RequirementSetServiceDep = Annotated[RequirementSetService, Depends(get_requirement_set_service)]

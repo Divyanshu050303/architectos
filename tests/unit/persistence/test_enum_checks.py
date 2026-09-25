@@ -7,7 +7,14 @@ from sqlalchemy import CheckConstraint, Table
 
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.organizations.enums import Role
-from persistence.models import InvitationRecord, OrganizationMemberRecord, SessionRecord, UserRecord
+from core.domain.projects.enums import ProjectStatus
+from persistence.models import (
+    InvitationRecord,
+    OrganizationMemberRecord,
+    ProjectRecord,
+    SessionRecord,
+    UserRecord,
+)
 
 
 def check_sql(table: Table, name: str) -> str:
@@ -24,6 +31,7 @@ def check_sql(table: Table, name: str) -> str:
         (OrganizationMemberRecord.__table__, "ck_organization_members_role", Role),
         (InvitationRecord.__table__, "ck_invitations_role", Role),
         (SessionRecord.__table__, "ck_sessions_revoked_reason", SessionRevocationReason),
+        (ProjectRecord.__table__, "ck_projects_status", ProjectStatus),
     ],
 )
 def test_check_constraint_lists_every_enum_value(table: Table, constraint: str, enum: type[StrEnum]) -> None:

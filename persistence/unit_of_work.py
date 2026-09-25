@@ -11,6 +11,9 @@ from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
     SqlAlchemyOrganizationRepository,
 )
+from persistence.repositories.projects import SqlAlchemyProjectRepository
+from persistence.repositories.requirement_sets import SqlAlchemyRequirementSetRepository
+from persistence.repositories.requirements import SqlAlchemyRequirementRepository
 from persistence.repositories.sessions import SqlAlchemySessionRepository
 from persistence.repositories.single_use_tokens import SqlAlchemySingleUseTokenRepository
 from persistence.repositories.users import SqlAlchemyUserRepository
@@ -35,6 +38,9 @@ class SqlAlchemyUnitOfWork:
         self.memberships = SqlAlchemyMembershipRepository(session)
         self.invitations = SqlAlchemyInvitationRepository(session)
         self.audit = SqlAlchemyAuditRepository(session, client or ClientInfo())
+        self.projects = SqlAlchemyProjectRepository(session)
+        self.requirements = SqlAlchemyRequirementRepository(session)
+        self.requirement_sets = SqlAlchemyRequirementSetRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()
@@ -48,5 +54,7 @@ class SqlAlchemyUnitOfWork:
             return
         if exc_type is None:
             await transaction.commit()
+            self.audit.publish_committed()
         else:
             await transaction.rollback()
+            self.audit.discard_uncommitted()

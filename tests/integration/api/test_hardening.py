@@ -181,7 +181,7 @@ async def test_oversized_bodies_without_a_declared_length_are_cut_off(client: As
         "/api/v1/auth/register", content=chunks(), headers={"Content-Type": "application/json"}
     )
     assert response.status_code in {400, 413}  # never accepted, never a 500
-    assert response.json()["error"]["code"] in {"http_error", "payload_too_large"}
+    assert response.json()["error"]["code"] in {"malformed_request", "payload_too_large"}
 
 
 # --- logs ---------------------------------------------------------------------------------------

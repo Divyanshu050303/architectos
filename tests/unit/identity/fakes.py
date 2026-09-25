@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.identity.entities import (
@@ -27,6 +27,15 @@ from core.domain.organizations.entities import (
     OwnedOrganization,
 )
 from core.domain.organizations.enums import Role
+from core.domain.projects.entities import NewProject, Project, ProjectAccess
+from core.domain.projects.enums import ProjectStatus
+from core.domain.projects.errors import ProjectSlugTaken
+from core.domain.projects.queries import ProjectQuery, ProjectSort
+from core.domain.projects.repository import ProjectLock
+from core.domain.requirements.entities import NewRequirement, Requirement, RequirementVersion, Revision
+from core.domain.requirements.enums import RequirementStatus
+from core.domain.requirements.queries import RequirementQuery
+from core.domain.requirements.requirement_sets import NewRequirementSet, RequirementSet
 
 
 class FakeClock:
@@ -366,6 +375,227 @@ class FakeAuditRepository:
         return [event.action.value for event in self.events]
 
 
+class FakeProjectRepository:
+    def __init__(self, clock: FakeClock, memberships: FakeMembershipRepository) -> None:
+        self._clock = clock
+        self._memberships = memberships
+        self.by_id: dict[uuid.UUID, Project] = {}
+
+    async def get_for_member(
+        self, project_id: uuid.UUID, *, user_id: uuid.UUID, lock: ProjectLock | None = None
+    ) -> ProjectAccess | None:
+        project = await self.get_live(project_id)
+        if project is None:
+            return None
+        scoped = await self._memberships.get_in_active_organization(
+            organization_id=project.organization_id, user_id=user_id
+        )
+        return ProjectAccess(project=project, membership=scoped.membership) if scoped else None
+
+    async def list_for_organization(self, organization_id: uuid.UUID, query: ProjectQuery) -> list[Project]:
+        found = [p for p in self.by_id.values() if p.organization_id == organization_id and not p.is_deleted]
+        if query.status is not None:
+            found = [p for p in found if p.status is query.status]
+        if query.search:
+            term = query.search.lower()
+            found = [p for p in found if term in p.name.lower() or term in p.slug]
+        if query.sort is ProjectSort.NAME:
+            found.sort(key=lambda p: (p.name.lower(), p.id))
+        else:
+            attr = "created_at" if query.sort is ProjectSort.CREATED_AT else "updated_at"
+            found.sort(key=lambda p: (getattr(p, attr), p.id), reverse=True)
+        if query.after is not None:
+            ids = [p.id for p in found]
+            found = found[ids.index(query.after.id) + 1 :] if query.after.id in ids else []
+        return found[: query.limit]
+
+    async def add(self, project: NewProject) -> Project:
+        if any(
+            p.organization_id == project.organization_id and p.slug == project.slug and not p.is_deleted
+            for p in self.by_id.values()
+        ):
+            raise ProjectSlugTaken
+        now = self._clock()
+        stored = Project(
+            id=uuid.uuid7(),
+            organization_id=project.organization_id,
+            name=project.name,
+            slug=project.slug,
+            description=project.description,
+            status=ProjectStatus.ACTIVE,
+            settings=project.settings,
+            created_by_user_id=project.created_by_user_id,
+            archived_at=None,
+            deleted_at=None,
+            created_at=now,
+            updated_at=now,
+        )
+        self.by_id[stored.id] = stored
+        return stored
+
+    async def get_live(self, project_id: uuid.UUID) -> Project | None:
+        found = self.by_id.get(project_id)
+        return found if found and not found.is_deleted else None
+
+    async def get_live_for_update(self, project_id: uuid.UUID) -> Project | None:
+        return await self.get_live(project_id)
+
+    async def save(self, project: Project) -> Project:
+        stored = replace(project, updated_at=self._clock())
+        self.by_id[project.id] = stored
+        return stored
+
+
+class FakeRequirementRepository:
+    """Keeps every version, like the append-only table."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, Requirement] = {}
+        self.versions: dict[uuid.UUID, list[RequirementVersion]] = {}
+
+    def _version_of(
+        self, requirement: Requirement, reason: str | None, author: uuid.UUID | None
+    ) -> RequirementVersion:
+        return RequirementVersion(
+            requirement_id=requirement.id,
+            version=requirement.version,
+            content=requirement.content,
+            source=requirement.source,
+            confidence=requirement.confidence,
+            change_reason=reason,
+            created_by_user_id=author,
+            created_at=self._clock(),
+        )
+
+    async def add(self, requirement: NewRequirement) -> Requirement:
+        numbers = [r.number for r in self.by_id.values() if r.project_id == requirement.project_id]
+        now = self._clock()
+        stored = Requirement(
+            id=uuid.uuid7(),
+            project_id=requirement.project_id,
+            number=max(numbers, default=0) + 1,
+            version=1,
+            content=requirement.content,
+            source=requirement.source,
+            confidence=requirement.confidence,
+            created_by_user_id=requirement.created_by_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+        self.by_id[stored.id] = stored
+        self.versions[stored.id] = [self._version_of(stored, None, requirement.created_by_user_id)]
+        return stored
+
+    async def get(
+        self, project_id: uuid.UUID, requirement_id: uuid.UUID, *, for_update: bool = False
+    ) -> Requirement | None:
+        found = self.by_id.get(requirement_id)
+        return found if found and found.project_id == project_id and not found.is_deleted else None
+
+    async def save(self, revision: Revision) -> Requirement:
+        requirement = revision.requirement
+        assert self.by_id[requirement.id].version == requirement.version - 1
+        stored = replace(requirement, updated_at=self._clock())
+        self.by_id[stored.id] = stored
+        self.versions[stored.id].append(
+            self._version_of(stored, revision.change_reason, revision.author_user_id)
+        )
+        return stored
+
+    async def save_deleted(self, requirement: Requirement) -> None:
+        self.by_id[requirement.id] = requirement
+
+    async def list_for_project(self, project_id: uuid.UUID, query: RequirementQuery) -> list[Requirement]:
+        found = [r for r in self.by_id.values() if r.project_id == project_id and not r.is_deleted]
+        for attr in ("type", "category", "status", "priority"):
+            wanted = getattr(query, attr)
+            if wanted is not None:
+                found = [r for r in found if getattr(r.content, attr) == wanted]
+        if query.search:
+            term = query.search.lower()
+            found = [
+                r for r in found if term in r.content.title.lower() or term in r.content.statement.lower()
+            ]
+        found.sort(key=lambda r: (r.created_at, r.id), reverse=True)
+        if query.after is not None:
+            after = (query.after.created_at, query.after.id)
+            found = [r for r in found if (r.created_at, r.id) < after]
+        return found[: query.limit]
+
+    async def list_by_status(
+        self, project_id: uuid.UUID, statuses: frozenset[RequirementStatus], *, limit: int
+    ) -> list[Requirement]:
+        found = [
+            r
+            for r in self.by_id.values()
+            if r.project_id == project_id and not r.is_deleted and r.content.status in statuses
+        ]
+        return sorted(found, key=lambda r: r.number)[:limit]
+
+    async def list_by_ids(self, project_id: uuid.UUID, requirement_ids: list[uuid.UUID]) -> list[Requirement]:
+        return [r for i in requirement_ids if (r := await self.get(project_id, i)) is not None]
+
+    async def list_versions(
+        self, project_id: uuid.UUID, requirement_id: uuid.UUID, *, after: int | None, limit: int
+    ) -> list[RequirementVersion]:
+        if await self.get(project_id, requirement_id) is None:
+            return []
+        return [v for v in self.versions[requirement_id] if after is None or v.version > after][:limit]
+
+    async def get_version(
+        self, project_id: uuid.UUID, requirement_id: uuid.UUID, version: int
+    ) -> RequirementVersion | None:
+        versions = await self.list_versions(project_id, requirement_id, after=version - 1, limit=1)
+        return versions[0] if versions and versions[0].version == version else None
+
+
+class FakeRequirementSetRepository:
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, RequirementSet] = {}
+        self.planning_inputs: dict[uuid.UUID, dict[str, Any]] = {}
+
+    async def add(self, requirement_set: NewRequirementSet) -> RequirementSet:
+        numbers = [s.number for s in self.by_id.values() if s.project_id == requirement_set.project_id]
+        stored = RequirementSet(
+            id=uuid.uuid7(),
+            project_id=requirement_set.project_id,
+            number=max(numbers, default=0) + 1,
+            name=requirement_set.name,
+            description=requirement_set.description,
+            schema_version=requirement_set.schema_version,
+            content_hash=requirement_set.content_hash,
+            requirement_count=len(requirement_set.items),
+            created_by_user_id=requirement_set.created_by_user_id,
+            created_at=self._clock(),
+            items=requirement_set.items,
+        )
+        self.by_id[stored.id] = stored
+        self.planning_inputs[stored.id] = requirement_set.planning_input
+        return stored
+
+    async def get(self, project_id: uuid.UUID, set_id: uuid.UUID) -> RequirementSet | None:
+        found = self.by_id.get(set_id)
+        return found if found and found.project_id == project_id else None
+
+    async def list_for_project(
+        self, project_id: uuid.UUID, *, before_number: int | None, limit: int
+    ) -> list[RequirementSet]:
+        found = [
+            replace(s, items=())
+            for s in self.by_id.values()
+            if s.project_id == project_id and (before_number is None or s.number < before_number)
+        ]
+        return sorted(found, key=lambda s: s.number, reverse=True)[:limit]
+
+    async def get_planning_input(
+        self, project_id: uuid.UUID, set_id: uuid.UUID
+    ) -> tuple[RequirementSet, dict[str, Any]] | None:
+        found = await self.get(project_id, set_id)
+        return (replace(found, items=()), self.planning_inputs[set_id]) if found else None
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -376,6 +606,9 @@ class FakeUnitOfWork:
         self._memberships = FakeMembershipRepository(self._organizations, clock)
         self._invitations = FakeInvitationRepository()
         self._audit = FakeAuditRepository()
+        self._projects = FakeProjectRepository(clock, self._memberships)
+        self._requirements = FakeRequirementRepository(clock)
+        self._requirement_sets = FakeRequirementSetRepository(clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -410,6 +643,18 @@ class FakeUnitOfWork:
     @property
     def audit(self) -> FakeAuditRepository:
         return self._audit
+
+    @property
+    def projects(self) -> FakeProjectRepository:
+        return self._projects
+
+    @property
+    def requirements(self) -> FakeRequirementRepository:
+        return self._requirements
+
+    @property
+    def requirement_sets(self) -> FakeRequirementSetRepository:
+        return self._requirement_sets
 
     async def __aenter__(self) -> Self:
         return self

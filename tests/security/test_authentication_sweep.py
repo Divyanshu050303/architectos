@@ -51,12 +51,32 @@ SPECIFIED = PUBLIC | {
     ("DELETE", "/api/v1/organizations/{organization_id}/invitations/{invitation_id}"),
     ("POST", "/api/v1/invitations/{invitation_token}/accept"),
     ("GET", "/api/v1/organizations/{organization_id}/audit-log"),
+    # Projects and requirements specification.
+    ("GET", "/api/v1/organizations/{organization_id}/projects"),
+    ("POST", "/api/v1/organizations/{organization_id}/projects"),
+    ("GET", "/api/v1/projects/{project_id}"),
+    ("PATCH", "/api/v1/projects/{project_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}"),
+    ("POST", "/api/v1/projects/{project_id}/archive"),
+    ("POST", "/api/v1/projects/{project_id}/restore"),
+    ("GET", "/api/v1/projects/{project_id}/requirements"),
+    ("POST", "/api/v1/projects/{project_id}/requirements"),
+    ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}"),
+    ("PATCH", "/api/v1/projects/{project_id}/requirements/{requirement_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}/requirements/{requirement_id}"),
+    ("GET", "/api/v1/projects/{project_id}/requirements/analysis"),
+    ("POST", "/api/v1/projects/{project_id}/requirements/{requirement_id}/validate"),
+    ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}/versions"),
+    ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}/versions/{version}"),
+    ("POST", "/api/v1/projects/{project_id}/requirement-sets"),
+    ("GET", "/api/v1/projects/{project_id}/requirement-sets"),
+    ("GET", "/api/v1/projects/{project_id}/requirement-sets/{set_id}"),
+    ("GET", "/api/v1/projects/{project_id}/requirement-sets/{set_id}/planning-input"),
 }
 
 
 def test_the_api_is_exactly_the_specified_endpoint_list(app: FastAPI) -> None:
     assert {(op.method, op.path) for op in inventory(app)} == SPECIFIED
-    assert len(SPECIFIED) == 27
 
 
 @pytest.mark.parametrize(

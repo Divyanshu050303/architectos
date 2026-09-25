@@ -25,6 +25,17 @@ class AuditAction(StrEnum):
     MEMBER_INVITATION_ACCEPTED = "member.invitation_accepted"
     MEMBER_ROLE_CHANGED = "member.role_changed"
     MEMBER_REMOVED = "member.removed"
+    PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
+    PROJECT_ARCHIVED = "project.archived"
+    PROJECT_RESTORED = "project.restored"
+    PROJECT_DELETED = "project.deleted"
+    REQUIREMENT_CREATED = "requirement.created"
+    REQUIREMENT_UPDATED = "requirement.updated"  # content (anything but status) changed
+    REQUIREMENT_STATUS_CHANGED = "requirement.status_changed"
+    REQUIREMENT_VERSION_CREATED = "requirement.version_created"  # every revision
+    REQUIREMENT_DELETED = "requirement.deleted"
+    REQUIREMENT_SET_CREATED = "requirement_set.created"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

@@ -102,6 +102,9 @@ POLICIES: dict[str, dict[str, Rule]] = {
     "reset_password": {"ip": Rule(30, timedelta(hours=1))},
     "confirm_password": {"user": Rule(10, timedelta(hours=1))},
     "create_organization": {"user": Rule(20, timedelta(days=1))},
+    "create_project": {"user": Rule(100, timedelta(hours=1))},
+    "create_requirement": {"user": Rule(500, timedelta(hours=1))},
+    "create_requirement_set": {"user": Rule(100, timedelta(hours=1))},
     "create_invitation": {"user": Rule(50, timedelta(hours=1))},
     "accept_invitation": {"ip": Rule(30, timedelta(hours=1))},
 }

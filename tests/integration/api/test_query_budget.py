@@ -12,7 +12,7 @@ from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from apps.api.email.transport import InMemoryTransport
-from persistence.models import AuditLogRecord, OrganizationMemberRecord, UserRecord
+from persistence.models import AuditLogRecord, OrganizationMemberRecord, ProjectRecord, UserRecord
 
 from .conftest import token_from
 
@@ -62,7 +62,17 @@ async def grow(db: AsyncSession, org_id: str, size: int) -> None:
         await db.flush()
         db.add(OrganizationMemberRecord(organization_id=uuid.UUID(org_id), user_id=user.id, role="member"))
         db.add(AuditLogRecord(action="member.invited", organization_id=uuid.UUID(org_id)))
+        db.add(ProjectRecord(organization_id=uuid.UUID(org_id), name=f"Grown {i}", slug=f"grown-{i}"))
     await db.flush()
+
+
+REQUIREMENT = {
+    "type": "functional",
+    "category": "order",
+    "title": "Place an order",
+    "statement": "A customer can place an order.",
+    "priority": "high",
+}
 
 
 @pytest.mark.parametrize(
@@ -73,6 +83,15 @@ async def grow(db: AsyncSession, org_id: str, size: int) -> None:
         ("/api/v1/organizations/{org}", 3),  # session + user + membership join
         ("/api/v1/organizations/{org}/members", 4),  # + one joined member listing
         ("/api/v1/organizations/{org}/audit-log", 4),  # + one keyset page
+        ("/api/v1/organizations/{org}/projects", 4),  # + one filtered, sorted page
+        ("/api/v1/projects/{project}", 3),  # session + user + project/organization/membership join
+        ("/api/v1/projects/{project}/requirements", 4),  # + one filtered page
+        ("/api/v1/projects/{project}/requirements/{requirement}", 4),  # + the requirement
+        ("/api/v1/projects/{project}/requirements/analysis", 4),  # + one query for all analyzed
+        ("/api/v1/projects/{project}/requirements/{requirement}/versions", 4),  # + one page of history
+        ("/api/v1/projects/{project}/requirement-sets", 4),  # + one page of summaries
+        ("/api/v1/projects/{project}/requirement-sets/{set}", 5),  # + the set + its pinned versions
+        ("/api/v1/projects/{project}/requirement-sets/{set}/planning-input", 4),  # + set and document
     ],
 )
 async def test_reads_stay_within_budget_regardless_of_size(
@@ -84,11 +103,28 @@ async def test_reads_stay_within_budget_regardless_of_size(
     budget: int,
 ) -> None:
     auth, org_id = await owner(client, outbox)
-    url = path.replace("{org}", org_id)
+    project = await client.post(
+        f"/api/v1/organizations/{org_id}/projects", json={"name": "Budget"}, headers=auth
+    )
+    requirements = f"/api/v1/projects/{project.json()['id']}/requirements"
+    requirement = await client.post(requirements, json=REQUIREMENT, headers=auth)
+    url = (
+        path.replace("{org}", org_id)
+        .replace("{project}", project.json()["id"])
+        .replace("{requirement}", requirement.json()["id"])
+    )
+    if "{set}" in url:
+        await client.post(requirements, json=REQUIREMENT | {"status": "active"}, headers=auth)
+        requirement_set = await client.post(
+            f"/api/v1/projects/{project.json()['id']}/requirement-sets", json={}, headers=auth
+        )
+        url = url.replace("{set}", requirement_set.json()["id"])
 
     with counting(connection) as small:
         assert (await client.get(url, headers=auth)).status_code == 200
     await grow(db, org_id, 25)
+    for i in range(25):
+        await client.post(requirements, json=REQUIREMENT | {"title": f"Grown {i}"}, headers=auth)
     with counting(connection) as large:
         assert (await client.get(url, headers=auth)).status_code == 200
 

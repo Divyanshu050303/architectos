@@ -15,6 +15,8 @@ from core.domain.organizations.repository import (
     MembershipRepository,
     OrganizationRepository,
 )
+from core.domain.projects.repository import ProjectRepository
+from core.domain.requirements.repository import RequirementRepository, RequirementSetRepository
 
 
 class UnitOfWork(Protocol):
@@ -41,6 +43,15 @@ class UnitOfWork(Protocol):
 
     @property
     def audit(self) -> AuditRepository: ...
+
+    @property
+    def projects(self) -> ProjectRepository: ...
+
+    @property
+    def requirements(self) -> RequirementRepository: ...
+
+    @property
+    def requirement_sets(self) -> RequirementSetRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

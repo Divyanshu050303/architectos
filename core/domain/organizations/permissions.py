@@ -25,7 +25,14 @@ class Permission(StrEnum):
     PROJECT_READ = "project.read"
     PROJECT_CREATE = "project.create"
     PROJECT_UPDATE = "project.update"
+    PROJECT_ARCHIVE = "project.archive"  # archive and restore
     PROJECT_DELETE = "project.delete"
+
+    REQUIREMENT_READ = "requirement.read"
+    REQUIREMENT_CREATE = "requirement.create"
+    REQUIREMENT_UPDATE = "requirement.update"  # includes status changes
+    REQUIREMENT_DELETE = "requirement.delete"
+    REQUIREMENT_SET_CREATE = "requirement_set.create"  # reading sets needs requirement.read
 
     ARCHITECTURE_READ = "architecture.read"
     ARCHITECTURE_CREATE = "architecture.create"
@@ -41,6 +48,7 @@ _VIEWER = frozenset(
         Permission.ORGANIZATION_READ,
         Permission.MEMBER_READ,
         Permission.PROJECT_READ,
+        Permission.REQUIREMENT_READ,
         Permission.ARCHITECTURE_READ,
     }
 )
@@ -48,6 +56,10 @@ _VIEWER = frozenset(
 _MEMBER = _VIEWER | {
     Permission.PROJECT_CREATE,
     Permission.PROJECT_UPDATE,
+    Permission.REQUIREMENT_CREATE,
+    Permission.REQUIREMENT_UPDATE,
+    Permission.REQUIREMENT_DELETE,
+    Permission.REQUIREMENT_SET_CREATE,
     Permission.ARCHITECTURE_CREATE,
     Permission.ARCHITECTURE_UPDATE,
     Permission.ARCHITECTURE_VALIDATE,
@@ -61,6 +73,7 @@ _ADMIN = _MEMBER | {
     Permission.MEMBER_REMOVE,
     Permission.MEMBER_UPDATE_ROLE,
     Permission.AUDIT_READ,
+    Permission.PROJECT_ARCHIVE,
     Permission.PROJECT_DELETE,
     Permission.ARCHITECTURE_DELETE,
 }

@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from sqlalchemy import and_, or_, select
@@ -8,6 +9,7 @@ from core.domain.client import ClientInfo
 from persistence.models import AuditLogRecord
 
 MAX_USER_AGENT_LENGTH = 512
+events_log = logging.getLogger("architectos.events")
 
 
 def to_entry(record: AuditLogRecord) -> AuditEntry:
@@ -32,6 +34,32 @@ class SqlAlchemyAuditRepository:
     def __init__(self, session: AsyncSession, client: ClientInfo) -> None:
         self._session = session
         self._client = client
+        self._uncommitted: list[AuditEvent] = []
+
+    def publish_committed(self) -> None:
+        """Called by the unit of work after a commit: each recorded event becomes one structured
+        log line with the request id. Identifiers only: metadata, which can
+        hold names, never reaches the logs, and events of rolled-back transactions never do."""
+        for event in self._uncommitted:
+            project_id = event.metadata.get("project_id") or (
+                str(event.resource_id) if event.resource_type == "project" else None
+            )
+            events_log.info(
+                event.action.value,
+                extra={
+                    "event": event.action.value,
+                    "request_id": self._client.request_id,
+                    "actor_user_id": str(event.actor_user_id) if event.actor_user_id else None,
+                    "organization_id": str(event.organization_id) if event.organization_id else None,
+                    "project_id": project_id,
+                    "resource_type": event.resource_type,
+                    "resource_id": str(event.resource_id) if event.resource_id is not None else None,
+                },
+            )
+        self._uncommitted.clear()
+
+    def discard_uncommitted(self) -> None:
+        self._uncommitted.clear()
 
     async def record(self, event: AuditEvent) -> None:
         user_agent = self._client.user_agent
@@ -48,6 +76,7 @@ class SqlAlchemyAuditRepository:
             )
         )
         await self._session.flush()
+        self._uncommitted.append(event)
 
     async def list_for_organization(
         self, organization_id: uuid.UUID, *, after: AuditCursor | None, limit: int

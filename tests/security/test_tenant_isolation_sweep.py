@@ -8,6 +8,7 @@ from httpx import AsyncClient
 from apps.api.email.transport import InMemoryTransport
 
 from .support import assert_error_envelope, inventory, signed_in
+from .test_mass_assignment_sweep import VALID_BODIES
 
 
 @pytest.fixture
@@ -55,3 +56,48 @@ async def test_a_stranger_gets_404_everywhere_and_changes_nothing(
         assert_error_envelope(response, 404, "organization_not_found")
 
     assert await snapshot(client, org_id, ada) == before
+
+
+async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing(
+    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport, acme: tuple[str, dict[str, str]]
+) -> None:
+    """Covers projects and everything under them (requirements), with valid bodies and with
+    bodies that try to smuggle in another organization."""
+    org_id, ada = acme
+    project = (
+        await client.post(f"/api/v1/organizations/{org_id}/projects", json={"name": "Secret"}, headers=ada)
+    ).json()
+    requirement = (
+        await client.post(
+            f"/api/v1/projects/{project['id']}/requirements",
+            json=VALID_BODIES["create_requirement_api_v1_projects__project_id__requirements_post"],
+            headers=ada,
+        )
+    ).json()
+    ids = {"project_id": project["id"], "requirement_id": requirement["id"]}
+
+    async def state() -> tuple[object, ...]:
+        return (
+            (await client.get(f"/api/v1/projects/{project['id']}", headers=ada)).json(),
+            (await client.get(f"/api/v1/projects/{project['id']}/requirements", headers=ada)).json(),
+            (await client.get(f"/api/v1/organizations/{org_id}/audit-log", headers=ada)).json(),
+        )
+
+    before = await state()
+    grace = await signed_in(client, outbox, "grace@example.com")
+    await client.post("/api/v1/organizations", json={"name": "Globex"}, headers=grace)
+
+    scoped = [op for op in inventory(app) if "{project_id}" in op.path]
+    assert len(scoped) >= 10
+    for op in scoped:
+        valid = VALID_BODIES.get(op.operation_id) if op.has_body else None
+        response = await client.request(op.method, op.url(**ids), headers=grace, json=valid)
+        assert_error_envelope(response, 404, "project_not_found")
+        if op.has_body:
+            smuggled = (valid or {}) | {"organizationId": org_id, "projectId": project["id"]}
+            response = await client.request(op.method, op.url(**ids), headers=grace, json=smuggled)
+            # Unknown fields may be rejected before authorization (422); anything else must be a 404.
+            if response.status_code != 422:
+                assert_error_envelope(response, 404, "project_not_found")
+
+    assert await state() == before

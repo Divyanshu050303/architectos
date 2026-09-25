@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from apps.api.access_tokens import AccessTokenExpired, InvalidAccessToken, Unauthenticated
@@ -55,6 +56,28 @@ from core.domain.organizations.errors import (
     PermissionDenied,
     RoleNotManageable,
     SoleOwnerOfOrganization,
+)
+from core.domain.projects.errors import (
+    InvalidProjectDescription,
+    InvalidProjectName,
+    InvalidProjectSettings,
+    InvalidProjectSlug,
+    ProjectArchived,
+    ProjectNotArchived,
+    ProjectNotFound,
+    ProjectSlugTaken,
+)
+from core.domain.requirements.errors import (
+    ChangeReasonRequired,
+    InvalidRequirement,
+    InvalidRequirementSet,
+    InvalidStatusTransition,
+    RequirementLocked,
+    RequirementNotFound,
+    RequirementSetConflicts,
+    RequirementSetNotFound,
+    RequirementVersionConflict,
+    RequirementVersionNotFound,
 )
 
 logger = logging.getLogger("architectos.api")
@@ -102,6 +125,24 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     OwnerInvitationNotAllowed: 422,
     InvalidCursor: 422,
     RateLimited: 429,
+    ProjectNotFound: 404,
+    ProjectArchived: 409,
+    ProjectNotArchived: 409,
+    ProjectSlugTaken: 409,
+    InvalidProjectName: 422,
+    InvalidProjectDescription: 422,
+    InvalidProjectSlug: 422,
+    InvalidProjectSettings: 422,
+    RequirementNotFound: 404,
+    RequirementVersionNotFound: 404,
+    InvalidRequirement: 422,
+    ChangeReasonRequired: 422,
+    RequirementVersionConflict: 409,
+    InvalidStatusTransition: 409,
+    RequirementLocked: 409,
+    RequirementSetNotFound: 404,
+    InvalidRequirementSet: 422,
+    RequirementSetConflicts: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.
@@ -113,6 +154,8 @@ BEARER_CHALLENGES: dict[type[DomainError], str] = {
 }
 
 HTTP_CODES: dict[int, tuple[str, str]] = {
+    # FastAPI answers bodies it cannot parse (e.g. JSON nested past the parser's limit) with 400.
+    400: ("malformed_request", "The request body could not be parsed."),
     404: ("not_found", "Not found."),
     405: ("method_not_allowed", "This method is not allowed here."),
 }
@@ -135,8 +178,19 @@ def domain_error_response(error: DomainError) -> JSONResponse:
     if isinstance(error, RateLimited):
         headers["Retry-After"] = str(error.retry_after)
     return error_response(
-        _status_for(error), error.code, error.detail_message, error.details, headers=headers
+        _status_for(error), error.code, error.detail_message, _camel_details(error.details), headers=headers
     )
+
+
+def _camel_details(details: Any) -> Any:
+    """Domain details use snake_case (field paths like "structured_data.value", keys like
+    "current_version"); the JSON API is camelCase throughout."""
+    if not isinstance(details, dict):
+        return details
+    converted = {to_camel(key): value for key, value in details.items()}
+    if isinstance(converted.get("field"), str):
+        converted["field"] = ".".join(to_camel(part) for part in converted["field"].split("."))
+    return converted
 
 
 def _status_for(error: DomainError) -> int:
