@@ -14,10 +14,13 @@ from core.domain.projects.entities import ProjectAccess
 from core.domain.projects.errors import ProjectNotFound
 from core.domain.unit_of_work import UnitOfWork
 
+from .analysis import ANALYZED_STATUSES, ProjectAnalysis, ValidationReport, analyze, validate_requirement
 from .entities import NewRequirement, Requirement, RequirementChanges, Revision
 from .enums import RequirementPriority, RequirementSource, RequirementStatus, RequirementType
 from .errors import RequirementNotFound
 from .queries import RequirementCursor, RequirementQuery
+
+MAX_ANALYZED_REQUIREMENTS = 2000
 
 
 class RequirementService:
@@ -60,6 +63,24 @@ class RequirementService:
         if requirement is None:
             raise RequirementNotFound
         return requirement
+
+    async def validate(
+        self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, user_id: uuid.UUID
+    ) -> ValidationReport:
+        """Read-only: checks the current version against today's rules."""
+        return validate_requirement(
+            await self.get(project_id=project_id, requirement_id=requirement_id, user_id=user_id)
+        )
+
+    async def analyze(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> ProjectAnalysis:
+        """Conflicts, completeness, ambiguity and unbounded metrics over the project's draft, active
+        and satisfied requirements (the first MAX_ANALYZED_REQUIREMENTS by number)."""
+        async with self._uow as uow:
+            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            rows = await uow.requirements.list_by_status(
+                project_id, ANALYZED_STATUSES, limit=MAX_ANALYZED_REQUIREMENTS + 1
+            )
+        return analyze(rows[:MAX_ANALYZED_REQUIREMENTS], truncated=len(rows) > MAX_ANALYZED_REQUIREMENTS)
 
     async def create(  # noqa: PLR0913 - keyword-only, one argument per field of the request
         self,

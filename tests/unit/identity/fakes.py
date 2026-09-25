@@ -32,6 +32,7 @@ from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
 from core.domain.projects.queries import ProjectQuery, ProjectSort
 from core.domain.requirements.entities import NewRequirement, Requirement, RequirementVersion, Revision
+from core.domain.requirements.enums import RequirementStatus
 from core.domain.requirements.queries import RequirementQuery
 
 
@@ -519,6 +520,16 @@ class FakeRequirementRepository:
             after = (query.after.created_at, query.after.id)
             found = [r for r in found if (r.created_at, r.id) < after]
         return found[: query.limit]
+
+    async def list_by_status(
+        self, project_id: uuid.UUID, statuses: frozenset[RequirementStatus], *, limit: int
+    ) -> list[Requirement]:
+        found = [
+            r
+            for r in self.by_id.values()
+            if r.project_id == project_id and not r.is_deleted and r.content.status in statuses
+        ]
+        return sorted(found, key=lambda r: r.number)[:limit]
 
     async def list_versions(
         self, project_id: uuid.UUID, requirement_id: uuid.UUID, *, after: int | None, limit: int

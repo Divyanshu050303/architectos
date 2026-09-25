@@ -92,7 +92,7 @@ def normalize_identifier(raw: object, field: str) -> str:
 # --- numbers -------------------------------------------------------------------------------------
 
 
-def _decimal_places(value: Decimal) -> int:
+def decimal_places(value: Decimal) -> int:
     exponent = value.normalize().as_tuple().exponent
     return -exponent if isinstance(exponent, int) and exponent < 0 else 0
 
@@ -119,7 +119,7 @@ def parse_decimal(raw: object, field: str) -> Decimal:
         raise invalid(field, "not_a_number")
     if abs(value) >= MAX_MAGNITUDE:
         raise invalid(field, "out_of_range")
-    if _decimal_places(value) > MAX_DECIMAL_PLACES:
+    if decimal_places(value) > MAX_DECIMAL_PLACES:
         raise invalid(field, "too_precise")
     return value.normalize() + 0  # canonical form; "+ 0" turns -0 into 0
 
@@ -135,7 +135,7 @@ def parse_confidence(raw: object) -> Decimal:
     value = parse_decimal(raw, "confidence")
     if not Decimal(0) <= value <= Decimal(1):
         raise invalid("confidence", "out_of_range")
-    if _decimal_places(value) > CONFIDENCE_PLACES:
+    if decimal_places(value) > CONFIDENCE_PLACES:
         raise invalid("confidence", "too_precise")
     return value
 

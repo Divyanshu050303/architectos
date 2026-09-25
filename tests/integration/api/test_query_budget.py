@@ -87,6 +87,7 @@ REQUIREMENT = {
         ("/api/v1/projects/{project}", 3),  # session + user + project/organization/membership join
         ("/api/v1/projects/{project}/requirements", 4),  # + one filtered page
         ("/api/v1/projects/{project}/requirements/{requirement}", 4),  # + the requirement
+        ("/api/v1/projects/{project}/requirements/analysis", 4),  # + one query for all analyzed
     ],
 )
 async def test_reads_stay_within_budget_regardless_of_size(

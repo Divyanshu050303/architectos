@@ -208,6 +208,21 @@ class SqlAlchemyRequirementRepository:
         )
         return [to_requirement(r) for r in records]
 
+    async def list_by_status(
+        self, project_id: uuid.UUID, statuses: frozenset[RequirementStatus], *, limit: int
+    ) -> list[Requirement]:
+        records = await self._session.scalars(
+            select(RequirementRecord)
+            .where(
+                RequirementRecord.project_id == project_id,
+                RequirementRecord.deleted_at.is_(None),
+                RequirementRecord.status.in_(sorted(status.value for status in statuses)),
+            )
+            .order_by(RequirementRecord.number)
+            .limit(limit)
+        )
+        return [to_requirement(r) for r in records]
+
     def _versions_of_live(self, project_id: uuid.UUID, requirement_id: uuid.UUID):  # type: ignore[no-untyped-def]
         return (
             select(RequirementVersionRecord)

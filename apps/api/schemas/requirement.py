@@ -4,7 +4,14 @@ from decimal import Decimal
 from typing import Annotated, Any
 
 from pydantic import Field
+from pydantic.alias_generators import to_camel
 
+from core.domain.requirements.analysis import (
+    Concern,
+    ProjectAnalysis,
+    Severity,
+    ValidationReport,
+)
 from core.domain.requirements.entities import Requirement, RequirementChanges
 from core.domain.requirements.enums import (
     RequirementPriority,
@@ -12,6 +19,7 @@ from core.domain.requirements.enums import (
     RequirementStatus,
     RequirementType,
 )
+from core.domain.requirements.normalization import canonical_data
 from core.domain.requirements.value_objects import KEEP
 
 from .common import ApiModel, RequestModel
@@ -21,7 +29,10 @@ STRUCTURED_DATA_DESCRIPTION = (
     'unit, percentile?}, e.g. {"metric": "latency", "operator": "<=", "value": "300", '
     '"unit": "ms", "percentile": "95"}. Set: {metric, operator: "in", values: [...]}. '
     "Numbers are exact decimals: send them as strings to avoid binary floating point; they are "
-    "always returned as strings."
+    "always returned as strings. Convenient input forms are normalized deterministically: "
+    '{"quantity": "2k requests/sec"} instead of value and unit, value "2k" or "10M", '
+    'unit aliases such as rps, seconds or percent, percentile "p95". Ambiguous spellings '
+    "(m, gb, $) are refused."
 )
 
 
@@ -43,6 +54,10 @@ class RequirementResponse(ApiModel):
         "that the requirement is true, and unrelated to priority."
     )
     structured_data: dict[str, Any]
+    normalized_data: dict[str, Any] | None = Field(
+        description="Derived, not stored: the constraint in its canonical unit (requests/second, users, "
+        "ms, ratio, B; money keeps its currency). What the engines consume. Null without a constraint."
+    )
     created_by_user_id: uuid.UUID | None
     created_at: datetime
     updated_at: datetime
@@ -65,6 +80,7 @@ class RequirementResponse(ApiModel):
             source=requirement.source,
             confidence=requirement.confidence,
             structured_data=content.structured_data,
+            normalized_data=canonical_data(content.constraint),
             created_by_user_id=requirement.created_by_user_id,
             created_at=requirement.created_at,
             updated_at=requirement.updated_at,
@@ -124,3 +140,118 @@ class UpdateRequirementRequest(RequestModel):
             status=self.status,
             structured_data=self.structured_data if self.structured_data is not None else KEEP,
         )
+
+
+class RequirementRef(ApiModel):
+    """Exactly which version a finding was computed from."""
+
+    id: uuid.UUID
+    reference: str
+    version: int
+
+    @classmethod
+    def of(cls, requirement: Requirement) -> RequirementRef:
+        return cls(id=requirement.id, reference=requirement.reference, version=requirement.version)
+
+
+class IssueModel(ApiModel):
+    severity: Severity
+    field: str
+    reason: str
+
+
+class ValidationResponse(ApiModel):
+    requirement: RequirementRef
+    valid: bool = Field(description="No errors against today's rules in the current status.")
+    ready_for_active: bool = Field(description="Would pass validation as an active requirement.")
+    issues: list[IssueModel]
+
+    @classmethod
+    def from_report(cls, report: ValidationReport) -> ValidationResponse:
+        return cls(
+            requirement=RequirementRef.of(report.requirement),
+            valid=report.valid,
+            ready_for_active=report.ready_for_active,
+            issues=[
+                IssueModel(severity=i.severity, field=_camel_path(i.field), reason=i.reason)
+                for i in report.issues
+            ],
+        )
+
+
+class ConflictModel(ApiModel):
+    reason: str = Field(description="disjoint_bounds or disjoint_sets")
+    metric: str
+    requirements: list[RequirementRef]
+    message: str
+
+
+class CoverageModel(ApiModel):
+    concern: Concern
+    requirements: list[RequirementRef]
+
+
+class AmbiguityModel(ApiModel):
+    requirement: RequirementRef
+    reason: str = Field(description="missing_constraint, missing_percentile or low_confidence")
+
+
+class UnboundedModel(ApiModel):
+    metric: str
+    reason: str
+    requirements: list[RequirementRef]
+
+
+class CompletenessModel(ApiModel):
+    covered: list[CoverageModel]
+    missing: list[Concern] = Field(
+        description="Warnings, not errors: common concerns nobody has specified yet."
+    )
+
+
+class AnalysisResponse(ApiModel):
+    requirements: list[RequirementRef] = Field(
+        description="The draft, active and satisfied versions analyzed."
+    )
+    truncated: bool
+    conflicts: list[ConflictModel]
+    completeness: CompletenessModel
+    ambiguous: list[AmbiguityModel]
+    unbounded: list[UnboundedModel]
+
+    @classmethod
+    def from_analysis(cls, analysis: ProjectAnalysis) -> AnalysisResponse:
+        refs = RequirementRef.of
+        return cls(
+            requirements=[refs(r) for r in analysis.requirements],
+            truncated=analysis.truncated,
+            conflicts=[
+                ConflictModel(
+                    reason=c.reason,
+                    metric=c.metric,
+                    requirements=[refs(r) for r in c.requirements],
+                    message=c.message,
+                )
+                for c in analysis.conflicts
+            ],
+            completeness=CompletenessModel(
+                covered=[
+                    CoverageModel(concern=c.concern, requirements=[refs(r) for r in c.requirements])
+                    for c in analysis.covered
+                ],
+                missing=list(analysis.missing),
+            ),
+            ambiguous=[
+                AmbiguityModel(requirement=refs(a.requirement), reason=a.reason) for a in analysis.ambiguous
+            ],
+            unbounded=[
+                UnboundedModel(
+                    metric=u.metric, reason=u.reason, requirements=[refs(r) for r in u.requirements]
+                )
+                for u in analysis.unbounded
+            ],
+        )
+
+
+def _camel_path(path: str) -> str:
+    return ".".join(to_camel(part) for part in path.split("."))

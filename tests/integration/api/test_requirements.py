@@ -168,7 +168,15 @@ async def test_delete_is_soft(client: AsyncClient, world: World) -> None:
     ("overrides", "field", "reason"),
     [
         ({"structuredData": RPS | {"value": -50}}, "structuredData.value", "out_of_range"),
-        ({"structuredData": RPS | {"unit": "rps"}}, "structuredData.unit", "unknown_unit"),
+        ({"structuredData": RPS | {"unit": "furlongs/fortnight"}}, "structuredData.unit", "unknown_unit"),
+        (
+            {
+                "category": "storage",
+                "structuredData": {"metric": "storage", "operator": ">=", "value": 5, "unit": "gb"},
+            },
+            "structuredData.unit",
+            "ambiguous_unit",
+        ),
         ({"structuredData": RPS | {"exec": "__import__('os')"}}, "structuredData.exec", "unknown_field"),
         ({"structuredData": {}}, "structuredData", "required_when_in_force"),
         ({"category": "vibes"}, "category", "unknown_for_type"),
@@ -187,6 +195,7 @@ async def test_delete_is_soft(client: AsyncClient, world: World) -> None:
     ids=[
         "negative-rps",
         "unknown-unit",
+        "ambiguous-unit",
         "code-in-data",
         "missing-constraint",
         "unknown-category",
@@ -388,3 +397,123 @@ async def test_unknown_project_or_requirement(client: AsyncClient, world: World)
     assert missing.json()["error"]["code"] == "requirement_not_found"
     not_a_uuid = await client.get(f"{world.base}/REQ-1", headers=world.ada)
     assert not_a_uuid.status_code == 422
+
+
+# --- normalization, validation and analysis ------------------------------------------------------
+
+
+async def test_convenient_input_is_normalized_and_the_canonical_form_returned(
+    client: AsyncClient, world: World
+) -> None:
+    created = await create(
+        client,
+        world,
+        type="availability",
+        category="availability",
+        structuredData={"metric": "availability", "operator": ">=", "quantity": "99.9%"},
+    )
+    assert created["structuredData"] == {
+        "metric": "availability",
+        "operator": ">=",
+        "value": "99.9",
+        "unit": "%",
+    }
+    assert created["normalizedData"] == {
+        "metric": "availability",
+        "operator": ">=",
+        "value": "0.999",
+        "unit": "ratio",
+    }
+
+    rps = await create(
+        client, world, structuredData={"metric": "rps", "operator": ">=", "value": "2k", "unit": "req/s"}
+    )
+    assert rps["structuredData"] == RPS | {"value": "2000"}
+
+
+async def test_validate_reports_without_changing_anything(
+    client: AsyncClient, db: AsyncSession, outbox: InMemoryTransport, world: World
+) -> None:
+    draft = await create(client, world, status="draft", structuredData={})
+    viewer = await member(client, db, outbox, world, "viewer")
+
+    response = await client.post(f"{world.base}/{draft['id']}/validate", headers=viewer)
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "requirement": {"id": draft["id"], "reference": "REQ-1", "version": 1},
+        "valid": True,
+        "readyForActive": False,
+        "issues": [
+            {"severity": "warning", "field": "structuredData", "reason": "missing_constraint"},
+            {"severity": "warning", "field": "structuredData", "reason": "not_ready_for_active"},
+        ],
+    }
+    assert (await client.get(f"{world.base}/{draft['id']}", headers=world.ada)).json() == draft
+
+
+async def test_analysis_finds_conflicts_and_gaps(client: AsyncClient, world: World) -> None:
+    floor = await create(client, world, structuredData=RPS | {"value": 10_000})
+    ceiling = await create(
+        client, world, title="Cap", structuredData=RPS | {"operator": "<=", "value": 5_000}
+    )
+    await create(
+        client, world, title="Retired", status="draft", structuredData=RPS | {"operator": "<=", "value": 1}
+    )
+    retired = (await client.get(world.base, params={"search": "Retired"}, headers=world.ada)).json()[
+        "requirements"
+    ][0]
+    await client.patch(
+        f"{world.base}/{retired['id']}",
+        json={"expectedVersion": 1, "status": "deprecated"},
+        headers=world.ada,
+    )
+
+    response = await client.get(f"{world.base}/analysis", headers=world.ada)
+    assert response.status_code == 200, response.text
+    analysis = response.json()
+
+    def ref(requirement: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "id": requirement["id"],
+            "reference": requirement["reference"],
+            "version": requirement["version"],
+        }
+
+    assert analysis["requirements"] == [ref(floor), ref(ceiling)]
+    assert analysis["truncated"] is False
+    assert analysis["conflicts"] == [
+        {
+            "reason": "disjoint_bounds",
+            "metric": "requests_per_second",
+            "requirements": [ref(floor), ref(ceiling)],
+            "message": "REQ-1 requires requests_per_second >= 10000 requests/second, but REQ-2 requires "
+            "requests_per_second <= 5000 requests/second: no value satisfies both.",
+        }
+    ]
+    assert analysis["completeness"] == {
+        "covered": [{"concern": "traffic", "requirements": [ref(floor), ref(ceiling)]}],
+        "missing": ["latency", "availability", "data", "security", "retention"],
+    }
+    assert (analysis["ambiguous"], analysis["unbounded"]) == ([], [])
+
+
+async def test_analysis_of_an_empty_project(client: AsyncClient, world: World) -> None:
+    analysis = (await client.get(f"{world.base}/analysis", headers=world.ada)).json()
+    assert analysis["requirements"] == []
+    assert len(analysis["completeness"]["missing"]) == 6
+
+
+async def test_analysis_and_validation_are_tenant_scoped(
+    client: AsyncClient, outbox: InMemoryTransport, world: World
+) -> None:
+    created = await create(client, world)
+    stranger = await signed_in(client, outbox, "eve@example.com")
+    for response in (
+        await client.get(f"{world.base}/analysis", headers=stranger),
+        await client.post(f"{world.base}/{created['id']}/validate", headers=stranger),
+    ):
+        assert (response.status_code, response.json()["error"]["code"]) == (404, "project_not_found")
+    wrong = await client.post(
+        f"/api/v1/projects/{world.other_id}/requirements/{created['id']}/validate", headers=world.ada
+    )
+    assert wrong.json()["error"]["code"] == "requirement_not_found"

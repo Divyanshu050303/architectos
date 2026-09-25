@@ -16,6 +16,7 @@ from core.domain.errors import NothingToUpdate
 
 from .enums import RequirementPriority, RequirementSource, RequirementStatus, RequirementType
 from .errors import ChangeReasonRequired, RequirementLocked, RequirementNotFound, RequirementVersionConflict
+from .normalization import normalize_structured_data
 from .requirements import IN_FORCE, INITIAL_STATUSES, check_transition, content_locked, validate_content
 from .value_objects import (
     KEEP,
@@ -99,7 +100,9 @@ class NewRequirement:
                 statement=normalize_statement(statement),
                 priority=priority,
                 status=status,
-                constraint=parse_structured_data(structured_data if structured_data is not None else {}),
+                constraint=parse_structured_data(
+                    normalize_structured_data(structured_data if structured_data is not None else {})
+                ),
             ).validated(),
             source=source,
             confidence=parse_confidence(confidence) if confidence is not None else None,
@@ -177,7 +180,7 @@ class Requirement:
             else current.statement,
             priority=changes.priority or current.priority,
             status=changes.status or current.status,
-            constraint=parse_structured_data(changes.structured_data)
+            constraint=parse_structured_data(normalize_structured_data(changes.structured_data))
             if not isinstance(changes.structured_data, Keep)
             else current.constraint,
         )

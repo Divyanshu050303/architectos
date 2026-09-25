@@ -2,6 +2,7 @@ import uuid
 from typing import Protocol
 
 from .entities import NewRequirement, Requirement, RequirementVersion, Revision
+from .enums import RequirementStatus
 from .queries import RequirementQuery
 
 
@@ -33,6 +34,12 @@ class RequirementRepository(Protocol):
 
     async def list_for_project(self, project_id: uuid.UUID, query: RequirementQuery) -> list[Requirement]:
         """Live requirements, newest first, filtered in the database, at most ``query.limit`` rows."""
+        ...
+
+    async def list_by_status(
+        self, project_id: uuid.UUID, statuses: frozenset[RequirementStatus], *, limit: int
+    ) -> list[Requirement]:
+        """Live requirements in the given statuses, by number, at most ``limit`` (for analysis)."""
         ...
 
     async def list_versions(

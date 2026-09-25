@@ -7,10 +7,12 @@ from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.services import RateLimitsDep, RequirementServiceDep
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.requirement import (
+    AnalysisResponse,
     CreateRequirementRequest,
     RequirementPage,
     RequirementResponse,
     UpdateRequirementRequest,
+    ValidationResponse,
 )
 from core.domain.requirements.enums import RequirementPriority, RequirementStatus, RequirementType
 from core.domain.requirements.queries import MAX_SEARCH_LENGTH, RequirementCursor, RequirementQuery
@@ -106,6 +108,27 @@ async def create_requirement(
     return RequirementResponse.from_requirement(requirement)
 
 
+# Declared before "/{requirement_id}" so that "analysis" is not taken for a requirement id.
+@router.get(
+    "/analysis",
+    response_model=AnalysisResponse,
+    responses=REQUIREMENT_ERRORS,
+    summary="Analyze a project's requirements",
+    description=(
+        "Deterministic, over draft, active and satisfied requirements (each finding names the exact "
+        "versions): conflicts (no value satisfies both, e.g. RPS >= 10000 and <= 5000; tensions "
+        "are not conflicts), completeness (common concerns covered and missing, as warnings), "
+        "ambiguous requirements and unbounded sizing metrics."
+    ),
+)
+async def analyze_requirements(
+    project_id: uuid.UUID, current: CurrentUser, requirements: RequirementServiceDep
+) -> AnalysisResponse:
+    return AnalysisResponse.from_analysis(
+        await requirements.analyze(project_id=project_id, user_id=current.user.id)
+    )
+
+
 @router.get(
     "/{requirement_id}",
     response_model=RequirementResponse,
@@ -179,3 +202,25 @@ async def delete_requirement(
     requirements: RequirementServiceDep,
 ) -> None:
     await requirements.delete(project_id=project_id, requirement_id=requirement_id, user_id=current.user.id)
+
+
+@router.post(
+    "/{requirement_id}/validate",
+    response_model=ValidationResponse,
+    responses=REQUIREMENT_ERRORS,
+    summary="Validate a requirement",
+    description=(
+        "Read-only: checks the current version against today's rules and whether it could become "
+        "active, plus warnings (missing percentile, low AI confidence). Changes nothing."
+    ),
+)
+async def validate_requirement(
+    project_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    current: CurrentUser,
+    requirements: RequirementServiceDep,
+) -> ValidationResponse:
+    report = await requirements.validate(
+        project_id=project_id, requirement_id=requirement_id, user_id=current.user.id
+    )
+    return ValidationResponse.from_report(report)
