@@ -4,6 +4,7 @@ import re
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from email.message import EmailMessage
+from typing import TYPE_CHECKING
 
 import pytest
 from fastapi import FastAPI
@@ -18,6 +19,9 @@ from apps.api.main import create_app
 from core.domain.clock import Clock
 from tests.integration.conftest import joined_session
 from tests.unit.identity.fakes import FakeClock
+
+if TYPE_CHECKING:
+    from .requirement_support import World
 
 TEST_SECRET = "test-access-token-secret-" + "x" * 32
 TOKEN_IN_LINK = re.compile(r"[?&]token=([A-Za-z0-9_-]+)")
@@ -92,3 +96,11 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="https://testserver") as client:
         yield client
+
+
+@pytest.fixture
+async def world(client: AsyncClient, outbox: InMemoryTransport) -> World:
+    """An owner (``world.ada``) with an organization and two projects; see requirement_support."""
+    from .requirement_support import make_world  # noqa: PLC0415 - avoids a circular import
+
+    return await make_world(client, outbox)

@@ -35,6 +35,7 @@ class Operation:
             .replace("{session_id}", str(uuid.uuid4()))
             .replace("{project_id}", str(uuid.uuid4()))
             .replace("{requirement_id}", str(uuid.uuid4()))
+            .replace("{version}", "1")
             .replace("{invitation_token}", "A" * 43)
         )
 

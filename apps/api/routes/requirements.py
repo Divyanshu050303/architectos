@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Path, Query, status
 
 from apps.api.dependencies.auth import CurrentUser
 from apps.api.dependencies.services import RateLimitsDep, RequirementServiceDep
@@ -11,11 +11,18 @@ from apps.api.schemas.requirement import (
     CreateRequirementRequest,
     RequirementPage,
     RequirementResponse,
+    RequirementVersionPage,
+    RequirementVersionResponse,
     UpdateRequirementRequest,
     ValidationResponse,
 )
 from core.domain.requirements.enums import RequirementPriority, RequirementStatus, RequirementType
-from core.domain.requirements.queries import MAX_SEARCH_LENGTH, RequirementCursor, RequirementQuery
+from core.domain.requirements.queries import (
+    MAX_SEARCH_LENGTH,
+    RequirementCursor,
+    RequirementQuery,
+    decode_version_cursor,
+)
 
 router = APIRouter(prefix="/projects/{project_id}/requirements", tags=["requirements"])
 
@@ -224,3 +231,60 @@ async def validate_requirement(
         project_id=project_id, requirement_id=requirement_id, user_id=current.user.id
     )
     return ValidationResponse.from_report(report)
+
+
+# --- history (read-only: there is deliberately no way to change or delete a version) ------------
+
+
+@router.get(
+    "/{requirement_id}/versions",
+    response_model=RequirementVersionPage,
+    responses=REQUIREMENT_ERRORS | {422: {"model": ErrorResponse, "description": "invalid_cursor"}},
+    summary="Version history of a requirement",
+    description="Every state the requirement has had, oldest first, with who changed it and why. Immutable.",
+)
+async def list_requirement_versions(
+    *,
+    project_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    current: CurrentUser,
+    requirements: RequirementServiceDep,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+) -> RequirementVersionPage:
+    page = await requirements.versions(
+        project_id=project_id,
+        requirement_id=requirement_id,
+        user_id=current.user.id,
+        after=decode_version_cursor(cursor) if cursor else None,
+        limit=limit,
+    )
+    return RequirementVersionPage(
+        versions=[RequirementVersionResponse.from_version(v) for v in page.items],
+        next_cursor=page.next_cursor,
+    )
+
+
+@router.get(
+    "/{requirement_id}/versions/{version}",
+    response_model=RequirementVersionResponse,
+    responses=REQUIREMENT_ERRORS
+    | {
+        404: {
+            "model": ErrorResponse,
+            "description": "project_not_found, requirement_not_found, requirement_version_not_found",
+        }
+    },
+    summary="One version of a requirement",
+)
+async def get_requirement_version(
+    project_id: uuid.UUID,
+    requirement_id: uuid.UUID,
+    version: Annotated[int, Path(ge=1, le=2_147_483_647)],
+    current: CurrentUser,
+    requirements: RequirementServiceDep,
+) -> RequirementVersionResponse:
+    found = await requirements.version(
+        project_id=project_id, requirement_id=requirement_id, version=version, user_id=current.user.id
+    )
+    return RequirementVersionResponse.from_version(found)

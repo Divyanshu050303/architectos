@@ -15,10 +15,10 @@ from core.domain.projects.errors import ProjectNotFound
 from core.domain.unit_of_work import UnitOfWork
 
 from .analysis import ANALYZED_STATUSES, ProjectAnalysis, ValidationReport, analyze, validate_requirement
-from .entities import NewRequirement, Requirement, RequirementChanges, Revision
+from .entities import NewRequirement, Requirement, RequirementChanges, RequirementVersion, Revision
 from .enums import RequirementPriority, RequirementSource, RequirementStatus, RequirementType
-from .errors import RequirementNotFound
-from .queries import RequirementCursor, RequirementQuery
+from .errors import RequirementNotFound, RequirementVersionNotFound
+from .queries import RequirementCursor, RequirementQuery, encode_version_cursor
 
 MAX_ANALYZED_REQUIREMENTS = 2000
 
@@ -63,6 +63,41 @@ class RequirementService:
         if requirement is None:
             raise RequirementNotFound
         return requirement
+
+    async def versions(
+        self,
+        *,
+        project_id: uuid.UUID,
+        requirement_id: uuid.UUID,
+        user_id: uuid.UUID,
+        after: int | None = None,
+        limit: int = 50,
+    ) -> pagination.Page[RequirementVersion]:
+        """The immutable history, oldest first. Only for requirements that are not deleted."""
+        size = pagination.page_size(limit)
+        async with self._uow as uow:
+            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            rows = await uow.requirements.list_versions(
+                project_id, requirement_id, after=after, limit=size + 1
+            )
+            if not rows and await uow.requirements.get(project_id, requirement_id) is None:
+                raise RequirementNotFound
+        items, more = rows[:size], len(rows) > size
+        return pagination.Page(
+            items=items, next_cursor=encode_version_cursor(items[-1].version) if more else None
+        )
+
+    async def version(
+        self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, version: int, user_id: uuid.UUID
+    ) -> RequirementVersion:
+        async with self._uow as uow:
+            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            found = await uow.requirements.get_version(project_id, requirement_id, version)
+            if found is None and await uow.requirements.get(project_id, requirement_id) is None:
+                raise RequirementNotFound
+        if found is None:
+            raise RequirementVersionNotFound
+        return found
 
     async def validate(
         self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, user_id: uuid.UUID

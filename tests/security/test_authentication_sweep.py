@@ -66,6 +66,8 @@ SPECIFIED = PUBLIC | {
     ("DELETE", "/api/v1/projects/{project_id}/requirements/{requirement_id}"),
     ("GET", "/api/v1/projects/{project_id}/requirements/analysis"),
     ("POST", "/api/v1/projects/{project_id}/requirements/{requirement_id}/validate"),
+    ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}/versions"),
+    ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}/versions/{version}"),
 }
 
 

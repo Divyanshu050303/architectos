@@ -12,7 +12,7 @@ from core.domain.requirements.analysis import (
     Severity,
     ValidationReport,
 )
-from core.domain.requirements.entities import Requirement, RequirementChanges
+from core.domain.requirements.entities import Requirement, RequirementChanges, RequirementVersion
 from core.domain.requirements.enums import (
     RequirementPriority,
     RequirementSource,
@@ -85,6 +85,52 @@ class RequirementResponse(ApiModel):
             created_at=requirement.created_at,
             updated_at=requirement.updated_at,
         )
+
+
+class RequirementVersionResponse(ApiModel):
+    """One immutable state of a requirement. Versions are never modified or deleted."""
+
+    requirement_id: uuid.UUID
+    version: int
+    type: RequirementType
+    category: str
+    title: str
+    statement: str
+    priority: RequirementPriority
+    status: RequirementStatus
+    source: RequirementSource
+    confidence: Decimal | None
+    structured_data: dict[str, Any]
+    normalized_data: dict[str, Any] | None
+    change_reason: str | None = Field(description="Why this version exists; null for version 1 and drafts.")
+    created_by_user_id: uuid.UUID | None = Field(description="Who made this change.")
+    created_at: datetime
+
+    @classmethod
+    def from_version(cls, version: RequirementVersion) -> RequirementVersionResponse:
+        content = version.content
+        return cls(
+            requirement_id=version.requirement_id,
+            version=version.version,
+            type=content.type,
+            category=content.category,
+            title=content.title,
+            statement=content.statement,
+            priority=content.priority,
+            status=content.status,
+            source=version.source,
+            confidence=version.confidence,
+            structured_data=content.structured_data,
+            normalized_data=canonical_data(content.constraint),
+            change_reason=version.change_reason,
+            created_by_user_id=version.created_by_user_id,
+            created_at=version.created_at,
+        )
+
+
+class RequirementVersionPage(ApiModel):
+    versions: list[RequirementVersionResponse]
+    next_cursor: str | None = Field(description="Pass as ?cursor= for the next page; null at the end.")
 
 
 class RequirementPage(ApiModel):

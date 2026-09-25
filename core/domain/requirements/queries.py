@@ -50,3 +50,17 @@ class RequirementQuery:
     def __post_init__(self) -> None:
         if self.search is not None and len(self.search) > MAX_SEARCH_LENGTH:
             raise ValueError("search too long")
+
+
+_VERSION_KIND = "version"
+
+
+def encode_version_cursor(version: int) -> str:
+    return pagination.encode_cursor([_VERSION_KIND, str(version)])
+
+
+def decode_version_cursor(raw: str) -> int:
+    kind, version = pagination.decode_cursor(raw, length=2)
+    if kind != _VERSION_KIND or not version.isdigit() or int(version) < 1:
+        raise InvalidCursor
+    return int(version)
