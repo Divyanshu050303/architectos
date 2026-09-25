@@ -16,6 +16,7 @@ finding can be referred to across re-runs.
 import hashlib
 import json
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 
 from core.domain.requirements.analysis import Severity
@@ -45,6 +46,7 @@ class Finding:
     field: str | None = None
     suggestion: str | None = None
     options: tuple[str, ...] = ()  # possible readings, for ambiguities and assumptions
+    confidence: Decimal | None = None  # for assumptions: how safe the assumed reading is
 
     @property
     def key(self) -> str:

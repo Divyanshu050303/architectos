@@ -256,6 +256,9 @@ _WINDOW = 40  # characters before a number searched for an operator phrase
 YEAR_AS_365_DAYS = Interpretation("year_as_365_days", "A year was read as 365 days.")
 MONTH_AS_30_DAYS = Interpretation("month_as_30_days", "A month was read as 30 days.")
 DOLLAR_AS_USD = Interpretation("dollar_as_usd", "“$” was read as US dollars (USD).")
+UNIT_SHARED_IN_RANGE = Interpretation(
+    "unit_shared_in_range", "The range's lower value has no unit; it was read in the upper value's unit."
+)
 
 
 # --- scanning --------------------------------------------------------------------------------------
@@ -439,11 +442,9 @@ def _bounds(text: str, quantities: list[Quantity]) -> list[Bound]:
         second = quantities[index + 1] if index + 1 < len(quantities) else None
         if second is not None and _joined_as_range(text, first, second):
             opener = _RANGE_OPENER.search(text, max(0, first.start - 12), first.start)
-            low = (
-                first
-                if first.unit is not None
-                else Quantity(first.value, second.unit, first.start, first.end)
-            )
+            shared = first.unit is None  # "between 10 and 20 GB": the 10 is read in GB
+            low = Quantity(first.value, second.unit, first.start, first.end) if shared else first
+            shared_note = (UNIT_SHARED_IN_RANGE,) if shared else ()
             bounds.append(
                 Bound(
                     Operator.BETWEEN,
@@ -451,7 +452,7 @@ def _bounds(text: str, quantities: list[Quantity]) -> list[Bound]:
                     second.end,
                     minimum=low,
                     maximum=second,
-                    interpretations=low.interpretations + second.interpretations,
+                    interpretations=low.interpretations + second.interpretations + shared_note,
                 )
             )
             index += 2
