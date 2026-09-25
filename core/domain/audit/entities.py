@@ -36,6 +36,8 @@ class AuditAction(StrEnum):
     REQUIREMENT_VERSION_CREATED = "requirement.version_created"  # every revision
     REQUIREMENT_DELETED = "requirement.deleted"
     REQUIREMENT_SET_CREATED = "requirement_set.created"
+    REQUIREMENT_ANALYSIS_CREATED = "requirement_analysis.created"
+    REQUIREMENT_PROMOTED = "requirement.promoted"  # created from an analysis's candidate
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

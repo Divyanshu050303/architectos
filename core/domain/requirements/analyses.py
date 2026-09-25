@@ -10,11 +10,15 @@ own words.
 import hashlib
 import unicodedata
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from .errors import InvalidRequirementInput
+
+if TYPE_CHECKING:
+    from .entities import Requirement
 
 MAX_INPUT_CHARACTERS = 20_000
 _ALLOWED_CONTROLS = frozenset({"\n", "\r", "\t"})
@@ -66,3 +70,18 @@ class RequirementAnalysis:
     result: dict[str, Any]
     created_by_user_id: uuid.UUID | None
     created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class AnalyzerOutput:
+    engine_version: str
+    result: dict[str, Any]  # JSON-ready, stored as is
+    ready_for_architecture: bool
+    candidate_count: int
+    blocking_count: int
+
+
+class RequirementsAnalyzer(Protocol):
+    """The Requirements Engine, as the domain sees it (implemented in engines/requirements)."""
+
+    async def analyze(self, raw_input: str, existing: Sequence[Requirement]) -> AnalyzerOutput: ...

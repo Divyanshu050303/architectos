@@ -170,6 +170,11 @@ planning input carries it as `origin: {analysis_id, candidate_key}`.
 - `404 requirement_analysis_not_found`: no such analysis in this project.
 - `409 candidate_already_promoted`: that candidate is already a live requirement
   (`details.requirementId`); promoting twice never creates a duplicate.
+- `422 invalid_promotion`: no candidates chosen, more than 100, one chosen twice, or one that is
+  not in the analysis (`details.reason`, `details.candidateKey`).
+
+Promotion is recorded as `requirement.promoted` (the reference, the analysis and the candidate);
+an analysis as `requirement_analysis.created` (engine version and counts, never the text).
 
 ## Audit
 

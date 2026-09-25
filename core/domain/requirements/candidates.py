@@ -15,13 +15,20 @@ import uuid
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
+from typing import Any
 
 from .analyses import Origin
 from .entities import NewRequirement, RequirementContent
-from .enums import RequirementSource, RequirementStatus
+from .enums import (
+    RequirementPriority,
+    RequirementScope,
+    RequirementSource,
+    RequirementStatus,
+    RequirementType,
+)
 from .errors import InvalidRequirement
 from .requirements import validate_content
-from .value_objects import decimal_to_str, parse_confidence
+from .value_objects import decimal_to_str, parse_confidence, parse_structured_data
 
 
 class ExtractionMethod(StrEnum):
@@ -111,3 +118,48 @@ class RequirementCandidate:
             scope=content.scope,
             origin=Origin(analysis_id, self.key) if analysis_id is not None else None,
         )
+
+    # --- storage ---------------------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """JSON-ready, for the analysis record; ``from_dict`` rebuilds exactly this candidate."""
+        content = self.content
+        return {
+            "key": self.key,
+            "method": self.method.value,
+            "source": self.source.value,
+            "confidence": decimal_to_str(self.confidence),
+            "span": {"start": self.span.start, "end": self.span.end, "text": self.span.text}
+            if self.span
+            else None,
+            "type": content.type.value,
+            "category": content.category,
+            "scope": content.scope.value,
+            "title": content.title,
+            "statement": content.statement,
+            "priority": content.priority.value,
+            "structured_data": content.structured_data,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> RequirementCandidate:
+        """Rebuilds a stored candidate; refuses a record whose key does not match its content."""
+        span = data["span"]
+        candidate = cls(
+            method=ExtractionMethod(data["method"]),
+            content=RequirementContent(
+                type=RequirementType(data["type"]),
+                category=data["category"],
+                title=data["title"],
+                statement=data["statement"],
+                priority=RequirementPriority(data["priority"]),
+                status=RequirementStatus.DRAFT,
+                constraint=parse_structured_data(data["structured_data"]),
+                scope=RequirementScope(data["scope"]),
+            ),
+            confidence=Decimal(data["confidence"]),
+            span=SourceSpan(span["start"], span["end"], span["text"]) if span else None,
+        )
+        if candidate.key != data["key"]:
+            raise ValueError("stored candidate does not match its key")
+        return candidate

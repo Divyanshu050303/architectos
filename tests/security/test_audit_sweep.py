@@ -111,12 +111,21 @@ def test_every_mutating_project_endpoint_is_classified(app: FastAPI) -> None:
     assert mutating == set(PLANS) | READ_ONLY
 
 
+# Actions written by use cases whose endpoint does not exist yet, with the phase that adds it.
+# Remove an entry as soon as its endpoint is in PLANS: the test fails on a stale entry.
+NOT_YET_EXPOSED = {
+    "requirement.promoted": "Requirements Engine phase 12: POST .../requirement-analyses/{id}/promote"
+}
+
+
 def test_every_project_scoped_audit_action_is_exercised() -> None:
     """No action is declared and then never written."""
     declared = {
         a.value for a in AuditAction if a.value.split(".")[0] in {"project", "requirement", "requirement_set"}
     }
-    assert declared == set().union(*(plan.actions for plan in PLANS.values()))
+    exercised = set().union(*(plan.actions for plan in PLANS.values()))
+    assert declared == exercised | set(NOT_YET_EXPOSED)
+    assert not exercised & set(NOT_YET_EXPOSED), "an exposed action is still listed as not yet exposed"
 
 
 async def audit_entries(client: AsyncClient, auth: dict[str, str], org_id: str) -> list[dict[str, Any]]:

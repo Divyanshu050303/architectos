@@ -87,3 +87,11 @@ class CandidateAlreadyPromoted(DomainError):
 
     code = "candidate_already_promoted"
     message = "This candidate has already been promoted to a requirement."
+
+
+class InvalidPromotion(DomainError):
+    """``details`` = {"reason": "empty" | "too_many" | "duplicate" | "unknown_candidate"}, with
+    ``candidate_key`` for the last two."""
+
+    code = "invalid_promotion"
+    message = "These candidates cannot be promoted."
