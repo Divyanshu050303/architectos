@@ -68,3 +68,22 @@ class RequirementSetConflicts(DomainError):
 
     code = "requirement_set_conflicts"
     message = "Some of these requirements contradict each other; resolve the conflicts first."
+
+
+class InvalidRequirementInput(DomainError):
+    """``details`` = {"reason": "empty" | "too_long" | "control_characters", ...}."""
+
+    code = "invalid_requirement_input"
+    message = "The requirement text cannot be analyzed."
+
+
+class RequirementAnalysisNotFound(DomainError):
+    code = "requirement_analysis_not_found"
+    message = "Requirement analysis not found."
+
+
+class CandidateAlreadyPromoted(DomainError):
+    """``details`` = {"requirement_id": ...}: the live requirement already promoted from it."""
+
+    code = "candidate_already_promoted"
+    message = "This candidate has already been promoted to a requirement."

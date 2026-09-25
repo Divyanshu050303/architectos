@@ -27,7 +27,8 @@ AUTH_TABLES = {
 PROJECT_TABLES = {"projects"}
 REQUIREMENT_TABLES = {"requirements", "requirement_versions"}
 SET_TABLES = {"requirement_sets", "requirement_set_items"}
-ALL_TABLES = AUTH_TABLES | PROJECT_TABLES | REQUIREMENT_TABLES | SET_TABLES
+ANALYSIS_TABLES = {"requirement_analyses"}
+ALL_TABLES = AUTH_TABLES | PROJECT_TABLES | REQUIREMENT_TABLES | SET_TABLES | ANALYSIS_TABLES
 GUARDS = {"audit_logs_reject_change", "requirement_versions_reject_change", "requirement_sets_reject_change"}
 
 
@@ -199,3 +200,12 @@ def test_upgrading_existing_requirements_gives_them_the_system_scope(empty_datab
     assert rows == [("system",), ("system",)]
     command.downgrade(config, "0005")  # no row uses a new source or scope: downgrading is possible
     command.upgrade(config, "head")
+
+
+def test_downgrading_analyses_leaves_requirement_sets_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0006")
+    assert _tables(empty_database_url) == ALL_TABLES - ANALYSIS_TABLES
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES

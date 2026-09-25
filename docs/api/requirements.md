@@ -157,6 +157,20 @@ exactly as stored at creation (snake_case keys: it is a versioned engine contrac
 `contentHash` = SHA-256 of `json.dumps(planningInput, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
 in UTF-8: anyone can verify it, and equal content gives an equal hash.
 
+## Provenance (Requirements Engine)
+
+Requirements can also be *promoted* from a requirement analysis: the Requirements Engine's
+reading of a person's text (the analysis endpoints are described below once available). A
+promoted requirement is always a draft and keeps its origin: the analysis, which stores the raw
+input exactly as written, and the candidate, which points at the exact span of that text. The
+planning input carries it as `origin: {analysis_id, candidate_key}`.
+
+- `422 invalid_requirement_input`: the text to analyze is empty, longer than 20,000 characters, or
+  contains control characters (`details.reason`).
+- `404 requirement_analysis_not_found`: no such analysis in this project.
+- `409 candidate_already_promoted`: that candidate is already a live requirement
+  (`details.requirementId`); promoting twice never creates a duplicate.
+
 ## Audit
 
 `requirement.created`, `requirement.version_created` (every change), `requirement.updated` (field

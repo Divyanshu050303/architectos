@@ -14,6 +14,7 @@ from typing import Any
 
 from core.domain.errors import NothingToUpdate
 
+from .analyses import Origin
 from .enums import (
     RequirementPriority,
     RequirementScope,
@@ -83,6 +84,7 @@ class NewRequirement:
     source: RequirementSource
     confidence: Decimal | None
     created_by_user_id: uuid.UUID
+    origin: Origin | None = None  # set when promoted from an analysis's candidate
 
     @classmethod
     def create(  # noqa: PLR0913 - keyword-only, one argument per field of the request
@@ -100,6 +102,7 @@ class NewRequirement:
         confidence: object = None,
         structured_data: object = None,
         scope: RequirementScope = RequirementScope.SYSTEM,
+        origin: Origin | None = None,
     ) -> NewRequirement:
         if status not in INITIAL_STATUSES[source]:
             raise invalid("status", "not_allowed_at_creation")
@@ -124,6 +127,7 @@ class NewRequirement:
             source=source,
             confidence=parse_confidence(confidence) if confidence is not None else None,
             created_by_user_id=created_by_user_id,
+            origin=origin,
         )
 
 
@@ -158,6 +162,7 @@ class Requirement:
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None = None
+    origin: Origin | None = None  # the analysis and candidate it was promoted from, if any
 
     @property
     def reference(self) -> str:

@@ -108,6 +108,9 @@ class RequirementRecord(UuidPrimaryKey, Timestamps, RequirementContent, Base):
         Uuid, ForeignKey("users.id", ondelete="SET NULL")
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Provenance: the analysis and candidate this requirement was promoted from (both or neither).
+    origin_analysis_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    origin_candidate_key: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         # Also serves the RESTRICT check on projects(id).
@@ -132,6 +135,29 @@ class RequirementRecord(UuidPrimaryKey, Timestamps, RequirementContent, Base):
             deferrable=True,
             initially="DEFERRED",
             use_alter=True,
+        ),
+        # The origin analysis belongs to the same project, enforced by the database.
+        ForeignKeyConstraint(
+            ["origin_analysis_id", "project_id"],
+            ["requirement_analyses.id", "requirement_analyses.project_id"],
+            name="fk_requirements_origin_requirement_analyses",
+            ondelete="RESTRICT",
+        ),
+        # A candidate becomes at most one live requirement: a retried promotion cannot duplicate it
+        # (after a deliberate delete it can be promoted again).
+        Index(
+            "uq_requirements_origin_live",
+            "origin_analysis_id",
+            "origin_candidate_key",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND origin_analysis_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "(origin_analysis_id IS NULL) = (origin_candidate_key IS NULL)", name="origin_complete"
+        ),
+        CheckConstraint(
+            "origin_candidate_key IS NULL OR origin_candidate_key ~ '^cand_[0-9a-f]{16}$'",
+            name="origin_candidate_key_format",
         ),
         CheckConstraint("number >= 1", name="number_positive"),
         CheckConstraint("current_version >= 1", name="current_version_positive"),

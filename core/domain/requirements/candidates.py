@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 
+from .analyses import Origin
 from .entities import NewRequirement, RequirementContent
 from .enums import RequirementSource, RequirementStatus
 from .errors import InvalidRequirement
@@ -89,8 +90,11 @@ class RequirementCandidate:
             return error
         return None
 
-    def to_new_requirement(self, *, project_id: uuid.UUID, created_by_user_id: uuid.UUID) -> NewRequirement:
-        """The draft requirement a promotion creates; validated like any creation."""
+    def to_new_requirement(
+        self, *, project_id: uuid.UUID, created_by_user_id: uuid.UUID, analysis_id: uuid.UUID | None = None
+    ) -> NewRequirement:
+        """The draft requirement a promotion creates; validated like any creation. With
+        ``analysis_id`` it remembers where it came from (and a second promotion is recognised)."""
         content = self.content
         return NewRequirement.create(
             project_id=project_id,
@@ -105,4 +109,5 @@ class RequirementCandidate:
             confidence=decimal_to_str(self.confidence),
             structured_data=content.structured_data,
             scope=content.scope,
+            origin=Origin(analysis_id, self.key) if analysis_id is not None else None,
         )

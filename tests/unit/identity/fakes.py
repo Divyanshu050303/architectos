@@ -32,8 +32,10 @@ from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
 from core.domain.projects.queries import ProjectQuery, ProjectSort
 from core.domain.projects.repository import ProjectLock
+from core.domain.requirements.analyses import NewRequirementAnalysis, RequirementAnalysis
 from core.domain.requirements.entities import NewRequirement, Requirement, RequirementVersion, Revision
 from core.domain.requirements.enums import RequirementStatus
+from core.domain.requirements.errors import CandidateAlreadyPromoted
 from core.domain.requirements.queries import RequirementQuery
 from core.domain.requirements.requirement_sets import NewRequirementSet, RequirementSet
 
@@ -469,6 +471,12 @@ class FakeRequirementRepository:
         )
 
     async def add(self, requirement: NewRequirement) -> Requirement:
+        if requirement.origin is not None:
+            existing = next(
+                (r for r in self.by_id.values() if r.origin == requirement.origin and not r.is_deleted), None
+            )
+            if existing is not None:
+                raise CandidateAlreadyPromoted(details={"requirement_id": str(existing.id)})
         numbers = [r.number for r in self.by_id.values() if r.project_id == requirement.project_id]
         now = self._clock()
         stored = Requirement(
@@ -482,6 +490,7 @@ class FakeRequirementRepository:
             created_by_user_id=requirement.created_by_user_id,
             created_at=now,
             updated_at=now,
+            origin=requirement.origin,
         )
         self.by_id[stored.id] = stored
         self.versions[stored.id] = [self._version_of(stored, None, requirement.created_by_user_id)]
@@ -596,6 +605,30 @@ class FakeRequirementSetRepository:
         return (replace(found, items=()), self.planning_inputs[set_id]) if found else None
 
 
+class FakeRequirementAnalysisRepository:
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, RequirementAnalysis] = {}
+
+    async def add(self, analysis: NewRequirementAnalysis) -> RequirementAnalysis:
+        stored = RequirementAnalysis(
+            id=uuid.uuid7(),
+            project_id=analysis.project_id,
+            raw_input=analysis.raw_input,
+            input_sha256=analysis.input_sha256,
+            engine_version=analysis.engine_version,
+            result=analysis.result,
+            created_by_user_id=analysis.created_by_user_id,
+            created_at=self._clock(),
+        )
+        self.by_id[stored.id] = stored
+        return stored
+
+    async def get(self, project_id: uuid.UUID, analysis_id: uuid.UUID) -> RequirementAnalysis | None:
+        found = self.by_id.get(analysis_id)
+        return found if found and found.project_id == project_id else None
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -609,6 +642,7 @@ class FakeUnitOfWork:
         self._projects = FakeProjectRepository(clock, self._memberships)
         self._requirements = FakeRequirementRepository(clock)
         self._requirement_sets = FakeRequirementSetRepository(clock)
+        self._requirement_analyses = FakeRequirementAnalysisRepository(clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -655,6 +689,10 @@ class FakeUnitOfWork:
     @property
     def requirement_sets(self) -> FakeRequirementSetRepository:
         return self._requirement_sets
+
+    @property
+    def requirement_analyses(self) -> FakeRequirementAnalysisRepository:
+        return self._requirement_analyses
 
     async def __aenter__(self) -> Self:
         return self

@@ -107,7 +107,12 @@ def _requirement(requirement: Requirement) -> PlanningRequirementV2:
         "scope": content.scope.value,
         "source": requirement.source.value,
         "confidence": decimal_to_str(requirement.confidence) if requirement.confidence is not None else None,
-        "origin": None,  # set once requirements can be promoted from an analysis
+        "origin": {
+            "analysis_id": str(requirement.origin.analysis_id),
+            "candidate_key": requirement.origin.candidate_key,
+        }
+        if requirement.origin
+        else None,
         "constraint": cast(PlanningConstraintV2, constraint) if constraint is not None else None,
     }
 
