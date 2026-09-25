@@ -25,6 +25,8 @@ class AuditAction(StrEnum):
     MEMBER_INVITATION_ACCEPTED = "member.invitation_accepted"
     MEMBER_ROLE_CHANGED = "member.role_changed"
     MEMBER_REMOVED = "member.removed"
+    PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

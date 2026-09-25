@@ -1,16 +1,19 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import ColumnElement, func, literal, or_, select, tuple_, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.domain.projects.entities import NewProject, Project
+from core.domain.projects.entities import NewProject, Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
+from core.domain.projects.queries import ProjectQuery, ProjectSort
 from core.domain.projects.value_objects import ProjectSettings
-from persistence.models import ProjectRecord
+from persistence.models import OrganizationMemberRecord, OrganizationRecord, ProjectRecord
 
 from ._errors import violated_constraint
+from .organizations import to_membership
 
 SLUG_UNIQUE_INDEX = "uq_projects_organization_id_slug_live"
 
@@ -92,3 +95,72 @@ class SqlAlchemyProjectRepository:
             msg = f"project {project.id} vanished inside its own transaction"
             raise LookupError(msg)
         return to_project(record)
+
+    async def get_for_member(
+        self, project_id: uuid.UUID, *, user_id: uuid.UUID, for_update: bool = False
+    ) -> ProjectAccess | None:
+        # Project, organization and membership in one statement: a project of another tenant, a
+        # deleted project or a deleted organization simply produce no row.
+        statement = (
+            select(ProjectRecord, OrganizationMemberRecord)
+            .join(OrganizationRecord, OrganizationRecord.id == ProjectRecord.organization_id)
+            .join(
+                OrganizationMemberRecord,
+                (OrganizationMemberRecord.organization_id == ProjectRecord.organization_id)
+                & (OrganizationMemberRecord.user_id == user_id),
+            )
+            .where(
+                ProjectRecord.id == project_id,
+                ProjectRecord.deleted_at.is_(None),
+                OrganizationRecord.deleted_at.is_(None),
+            )
+            .execution_options(populate_existing=True)
+        )
+        if for_update:
+            statement = statement.with_for_update(of=ProjectRecord)
+        row = (await self._session.execute(statement)).first()
+        if row is None:
+            return None
+        project, member = row
+        return ProjectAccess(project=to_project(project), membership=to_membership(member))
+
+    async def list_for_organization(self, organization_id: uuid.UUID, query: ProjectQuery) -> list[Project]:
+        statement = select(ProjectRecord).where(
+            ProjectRecord.organization_id == organization_id, ProjectRecord.deleted_at.is_(None)
+        )
+        if query.status is not None:
+            statement = statement.where(ProjectRecord.status == query.status.value)
+        if query.search:
+            pattern = f"%{_escape_like(query.search.strip().lower())}%"
+            statement = statement.where(
+                or_(
+                    func.lower(ProjectRecord.name).like(pattern, escape="\\"),
+                    ProjectRecord.slug.like(pattern, escape="\\"),
+                )
+            )
+        key, descending = _SORT_KEYS[query.sort]
+        if query.after is not None:
+            after_value: object = (
+                query.after.value
+                if query.sort is ProjectSort.NAME
+                else datetime.fromisoformat(query.after.value)
+            )
+            boundary = tuple_(key, ProjectRecord.id)
+            position = tuple_(literal(after_value), literal(query.after.id))
+            statement = statement.where(boundary < position if descending else boundary > position)
+        order = (key.desc(), ProjectRecord.id.desc()) if descending else (key.asc(), ProjectRecord.id.asc())
+        records = await self._session.scalars(statement.order_by(*order).limit(query.limit))
+        return [to_project(r) for r in records]
+
+
+# Sort key and direction per whitelisted ordering. Keyset pagination compares (key, id).
+_SORT_KEYS: dict[ProjectSort, tuple[ColumnElement[object], bool]] = {
+    ProjectSort.CREATED_AT: (ProjectRecord.created_at, True),  # type: ignore[dict-item]
+    ProjectSort.UPDATED_AT: (ProjectRecord.updated_at, True),  # type: ignore[dict-item]
+    ProjectSort.NAME: (func.lower(ProjectRecord.name), False),
+}
+
+
+def _escape_like(value: str) -> str:
+    """Search text is matched literally: LIKE wildcards in it are escaped."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

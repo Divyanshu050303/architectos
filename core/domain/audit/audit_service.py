@@ -1,9 +1,9 @@
 """Reading the audit trail. Writing happens inside each domain service's own transaction."""
 
-import base64
 import uuid
 from datetime import datetime
 
+from core.domain import pagination
 from core.domain.organizations.entities import Membership
 from core.domain.organizations.permissions import Permission
 from core.domain.unit_of_work import UnitOfWork
@@ -11,23 +11,21 @@ from core.domain.unit_of_work import UnitOfWork
 from .entities import AuditCursor, AuditPage
 from .errors import InvalidCursor
 
-MAX_PAGE_SIZE = 100
+MAX_PAGE_SIZE = pagination.MAX_PAGE_SIZE
 
 
 def encode_cursor(cursor: AuditCursor) -> str:
-    raw = f"{cursor.created_at.isoformat()}|{cursor.id}"
-    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+    return pagination.encode_cursor(["audit", cursor.created_at.isoformat(), str(cursor.id)])
 
 
 def decode_cursor(value: str) -> AuditCursor:
+    kind, created_at, entry_id = pagination.decode_cursor(value, length=3)
     try:
-        padded = value + "=" * (-len(value) % 4)
-        created_at, _, entry_id = base64.urlsafe_b64decode(padded.encode()).decode().partition("|")
         parsed = datetime.fromisoformat(created_at)
-        if parsed.tzinfo is None:
-            raise ValueError("naive timestamp")
+        if kind != "audit" or parsed.tzinfo is None:
+            raise ValueError("wrong cursor")
         return AuditCursor(created_at=parsed, id=uuid.UUID(entry_id))
-    except ValueError, UnicodeDecodeError:
+    except ValueError:
         raise InvalidCursor from None
 
 

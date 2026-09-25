@@ -14,7 +14,7 @@ from apps.api.middleware.rate_limit import InMemoryRateLimiter, RateLimiter, Red
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import RequestIdMiddleware
 from apps.api.middleware.security_headers import SecurityHeadersMiddleware
-from apps.api.routes import auth, invitations, organizations, users
+from apps.api.routes import auth, invitations, organizations, projects, users
 
 API_PREFIX = "/api/v1"
 
@@ -67,4 +67,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(users.router, prefix=API_PREFIX)
     app.include_router(organizations.router, prefix=API_PREFIX)
     app.include_router(invitations.router, prefix=API_PREFIX)
+    app.include_router(projects.router, prefix=API_PREFIX)
     return app

@@ -23,6 +23,7 @@ from core.domain.notifications import Mailer
 from core.domain.organizations.invitation_service import InvitationService, InvitationSettings
 from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
+from core.domain.projects.project_service import ProjectService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 from .database import DbSession
@@ -210,3 +211,12 @@ def get_rate_limits(request: Request, settings: AppSettings, client: Client) -> 
 
 
 RateLimitsDep = Annotated[RateLimits, Depends(get_rate_limits)]
+
+
+def get_project_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> ProjectService:
+    return ProjectService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]

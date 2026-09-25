@@ -33,6 +33,8 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "create_organization_api_v1_organizations_post": {"name": "X"},
     "update_organization_api_v1_organizations__organization_id__patch": {"name": "X"},
     "change_role_api_v1_organizations__organization_id__members__member_id__patch": {"role": "viewer"},
+    "create_project_api_v1_organizations__organization_id__projects_post": {"name": "Food Delivery"},
+    "update_project_api_v1_projects__project_id__patch": {"name": "Orders"},
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",
@@ -51,16 +53,22 @@ async def test_every_body_rejects_undeclared_privileged_fields(
 ) -> None:
     ada = await signed_in(client, outbox, "ada@example.com")
     org_id = (await client.post("/api/v1/organizations", json={"name": "Acme"}, headers=ada)).json()["id"]
-    member_id = (await client.get(f"/api/v1/organizations/{org_id}/members", headers=ada)).json()["members"][
-        0
-    ]["id"]
+    members = (await client.get(f"/api/v1/organizations/{org_id}/members", headers=ada)).json()["members"]
+    member_id = members[0]["id"]
+    created = await client.post(
+        f"/api/v1/organizations/{org_id}/projects", json={"name": "Sweep"}, headers=ada
+    )
+    project_id = created.json()["id"]
 
     for op in (o for o in inventory(app) if o.has_body):
         body = VALID_BODIES[op.operation_id] | {field: PRIVILEGED[field]}
         if field in VALID_BODIES[op.operation_id]:
             continue  # a declared field (e.g. role on change_role) is validated by the endpoint itself
         response = await client.request(
-            op.method, op.url(organization_id=org_id, member_id=member_id), json=body, headers=ada | WEB
+            op.method,
+            op.url(organization_id=org_id, member_id=member_id, project_id=project_id),
+            json=body,
+            headers=ada | WEB,
         )
         assert_error_envelope(response, 422, "validation_error")
         fields = [f["field"] for f in response.json()["error"]["details"]["fields"]]

@@ -56,6 +56,16 @@ from core.domain.organizations.errors import (
     RoleNotManageable,
     SoleOwnerOfOrganization,
 )
+from core.domain.projects.errors import (
+    InvalidProjectDescription,
+    InvalidProjectName,
+    InvalidProjectSettings,
+    InvalidProjectSlug,
+    ProjectArchived,
+    ProjectNotArchived,
+    ProjectNotFound,
+    ProjectSlugTaken,
+)
 
 logger = logging.getLogger("architectos.api")
 security_log = logging.getLogger("architectos.security")
@@ -102,6 +112,14 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     OwnerInvitationNotAllowed: 422,
     InvalidCursor: 422,
     RateLimited: 429,
+    ProjectNotFound: 404,
+    ProjectArchived: 409,
+    ProjectNotArchived: 409,
+    ProjectSlugTaken: 409,
+    InvalidProjectName: 422,
+    InvalidProjectDescription: 422,
+    InvalidProjectSlug: 422,
+    InvalidProjectSettings: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

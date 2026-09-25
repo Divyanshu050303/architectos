@@ -27,9 +27,10 @@ from core.domain.organizations.entities import (
     OwnedOrganization,
 )
 from core.domain.organizations.enums import Role
-from core.domain.projects.entities import NewProject, Project
+from core.domain.projects.entities import NewProject, Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
+from core.domain.projects.queries import ProjectQuery, ProjectSort
 
 
 class FakeClock:
@@ -370,9 +371,38 @@ class FakeAuditRepository:
 
 
 class FakeProjectRepository:
-    def __init__(self, clock: FakeClock) -> None:
+    def __init__(self, clock: FakeClock, memberships: FakeMembershipRepository) -> None:
         self._clock = clock
+        self._memberships = memberships
         self.by_id: dict[uuid.UUID, Project] = {}
+
+    async def get_for_member(
+        self, project_id: uuid.UUID, *, user_id: uuid.UUID, for_update: bool = False
+    ) -> ProjectAccess | None:
+        project = await self.get_live(project_id)
+        if project is None:
+            return None
+        scoped = await self._memberships.get_in_active_organization(
+            organization_id=project.organization_id, user_id=user_id
+        )
+        return ProjectAccess(project=project, membership=scoped.membership) if scoped else None
+
+    async def list_for_organization(self, organization_id: uuid.UUID, query: ProjectQuery) -> list[Project]:
+        found = [p for p in self.by_id.values() if p.organization_id == organization_id and not p.is_deleted]
+        if query.status is not None:
+            found = [p for p in found if p.status is query.status]
+        if query.search:
+            term = query.search.lower()
+            found = [p for p in found if term in p.name.lower() or term in p.slug]
+        if query.sort is ProjectSort.NAME:
+            found.sort(key=lambda p: (p.name.lower(), p.id))
+        else:
+            attr = "created_at" if query.sort is ProjectSort.CREATED_AT else "updated_at"
+            found.sort(key=lambda p: (getattr(p, attr), p.id), reverse=True)
+        if query.after is not None:
+            ids = [p.id for p in found]
+            found = found[ids.index(query.after.id) + 1 :] if query.after.id in ids else []
+        return found[: query.limit]
 
     async def add(self, project: NewProject) -> Project:
         if any(
@@ -421,7 +451,7 @@ class FakeUnitOfWork:
         self._memberships = FakeMembershipRepository(self._organizations, clock)
         self._invitations = FakeInvitationRepository()
         self._audit = FakeAuditRepository()
-        self._projects = FakeProjectRepository(clock)
+        self._projects = FakeProjectRepository(clock, self._memberships)
         self.commits = 0
         self.rollbacks = 0
 

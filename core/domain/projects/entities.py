@@ -13,6 +13,8 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import datetime
 
+from core.domain.organizations.entities import Membership
+
 from .enums import ProjectStatus
 from .errors import ProjectArchived, ProjectNotArchived, ProjectNotFound
 from .value_objects import (
@@ -125,3 +127,12 @@ class Project:
         if not self.is_archived:
             raise ProjectNotArchived
         return replace(self, deleted_at=at)
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectAccess:
+    """A project together with the caller's membership in the organization that owns it. Only
+    ever built by resolving (project id, authenticated user) in one query."""
+
+    project: Project
+    membership: Membership
