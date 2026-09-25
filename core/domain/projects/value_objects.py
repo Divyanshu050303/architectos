@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Self
 
+from core.domain.text import has_forbidden_characters
+
 from .errors import InvalidProjectDescription, InvalidProjectName, InvalidProjectSettings, InvalidProjectSlug
 
 MAX_NAME_LENGTH = 100
@@ -22,13 +24,9 @@ _NON_SLUG = re.compile(r"[^a-z0-9]+")
 _ALLOWED_DESCRIPTION_CONTROLS = {"\n", "\t"}
 
 
-def _has_forbidden_characters(value: str, allowed: set[str] | frozenset[str] = frozenset()) -> bool:
-    return any(unicodedata.category(c) in {"Cc", "Cf"} and c not in allowed for c in value)
-
-
 def normalize_project_name(raw: str) -> str:
     name = unicodedata.normalize("NFC", " ".join(raw.split()))
-    if not name or len(name) > MAX_NAME_LENGTH or _has_forbidden_characters(name):
+    if not name or len(name) > MAX_NAME_LENGTH or has_forbidden_characters(name):
         raise InvalidProjectName
     return name
 
@@ -37,7 +35,7 @@ def normalize_project_description(raw: str) -> str:
     description = unicodedata.normalize("NFC", raw.replace("\r\n", "\n").strip())
     if len(description) > MAX_DESCRIPTION_LENGTH:
         raise InvalidProjectDescription
-    if _has_forbidden_characters(description, _ALLOWED_DESCRIPTION_CONTROLS):
+    if has_forbidden_characters(description, _ALLOWED_DESCRIPTION_CONTROLS):
         raise InvalidProjectDescription(details={"reason": "control_characters"})
     return description
 
