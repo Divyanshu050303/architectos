@@ -55,3 +55,40 @@ async def test_a_stranger_gets_404_everywhere_and_changes_nothing(
         assert_error_envelope(response, 404, "organization_not_found")
 
     assert await snapshot(client, org_id, ada) == before
+
+
+async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing(
+    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport, acme: tuple[str, dict[str, str]]
+) -> None:
+    org_id, ada = acme
+    project = (
+        await client.post(f"/api/v1/organizations/{org_id}/projects", json={"name": "Secret"}, headers=ada)
+    ).json()
+    before = (
+        (await client.get(f"/api/v1/projects/{project['id']}", headers=ada)).json(),
+        (await client.get(f"/api/v1/organizations/{org_id}/audit-log", headers=ada)).json(),
+    )
+    grace = await signed_in(client, outbox, "grace@example.com")
+    await client.post("/api/v1/organizations", json={"name": "Globex"}, headers=grace)
+
+    scoped = [op for op in inventory(app) if "{project_id}" in op.path]
+    assert scoped, "no project endpoints found"
+    for op in scoped:
+        body = {"name": "Hijacked", "organizationId": org_id} if op.has_body else None
+        response = await client.request(op.method, op.url(project_id=project["id"]), headers=grace, json=body)
+        # Unknown fields may be rejected before authorization (422); anything else must be a 404.
+        if response.status_code != 422:
+            assert_error_envelope(response, 404, "project_not_found")
+        name_only = await client.request(
+            op.method,
+            op.url(project_id=project["id"]),
+            headers=grace,
+            json={"name": "Hijacked"} if op.has_body else None,
+        )
+        assert_error_envelope(name_only, 404, "project_not_found")
+
+    after = (
+        (await client.get(f"/api/v1/projects/{project['id']}", headers=ada)).json(),
+        (await client.get(f"/api/v1/organizations/{org_id}/audit-log", headers=ada)).json(),
+    )
+    assert after == before

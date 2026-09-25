@@ -152,3 +152,38 @@ async def test_listing_pages_through_every_project_once(
         if cursor is None:
             break
     assert seen == [f"Project {i}" for i in range(7)]
+
+
+async def test_membership_removed_between_the_check_and_the_write(
+    projects: ProjectService, uow: FakeUnitOfWork, clock: FakeClock
+) -> None:
+    """The route resolved access a moment ago; the service re-resolves inside its transaction."""
+    ada = await verified(uow, clock, "ada@example.com")
+    mel = await verified(uow, clock, "mel@example.com")
+    acme = await org_of(uow, clock, ada)
+    mel_membership = await uow.memberships.add(
+        organization_id=acme.organization.id, user_id=mel.id, role=Role.MEMBER
+    )
+    project = await projects.create(membership=acme.membership, name="Food Delivery")
+    assert await projects.resolve(project_id=project.id, user_id=mel.id)
+
+    await uow.memberships.delete(mel_membership.id)
+
+    with pytest.raises(ProjectNotFound):
+        await projects.update(project_id=project.id, user_id=mel.id, name="Too late")
+    assert uow.projects.by_id[project.id].name == "Food Delivery"
+
+
+async def test_a_creator_removed_before_the_write_cannot_create(
+    projects: ProjectService, uow: FakeUnitOfWork, clock: FakeClock
+) -> None:
+    ada = await verified(uow, clock, "ada@example.com")
+    mel = await verified(uow, clock, "mel@example.com")
+    acme = await org_of(uow, clock, ada)
+    mel_membership = await uow.memberships.add(
+        organization_id=acme.organization.id, user_id=mel.id, role=Role.MEMBER
+    )
+    await uow.memberships.delete(mel_membership.id)
+
+    with pytest.raises(ProjectNotFound):
+        await projects.create(membership=mel_membership, name="Planted")
