@@ -3,6 +3,8 @@ inside the operation's own transaction (for writes, with the project row locked)
 permission is checked, then the change is made and audited in the same transaction."""
 
 import uuid
+from collections.abc import Callable
+from datetime import datetime
 
 from core.domain import pagination
 from core.domain.audit.entities import AuditAction, AuditEvent
@@ -27,6 +29,10 @@ def _cursor_for(project: Project, sort: ProjectSort) -> ProjectCursor:
         case ProjectSort.NAME:
             value = project.name.lower()
     return ProjectCursor(sort=sort, value=value, id=project.id)
+
+
+def _restore(project: Project, _: datetime) -> Project:
+    return project.restore()
 
 
 class ProjectService:
@@ -124,6 +130,59 @@ class ProjectService:
                     resource_type="project",
                     resource_id=saved.id,
                     metadata={"fields": fields},
+                )
+            )
+        return ProjectAccess(project=saved, membership=access.membership)
+
+    # --- lifecycle ---------------------------------------------------------------------------
+
+    async def archive(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> ProjectAccess:
+        """Idempotent: archiving an archived project changes nothing and records nothing."""
+        return await self._transition(
+            project_id, user_id, Permission.PROJECT_ARCHIVE, AuditAction.PROJECT_ARCHIVED, Project.archive
+        )
+
+    async def restore(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> ProjectAccess:
+        """Idempotent: restoring an active project changes nothing and records nothing."""
+        return await self._transition(
+            project_id, user_id, Permission.PROJECT_ARCHIVE, AuditAction.PROJECT_RESTORED, _restore
+        )
+
+    async def delete(self, *, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        """Soft delete, only from the archived state. Afterwards the project is not found anywhere and
+        its slug can be reused; nothing is purged."""
+        await self._transition(
+            project_id, user_id, Permission.PROJECT_DELETE, AuditAction.PROJECT_DELETED, Project.delete
+        )
+
+    async def _transition(
+        self,
+        project_id: uuid.UUID,
+        user_id: uuid.UUID,
+        permission: Permission,
+        action: AuditAction,
+        step: Callable[[Project, datetime], Project],
+    ) -> ProjectAccess:
+        """Lock, re-authorize, apply one lifecycle step; save and audit only if the state changed."""
+        now = self._clock()
+        async with self._uow as uow:
+            access = await uow.projects.get_for_member(project_id, user_id=user_id, for_update=True)
+            if access is None:
+                raise ProjectNotFound
+            access.membership.require(permission)
+            current = access.project
+            target = step(current, now)
+            if target == current:
+                return access
+            saved = await uow.projects.save(target)
+            await uow.audit.record(
+                AuditEvent(
+                    action,
+                    actor_user_id=user_id,
+                    organization_id=saved.organization_id,
+                    resource_type="project",
+                    resource_id=saved.id,
+                    metadata={"name": saved.name},
                 )
             )
         return ProjectAccess(project=saved, membership=access.membership)

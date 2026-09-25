@@ -83,6 +83,9 @@ class Project:
         return self.deleted_at is not None
 
     def ensure_modifiable(self) -> None:
+        """The single write guard for a project and everything it owns. Requirements, requirement
+        versions and requirement sets under an archived project are read-only: their use cases must
+        call this on the (locked) project before writing, so archiving freezes the whole project."""
         if self.is_deleted:
             raise ProjectNotFound
         if self.is_archived:

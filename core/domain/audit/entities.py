@@ -27,6 +27,9 @@ class AuditAction(StrEnum):
     MEMBER_REMOVED = "member.removed"
     PROJECT_CREATED = "project.created"
     PROJECT_UPDATED = "project.updated"
+    PROJECT_ARCHIVED = "project.archived"
+    PROJECT_RESTORED = "project.restored"
+    PROJECT_DELETED = "project.deleted"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

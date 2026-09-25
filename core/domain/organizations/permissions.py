@@ -25,6 +25,7 @@ class Permission(StrEnum):
     PROJECT_READ = "project.read"
     PROJECT_CREATE = "project.create"
     PROJECT_UPDATE = "project.update"
+    PROJECT_ARCHIVE = "project.archive"  # archive and restore
     PROJECT_DELETE = "project.delete"
 
     ARCHITECTURE_READ = "architecture.read"
@@ -61,6 +62,7 @@ _ADMIN = _MEMBER | {
     Permission.MEMBER_REMOVE,
     Permission.MEMBER_UPDATE_ROLE,
     Permission.AUDIT_READ,
+    Permission.PROJECT_ARCHIVE,
     Permission.PROJECT_DELETE,
     Permission.ARCHITECTURE_DELETE,
 }

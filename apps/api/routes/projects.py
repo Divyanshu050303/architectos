@@ -129,3 +129,47 @@ async def update_project(
         settings=settings_or_none(body.settings),
     )
     return ProjectResponse.from_access(access)
+
+
+# --- lifecycle ----------------------------------------------------------------------------------
+
+
+@router.post(
+    "/projects/{project_id}/archive",
+    response_model=ProjectResponse,
+    responses=PROJECT_ERRORS,
+    dependencies=[require_project_permission(Permission.PROJECT_ARCHIVE)],
+    summary="Archive a project",
+    description="Owners and admins. The project becomes read-only. Idempotent.",
+)
+async def archive_project(scoped: CurrentProject, projects: ProjectServiceDep) -> ProjectResponse:
+    access = await projects.archive(project_id=scoped.project.id, user_id=scoped.membership.user_id)
+    return ProjectResponse.from_access(access)
+
+
+@router.post(
+    "/projects/{project_id}/restore",
+    response_model=ProjectResponse,
+    responses=PROJECT_ERRORS,
+    dependencies=[require_project_permission(Permission.PROJECT_ARCHIVE)],
+    summary="Restore an archived project",
+    description="Owners and admins. Makes the project editable again. Idempotent.",
+)
+async def restore_project(scoped: CurrentProject, projects: ProjectServiceDep) -> ProjectResponse:
+    access = await projects.restore(project_id=scoped.project.id, user_id=scoped.membership.user_id)
+    return ProjectResponse.from_access(access)
+
+
+@router.delete(
+    "/projects/{project_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=PROJECT_ERRORS | {409: {"model": ErrorResponse, "description": "project_not_archived"}},
+    dependencies=[require_project_permission(Permission.PROJECT_DELETE)],
+    summary="Delete an archived project",
+    description=(
+        "Owners and admins, archived projects only (archive first). A soft delete: the project "
+        "disappears everywhere and its slug can be reused; its history is retained."
+    ),
+)
+async def delete_project(scoped: CurrentProject, projects: ProjectServiceDep) -> None:
+    await projects.delete(project_id=scoped.project.id, user_id=scoped.membership.user_id)
