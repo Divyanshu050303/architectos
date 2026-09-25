@@ -27,6 +27,9 @@ from core.domain.organizations.entities import (
     OwnedOrganization,
 )
 from core.domain.organizations.enums import Role
+from core.domain.projects.entities import NewProject, Project
+from core.domain.projects.enums import ProjectStatus
+from core.domain.projects.errors import ProjectSlugTaken
 
 
 class FakeClock:
@@ -366,6 +369,48 @@ class FakeAuditRepository:
         return [event.action.value for event in self.events]
 
 
+class FakeProjectRepository:
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, Project] = {}
+
+    async def add(self, project: NewProject) -> Project:
+        if any(
+            p.organization_id == project.organization_id and p.slug == project.slug and not p.is_deleted
+            for p in self.by_id.values()
+        ):
+            raise ProjectSlugTaken
+        now = self._clock()
+        stored = Project(
+            id=uuid.uuid7(),
+            organization_id=project.organization_id,
+            name=project.name,
+            slug=project.slug,
+            description=project.description,
+            status=ProjectStatus.ACTIVE,
+            settings=project.settings,
+            created_by_user_id=project.created_by_user_id,
+            archived_at=None,
+            deleted_at=None,
+            created_at=now,
+            updated_at=now,
+        )
+        self.by_id[stored.id] = stored
+        return stored
+
+    async def get_live(self, project_id: uuid.UUID) -> Project | None:
+        found = self.by_id.get(project_id)
+        return found if found and not found.is_deleted else None
+
+    async def get_live_for_update(self, project_id: uuid.UUID) -> Project | None:
+        return await self.get_live(project_id)
+
+    async def save(self, project: Project) -> Project:
+        stored = replace(project, updated_at=self._clock())
+        self.by_id[project.id] = stored
+        return stored
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -376,6 +421,7 @@ class FakeUnitOfWork:
         self._memberships = FakeMembershipRepository(self._organizations, clock)
         self._invitations = FakeInvitationRepository()
         self._audit = FakeAuditRepository()
+        self._projects = FakeProjectRepository(clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -410,6 +456,10 @@ class FakeUnitOfWork:
     @property
     def audit(self) -> FakeAuditRepository:
         return self._audit
+
+    @property
+    def projects(self) -> FakeProjectRepository:
+        return self._projects
 
     async def __aenter__(self) -> Self:
         return self

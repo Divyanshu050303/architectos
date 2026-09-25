@@ -15,3 +15,8 @@ class DomainError(Exception):
         self.detail_message = message or self.message
         self.details = details
         super().__init__(self.detail_message)
+
+
+class NothingToUpdate(DomainError):
+    code = "nothing_to_update"
+    message = "Provide at least one field to update."

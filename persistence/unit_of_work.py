@@ -11,6 +11,7 @@ from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
     SqlAlchemyOrganizationRepository,
 )
+from persistence.repositories.projects import SqlAlchemyProjectRepository
 from persistence.repositories.sessions import SqlAlchemySessionRepository
 from persistence.repositories.single_use_tokens import SqlAlchemySingleUseTokenRepository
 from persistence.repositories.users import SqlAlchemyUserRepository
@@ -35,6 +36,7 @@ class SqlAlchemyUnitOfWork:
         self.memberships = SqlAlchemyMembershipRepository(session)
         self.invitations = SqlAlchemyInvitationRepository(session)
         self.audit = SqlAlchemyAuditRepository(session, client or ClientInfo())
+        self.projects = SqlAlchemyProjectRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

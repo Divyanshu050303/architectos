@@ -1,4 +1,5 @@
 from core.domain.errors import DomainError
+from core.domain.errors import NothingToUpdate as _NothingToUpdate
 
 
 class InvalidEmail(DomainError):
@@ -95,6 +96,5 @@ class InvalidAvatarUrl(DomainError):
     message = "The avatar must be an https URL from an allowed image host."
 
 
-class NothingToUpdate(DomainError):
-    code = "nothing_to_update"
-    message = "Provide at least one field to update."
+# Shared by every domain; re-exported here for existing imports.
+NothingToUpdate = _NothingToUpdate

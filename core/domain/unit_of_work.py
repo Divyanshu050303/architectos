@@ -15,6 +15,7 @@ from core.domain.organizations.repository import (
     MembershipRepository,
     OrganizationRepository,
 )
+from core.domain.projects.repository import ProjectRepository
 
 
 class UnitOfWork(Protocol):
@@ -41,6 +42,9 @@ class UnitOfWork(Protocol):
 
     @property
     def audit(self) -> AuditRepository: ...
+
+    @property
+    def projects(self) -> ProjectRepository: ...
 
     async def __aenter__(self) -> Self: ...
 
