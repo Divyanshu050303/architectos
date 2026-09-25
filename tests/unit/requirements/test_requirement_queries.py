@@ -30,3 +30,23 @@ def test_foreign_or_malformed_cursors_are_refused(raw: str) -> None:
 def test_search_is_bounded() -> None:
     with pytest.raises(ValueError, match="search"):
         RequirementQuery(search="x" * 101)
+
+
+def test_version_and_set_cursors_are_not_interchangeable() -> None:
+    from core.domain.requirements.queries import (  # noqa: PLC0415
+        decode_set_cursor,
+        decode_version_cursor,
+        encode_set_cursor,
+        encode_version_cursor,
+    )
+
+    assert decode_version_cursor(encode_version_cursor(3)) == 3
+    assert decode_set_cursor(encode_set_cursor(4)) == 4
+    for decode, raw in (
+        (decode_set_cursor, encode_version_cursor(3)),
+        (decode_version_cursor, encode_set_cursor(4)),
+        (decode_set_cursor, encode_cursor(["requirement_set", "0"])),
+        (decode_version_cursor, encode_cursor(["version", "x"])),
+    ):
+        with pytest.raises(InvalidCursor):
+            decode(raw)

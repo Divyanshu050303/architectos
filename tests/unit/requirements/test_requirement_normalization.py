@@ -186,3 +186,9 @@ def test_money_keeps_its_currency() -> None:
 
 def test_no_constraint_has_no_canonical_form() -> None:
     assert canonical_data(None) is None
+
+
+def test_a_quantity_must_be_text() -> None:
+    with pytest.raises(InvalidRequirement) as error:
+        normalize_structured_data({"metric": "latency", "operator": "<=", "quantity": 300})
+    assert error.value.details == {"field": "structured_data.quantity", "reason": "not_a_quantity"}

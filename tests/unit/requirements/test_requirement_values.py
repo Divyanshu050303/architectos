@@ -251,3 +251,15 @@ def test_malformed_structured_data(raw: object, field: str, reason: str) -> None
     with pytest.raises(InvalidRequirement) as error:
         parse_structured_data(raw)
     assert reason_of(error) == (field, reason)
+
+
+def test_titles_refuse_control_characters() -> None:
+    with pytest.raises(InvalidRequirement) as error:
+        normalize_title("API" + chr(0x202E) + "throughput")
+    assert reason_of(error) == ("title", "control_characters")
+
+
+def test_structured_data_keys_must_be_strings() -> None:
+    with pytest.raises(InvalidRequirement) as error:
+        parse_structured_data({1: "latency"})
+    assert reason_of(error) == ("structured_data", "not_an_object")

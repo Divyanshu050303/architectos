@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -261,3 +262,64 @@ async def test_listing_is_newest_first_and_paginates(
     assert [s.number for s in page.items] == [3, 2]
     assert page.next_cursor is not None
     assert all(s.items == () for s in page.items)  # listings carry no items
+
+
+async def test_names_descriptions_and_limits(
+    requirements: RequirementService,
+    sets: RequirementSetService,
+    world: World,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = await add(requirements, world)
+    second = await add(requirements, world, title="Second")
+    with pytest.raises(InvalidRequirementSet) as error:
+        await sets.create(project_id=world.project.id, user_id=world.ada.id, name="x" * 101)
+    assert error.value.details == {"field": "name", "reason": "invalid"}
+    with pytest.raises(InvalidRequirementSet) as error:
+        await sets.create(project_id=world.project.id, user_id=world.ada.id, description="bad" + chr(0))
+    assert error.value.details == {"field": "description", "reason": "invalid"}
+
+    monkeypatch.setattr("core.domain.requirements.requirement_set_service.MAX_SET_REQUIREMENTS", 1)
+    for selection in (None, [first.id, second.id]):
+        with pytest.raises(InvalidRequirementSet) as error:
+            await sets.create(project_id=world.project.id, user_id=world.ada.id, requirement_ids=selection)
+        assert error.value.details == {"field": "requirement_ids", "reason": "too_many"}
+
+
+async def test_requirements_that_fail_todays_rules_cannot_be_pinned(
+    requirements: RequirementService, sets: RequirementSetService, uow: FakeUnitOfWork, world: World
+) -> None:
+    """History is loaded without revalidation, so a requirement written under older rules can
+    exist; it must be fixed (a new version) before it can be pinned."""
+    legacy = await add(requirements, world)
+    uow.requirements.by_id[legacy.id] = replace(
+        legacy, content=replace(legacy.content, category="retired_category")
+    )
+    with pytest.raises(InvalidRequirementSet) as error:
+        await sets.create(project_id=world.project.id, user_id=world.ada.id)
+    assert error.value.details == {"requirement_id": str(legacy.id), "reason": "invalid"}
+
+
+async def test_unknown_sets(sets: RequirementSetService, world: World) -> None:
+    for call in (sets.get, sets.planning_input):
+        with pytest.raises(RequirementSetNotFound):
+            await call(project_id=world.project.id, set_id=uuid.uuid7(), user_id=world.ada.id)
+
+
+async def test_region_sets_enter_the_planning_input_as_sorted_sets(
+    requirements: RequirementService, sets: RequirementSetService, uow: FakeUnitOfWork, world: World
+) -> None:
+    await add(
+        requirements,
+        world,
+        type=RequirementType.OPERATIONAL,
+        category="regions",
+        structured_data={"metric": "regions", "operator": "in", "values": ["eu-west-1", "eu-central-1"]},
+    )
+    created = await sets.create(project_id=world.project.id, user_id=world.ada.id)
+    [item] = uow.requirement_sets.planning_inputs[created.id]["requirements"]
+    assert item["constraint"] == {
+        "metric": "regions",
+        "operator": "in",
+        "values": ["eu-central-1", "eu-west-1"],
+    }
