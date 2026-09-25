@@ -153,7 +153,8 @@ _MAGNITUDES = {
     "million": 10**6,
     "billion": 10**9,
 }
-_QUANTITY = re.compile(rf"(?<![\w.,]){_NUMBER}{_MAGNITUDE}")
+# Not part of a word ("eu-west-1", "v2", "x3.5") nor of a larger number.
+_QUANTITY = re.compile(rf"(?<![\w.,])(?<![A-Za-z]-){_NUMBER}{_MAGNITUDE}")
 
 _PER = r"\s*(?:/|per\s+|a\s+|an\s+)\s*"
 _SECOND = r"(?:seconds?|secs?|s)\b"
@@ -161,7 +162,8 @@ _MINUTE = r"(?:minutes?|mins?)\b"
 _HOUR = r"(?:hours?|hrs?|h)\b"
 _DAY = r"(?:days?|d)\b"
 _USERS = (
-    r"(?:(?P<qual>daily\s+active|monthly\s+active|concurrent|simultaneous|registered|active)\s+)?users?\b"
+    r"(?:(?P<qual>daily\s+active|monthly\s+active|daily|monthly|concurrent|simultaneous|registered|active)\s+)?"
+    r"users?\b"
 )
 
 # Case-insensitive units, longest first: (pattern after the number, unit symbol or marker).
