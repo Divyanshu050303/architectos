@@ -35,7 +35,7 @@ async def test_create_read_and_planning_input(client: AsyncClient, world: World)
         "number": 1,
         "label": "v1",
         "name": "Launch baseline",
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "requirementCount": 1,
         "requirements": [{"requirementId": throughput["id"], "reference": "REQ-1", "version": 1}],
     }
@@ -47,7 +47,7 @@ async def test_create_read_and_planning_input(client: AsyncClient, world: World)
     ).json()
     assert (planning["requirementSetId"], planning["schemaVersion"], planning["contentHash"]) == (
         created["id"],
-        1,
+        2,
         created["contentHash"],
     )
     document = planning["planningInput"]
@@ -56,6 +56,7 @@ async def test_create_read_and_planning_input(client: AsyncClient, world: World)
         "settings": {"cloud_provider": None, "currency": "USD"},
     }
     [pinned] = document["requirements"]
+    assert (document["schema_version"], pinned["scope"], pinned["origin"]) == (2, "system", None)
     assert (pinned["reference"], pinned["version"], pinned["constraint"]) == (
         "REQ-1",
         1,

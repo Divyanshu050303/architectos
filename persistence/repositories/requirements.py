@@ -13,6 +13,7 @@ from core.domain.requirements.entities import (
 )
 from core.domain.requirements.enums import (
     RequirementPriority,
+    RequirementScope,
     RequirementSource,
     RequirementStatus,
     RequirementType,
@@ -35,6 +36,7 @@ def _content(record: ContentColumns) -> RequirementContent:
         priority=RequirementPriority(record.priority),
         status=RequirementStatus(record.status),
         constraint=parse_structured_data(record.structured_data),
+        scope=RequirementScope(record.scope),
     )
 
 
@@ -52,6 +54,7 @@ def _content_columns(content: RequirementContent) -> dict[str, object]:
         "priority": content.priority.value,
         "status": content.status.value,
         "structured_data": content.structured_data,
+        "scope": content.scope.value,
     }
 
 

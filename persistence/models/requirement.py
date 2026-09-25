@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.domain.requirements.enums import (
     RequirementPriority,
+    RequirementScope,
     RequirementSource,
     RequirementStatus,
     RequirementType,
@@ -53,6 +54,8 @@ class RequirementContent:
     structured_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    # What the requirement applies to; "system" when the statement does not say.
+    scope: Mapped[str] = mapped_column(Text, nullable=False, server_default=RequirementScope.SYSTEM.value)
 
 
 def content_checks() -> tuple[CheckConstraint, ...]:
@@ -69,8 +72,12 @@ def content_checks() -> tuple[CheckConstraint, ...]:
         CheckConstraint(in_values("status", RequirementStatus), name="status"),
         CheckConstraint(in_values("source", RequirementSource), name="source"),
         CheckConstraint("confidence IS NULL OR confidence BETWEEN 0 AND 1", name="confidence_range"),
-        # An interpretation by a machine must say how sure it is.
-        CheckConstraint("source <> 'ai' OR confidence IS NOT NULL", name="ai_confidence"),
+        # A machine's interpretation must say how sure it is; a person's requirement has no confidence.
+        CheckConstraint(
+            "source NOT IN ('ai', 'discovery') OR confidence IS NOT NULL", name="machine_confidence"
+        ),
+        CheckConstraint("source <> 'user' OR confidence IS NULL", name="user_without_confidence"),
+        CheckConstraint(in_values("scope", RequirementScope), name="scope"),
         CheckConstraint("jsonb_typeof(structured_data) = 'object'", name="structured_data_object"),
         CheckConstraint(
             f"octet_length(structured_data::text) <= {MAX_STRUCTURED_DATA_BYTES}",

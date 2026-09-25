@@ -51,12 +51,12 @@ ignore = [
 max-args = 8
 
 [tool.ruff.lint.isort]
-known-first-party = ["apps", "core", "persistence"]
+known-first-party = ["ai", "apps", "core", "engines", "persistence"]
 
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["apps/api", "core", "persistence", "tests"]
+files = ["ai", "apps/api", "core", "engines", "persistence", "tests"]
 exclude = ["^apps/web/"]
 explicit_package_bases = true
 namespace_packages = true

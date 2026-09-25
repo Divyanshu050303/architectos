@@ -10,6 +10,7 @@ Units are explicit and closed. Each belongs to a dimension with one canonical un
 conversion to it is exact multiplication/division:
 
     rate        requests/second (canonical), requests/minute, requests/hour, requests/day
+    order rate  orders/second (canonical), orders/minute, orders/hour, orders/day
     count       users
     duration    ms (canonical), s, min, h, d
     ratio       ratio (canonical, 0.999), % (99.9 % = 0.999)
@@ -145,6 +146,7 @@ def parse_confidence(raw: object) -> Decimal:
 
 class Dimension(StrEnum):
     RATE = "rate"
+    ORDER_RATE = "order_rate"
     COUNT = "count"
     DURATION = "duration"
     RATIO = "ratio"
@@ -173,6 +175,10 @@ _UNITS = [
     Unit("requests/minute", Dimension.RATE, divisor=60),
     Unit("requests/hour", Dimension.RATE, divisor=3_600),
     Unit("requests/day", Dimension.RATE, divisor=86_400),
+    Unit("orders/second", Dimension.ORDER_RATE),
+    Unit("orders/minute", Dimension.ORDER_RATE, divisor=60),
+    Unit("orders/hour", Dimension.ORDER_RATE, divisor=3_600),
+    Unit("orders/day", Dimension.ORDER_RATE, divisor=86_400),
     Unit("users", Dimension.COUNT),
     Unit("ms", Dimension.DURATION),
     Unit("s", Dimension.DURATION, factor=1_000),
@@ -191,6 +197,7 @@ _UNITS = [
 UNITS = {unit.symbol: unit for unit in _UNITS}
 CANONICAL_UNITS = {
     Dimension.RATE: "requests/second",
+    Dimension.ORDER_RATE: "orders/second",
     Dimension.COUNT: "users",
     Dimension.DURATION: "ms",
     Dimension.RATIO: "ratio",
@@ -218,15 +225,19 @@ class Operator(StrEnum):
     MORE_THAN = ">"
     AT_MOST = "<="
     LESS_THAN = "<"
+    EQUALS = "=="  # a target: "availability of 99.9 %"
+    BETWEEN = "between"  # range constraints only, both ends inclusive
     ONE_OF = "in"  # set constraints only
 
     @property
     def is_lower_bound(self) -> bool:
-        return self in {Operator.AT_LEAST, Operator.MORE_THAN}
+        """Sets a floor on the value (a range and a target do too)."""
+        return self in {Operator.AT_LEAST, Operator.MORE_THAN, Operator.EQUALS, Operator.BETWEEN}
 
     @property
     def is_upper_bound(self) -> bool:
-        return self in {Operator.AT_MOST, Operator.LESS_THAN}
+        """Sets a ceiling on the value (a range and a target do too)."""
+        return self in {Operator.AT_MOST, Operator.LESS_THAN, Operator.EQUALS, Operator.BETWEEN}
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,9 +282,38 @@ class SetConstraint:
         return {"metric": self.metric, "operator": Operator.ONE_OF.value, "values": list(self.values)}
 
 
-type StructuredConstraint = QuantityConstraint | SetConstraint
+@dataclass(frozen=True, slots=True)
+class RangeConstraint:
+    """An inclusive range, e.g. storage between 10 GB and 20 GB. ``minimum < maximum`` (a range of
+    one value is a target: use ``==``)."""
+
+    metric: str
+    minimum: Decimal
+    maximum: Decimal
+    unit: Unit
+    percentile: Decimal | None = None
+
+    @property
+    def operator(self) -> Operator:
+        return Operator.BETWEEN
+
+    def to_dict(self) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "metric": self.metric,
+            "operator": Operator.BETWEEN.value,
+            "min": decimal_to_str(self.minimum),
+            "max": decimal_to_str(self.maximum),
+            "unit": self.unit.symbol,
+        }
+        if self.percentile is not None:
+            data["percentile"] = decimal_to_str(self.percentile)
+        return data
+
+
+type StructuredConstraint = QuantityConstraint | RangeConstraint | SetConstraint
 
 _QUANTITY_KEYS = {"metric", "operator", "value", "unit", "percentile"}
+_RANGE_KEYS = {"metric", "operator", "min", "max", "unit", "percentile"}
 _SET_KEYS = {"metric", "operator", "values"}
 
 
@@ -308,20 +348,38 @@ def parse_structured_data(raw: object) -> StructuredConstraint | None:
         _reject_unknown_keys(raw, _SET_KEYS)
         return SetConstraint(metric=metric, values=_parse_set_values(_require(raw, "values")))
 
+    if operator is Operator.BETWEEN:
+        _reject_unknown_keys(raw, _RANGE_KEYS)
+        minimum = parse_decimal(_require(raw, "min"), "structured_data.min")
+        maximum = parse_decimal(_require(raw, "max"), "structured_data.max")
+        if minimum >= maximum:
+            raise invalid("structured_data.max", "not_above_min")
+        return RangeConstraint(
+            metric=metric,
+            minimum=minimum,
+            maximum=maximum,
+            unit=unit_for(_require(raw, "unit")),
+            percentile=_parse_percentile(raw),
+        )
+
     _reject_unknown_keys(raw, _QUANTITY_KEYS)
-    percentile = raw.get("percentile")
-    parsed_percentile = None
-    if percentile is not None:
-        parsed_percentile = parse_decimal(percentile, "structured_data.percentile")
-        if not Decimal(0) < parsed_percentile <= Decimal(100):
-            raise invalid("structured_data.percentile", "out_of_range")
     return QuantityConstraint(
         metric=metric,
         operator=operator,
         value=parse_decimal(_require(raw, "value"), "structured_data.value"),
         unit=unit_for(_require(raw, "unit")),
-        percentile=parsed_percentile,
+        percentile=_parse_percentile(raw),
     )
+
+
+def _parse_percentile(raw: dict[str, Any]) -> Decimal | None:
+    percentile = raw.get("percentile")
+    if percentile is None:
+        return None
+    parsed = parse_decimal(percentile, "structured_data.percentile")
+    if not Decimal(0) < parsed <= Decimal(100):
+        raise invalid("structured_data.percentile", "out_of_range")
+    return parsed
 
 
 def _parse_set_values(raw: object) -> tuple[str, ...]:

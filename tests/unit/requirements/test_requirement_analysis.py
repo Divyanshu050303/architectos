@@ -242,4 +242,4 @@ def test_history_written_under_older_rules_is_reported() -> None:
     legacy = replace(current, content=replace(current.content, category="legacy"))
     report = validate_requirement(legacy)
     assert not report.valid
-    assert report.issues[0] == Issue(Severity.ERROR, "category", "unknown_for_type")
+    assert report.issues[0] == Issue(Severity.BLOCKING, "category", "unknown_for_type")

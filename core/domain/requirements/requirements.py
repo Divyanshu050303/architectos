@@ -31,6 +31,7 @@ from .value_objects import (
     Dimension,
     Operator,
     QuantityConstraint,
+    RangeConstraint,
     SetConstraint,
     StructuredConstraint,
     invalid,
@@ -42,19 +43,29 @@ S = RequirementStatus
 # --- categories ----------------------------------------------------------------------------------
 
 KNOWN_CATEGORIES: dict[RequirementType, frozenset[str]] = {
-    T.FUNCTIONAL: frozenset({"user", "order", "payment", "notification", "search", "reporting"}),
+    T.FUNCTIONAL: frozenset(
+        {"user", "order", "payment", "notification", "authentication", "search", "reporting"}
+    ),
     T.NON_FUNCTIONAL: frozenset({"usability", "maintainability", "portability", "accessibility"}),
     T.CAPACITY: frozenset(
-        {"throughput", "requests_per_second", "concurrent_users", "daily_active_users", "storage"}
+        {
+            "throughput",
+            "requests_per_second",
+            "orders_per_second",
+            "concurrent_users",
+            "daily_active_users",
+            "monthly_active_users",
+            "storage",
+        }
     ),
     T.PERFORMANCE: frozenset({"latency", "throughput"}),
-    T.AVAILABILITY: frozenset({"availability"}),
+    T.AVAILABILITY: frozenset({"availability", "uptime"}),
     T.RELIABILITY: frozenset({"availability", "durability", "rpo", "rto"}),
-    T.SECURITY: frozenset({"encryption", "authentication", "authorization", "pii"}),
-    T.DATA: frozenset({"retention", "consistency", "durability", "storage"}),
+    T.SECURITY: frozenset({"encryption", "authentication", "authorization", "pii", "secrets"}),
+    T.DATA: frozenset({"retention", "consistency", "durability", "storage", "data_volume"}),
     T.COMPLIANCE: frozenset({"retention", "data_residency", "gdpr", "hipaa", "pci_dss", "soc2"}),
     T.OPERATIONAL: frozenset({"regions", "deployment", "monitoring", "backup"}),
-    T.COST: frozenset({"budget"}),
+    T.COST: frozenset({"budget", "monthly_budget", "infrastructure_budget"}),
 }
 # Types whose category must be a known one (the engines branch on them).
 CLOSED_CATEGORY_TYPES = frozenset({T.CAPACITY, T.PERFORMANCE, T.AVAILABILITY, T.RELIABILITY, T.DATA, T.COST})
@@ -63,9 +74,19 @@ MEASURABLE_TYPES = frozenset({T.CAPACITY, T.PERFORMANCE, T.AVAILABILITY, T.RELIA
 
 # --- metrics -------------------------------------------------------------------------------------
 
-_BOTH = frozenset({Operator.AT_LEAST, Operator.MORE_THAN, Operator.AT_MOST, Operator.LESS_THAN})
-_FLOOR = frozenset({Operator.AT_LEAST, Operator.MORE_THAN})  # "at least": availability, durability
-_CEILING = frozenset({Operator.AT_MOST, Operator.LESS_THAN})  # "at most": latency, RPO, budget
+# Every quantity accepts a target (==). Ranges only make sense where both directions do.
+_BOTH = frozenset(
+    {
+        Operator.AT_LEAST,
+        Operator.MORE_THAN,
+        Operator.AT_MOST,
+        Operator.LESS_THAN,
+        Operator.EQUALS,
+        Operator.BETWEEN,
+    }
+)
+_FLOOR = frozenset({Operator.AT_LEAST, Operator.MORE_THAN, Operator.EQUALS})  # availability, durability
+_CEILING = frozenset({Operator.AT_MOST, Operator.LESS_THAN, Operator.EQUALS})  # latency, RPO, budget
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,15 +117,25 @@ METRICS: dict[str, MetricRule] = {
     "daily_active_users": MetricRule(
         frozenset({T.CAPACITY}), frozenset({"daily_active_users"}), Dimension.COUNT, _BOTH, integral=True
     ),
+    "monthly_active_users": MetricRule(
+        frozenset({T.CAPACITY}), frozenset({"monthly_active_users"}), Dimension.COUNT, _BOTH, integral=True
+    ),
+    # A business rate, kept apart from requests: 500 orders/second is not 500 requests/second.
+    "orders_per_second": MetricRule(
+        frozenset({T.CAPACITY, T.PERFORMANCE}),
+        frozenset({"throughput", "orders_per_second"}),
+        Dimension.ORDER_RATE,
+        _BOTH,
+    ),
     "storage": MetricRule(
-        frozenset({T.CAPACITY, T.DATA}), frozenset({"storage"}), Dimension.DATA_SIZE, _BOTH
+        frozenset({T.CAPACITY, T.DATA}), frozenset({"storage", "data_volume"}), Dimension.DATA_SIZE, _BOTH
     ),
     "latency": MetricRule(
         frozenset({T.PERFORMANCE}), frozenset({"latency"}), Dimension.DURATION, _CEILING, percentile=True
     ),
     "availability": MetricRule(
         frozenset({T.AVAILABILITY, T.RELIABILITY}),
-        frozenset({"availability"}),
+        frozenset({"availability", "uptime"}),
         Dimension.RATIO,
         _FLOOR,
         maximum=Decimal(1),
@@ -129,7 +160,7 @@ METRICS: dict[str, MetricRule] = {
     ),
     "monthly_budget": MetricRule(
         frozenset({T.COST}),
-        frozenset({"budget"}),
+        frozenset({"budget", "monthly_budget", "infrastructure_budget"}),
         Dimension.MONEY_PER_MONTH,
         _CEILING,
         minimum_exclusive=False,
@@ -149,10 +180,14 @@ TRANSITIONS: dict[RequirementStatus, frozenset[RequirementStatus]] = {
     S.DEPRECATED: frozenset(),
 }
 IN_FORCE = frozenset({S.ACTIVE, S.SATISFIED})
+# Only a person's own structured requirement can start active; anything interpreted, imported or
+# inferred is a draft until a person promotes it.
 INITIAL_STATUSES: dict[RequirementSource, frozenset[RequirementStatus]] = {
-    RequirementSource.USER: frozenset({S.DRAFT, S.ACTIVE}),
-    RequirementSource.AI: frozenset({S.DRAFT}),  # never authoritative until a person promotes it
+    source: frozenset({S.DRAFT, S.ACTIVE}) if source is RequirementSource.USER else frozenset({S.DRAFT})
+    for source in RequirementSource
 }
+# Machine interpretations must say how sure they are; a person's own requirement has no confidence.
+CONFIDENCE_REQUIRED = frozenset({RequirementSource.AI, RequirementSource.DISCOVERY})
 
 
 def check_transition(current: RequirementStatus, target: RequirementStatus) -> None:
@@ -187,21 +222,29 @@ def validate_constraint(type_: RequirementType, category: str, constraint: Struc
         raise invalid("structured_data.operator", "not_allowed_for_metric")
     if isinstance(constraint, SetConstraint):
         return
-    _validate_quantity(rule, constraint)
-
-
-def _validate_quantity(rule: MetricRule, constraint: QuantityConstraint) -> None:
     if constraint.unit.dimension is not rule.dimension:
         raise invalid("structured_data.unit", "not_allowed_for_metric")
     if constraint.percentile is not None and not rule.percentile:
         raise invalid("structured_data.percentile", "not_allowed_for_metric")
-    value = constraint.canonical_value
+    if isinstance(constraint, RangeConstraint):
+        _check_value(rule, constraint.unit.to_canonical(constraint.minimum), "structured_data.min")
+        _check_value(rule, constraint.unit.to_canonical(constraint.maximum), "structured_data.max")
+        return
+    _validate_quantity(rule, constraint)
+
+
+def _check_value(rule: MetricRule, value: Decimal, field: str) -> None:
     too_low = value <= rule.minimum if rule.minimum_exclusive else value < rule.minimum
     too_high = rule.maximum is not None and value > rule.maximum
     if too_low or too_high:
-        raise invalid("structured_data.value", "out_of_range")
+        raise invalid(field, "out_of_range")
     if rule.integral and value != value.to_integral_value():
-        raise invalid("structured_data.value", "not_integral")
+        raise invalid(field, "not_integral")
+
+
+def _validate_quantity(rule: MetricRule, constraint: QuantityConstraint) -> None:
+    value = constraint.canonical_value
+    _check_value(rule, value, "structured_data.value")
     # A bound nothing can satisfy: "< 0 s" for an RPO, "> 100 %" for availability.
     if constraint.operator is Operator.LESS_THAN and not rule.minimum_exclusive and value == rule.minimum:
         raise invalid("structured_data.value", "unsatisfiable")

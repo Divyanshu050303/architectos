@@ -86,8 +86,10 @@ def test_the_contract_shape() -> None:
                 "status": "active",
                 "title": "Checkout latency",
                 "statement": "Checkout p95 latency stays under 1.5 s.",
+                "scope": "system",
                 "source": "user",
                 "confidence": None,
+                "origin": None,
                 # canonical unit: 1.5 s -> 1500 ms
                 "constraint": {
                     "metric": "latency",

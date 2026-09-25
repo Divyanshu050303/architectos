@@ -15,6 +15,7 @@ from core.domain.requirements.analysis import (
 from core.domain.requirements.entities import Requirement, RequirementChanges, RequirementVersion
 from core.domain.requirements.enums import (
     RequirementPriority,
+    RequirementScope,
     RequirementSource,
     RequirementStatus,
     RequirementType,
@@ -25,9 +26,10 @@ from core.domain.requirements.value_objects import KEEP
 from .common import ApiModel, RequestModel
 
 STRUCTURED_DATA_DESCRIPTION = (
-    "One structured constraint, or {} for none. Quantity: {metric, operator (>=, >, <=, <), value, "
+    "One structured constraint, or {} for none. Quantity: {metric, operator (>=, >, <=, <, ==), value, "
     'unit, percentile?}, e.g. {"metric": "latency", "operator": "<=", "value": "300", '
-    '"unit": "ms", "percentile": "95"}. Set: {metric, operator: "in", values: [...]}. '
+    '"unit": "ms", "percentile": "95"}. Range (inclusive): {metric, operator: "between", min, max, '
+    'unit, percentile?}. Set: {metric, operator: "in", values: [...]}. '
     "Numbers are exact decimals: send them as strings to avoid binary floating point; they are "
     "always returned as strings. Convenient input forms are normalized deterministically: "
     '{"quantity": "2k requests/sec"} instead of value and unit, value "2k" or "10M", '
@@ -44,6 +46,7 @@ class RequirementResponse(ApiModel):
     version: int = Field(description="Current version; send it back as expectedVersion when updating.")
     type: RequirementType
     category: str
+    scope: RequirementScope = Field(description="What it applies to; system also when unspecified.")
     title: str
     statement: str
     priority: RequirementPriority
@@ -73,6 +76,7 @@ class RequirementResponse(ApiModel):
             version=requirement.version,
             type=content.type,
             category=content.category,
+            scope=content.scope,
             title=content.title,
             statement=content.statement,
             priority=content.priority,
@@ -94,6 +98,7 @@ class RequirementVersionResponse(ApiModel):
     version: int
     type: RequirementType
     category: str
+    scope: RequirementScope = Field(description="What it applies to; system also when unspecified.")
     title: str
     statement: str
     priority: RequirementPriority
@@ -114,6 +119,7 @@ class RequirementVersionResponse(ApiModel):
             version=version.version,
             type=content.type,
             category=content.category,
+            scope=content.scope,
             title=content.title,
             statement=content.statement,
             priority=content.priority,
@@ -142,6 +148,7 @@ class RequirementPage(ApiModel):
 class CreateRequirementRequest(RequestModel):
     type: RequirementType
     category: Annotated[str, Field(max_length=128, examples=["throughput"])]
+    scope: RequirementScope = RequirementScope.SYSTEM
     title: Annotated[str, Field(max_length=400, examples=["API throughput"])]
     statement: Annotated[
         str, Field(max_length=10_000, examples=["The API must support 2,000 requests per second."])
@@ -169,6 +176,7 @@ class UpdateRequirementRequest(RequestModel):
         Field(max_length=1000, description="Required when the requirement is active or satisfied."),
     ] = None
     category: Annotated[str | None, Field(max_length=128)] = None
+    scope: RequirementScope | None = None
     title: Annotated[str | None, Field(max_length=400)] = None
     statement: Annotated[str | None, Field(max_length=10_000)] = None
     priority: RequirementPriority | None = None
@@ -180,6 +188,7 @@ class UpdateRequirementRequest(RequestModel):
     def to_changes(self) -> RequirementChanges:
         return RequirementChanges(
             category=self.category,
+            scope=self.scope,
             title=self.title,
             statement=self.statement,
             priority=self.priority,

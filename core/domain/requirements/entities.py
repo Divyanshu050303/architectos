@@ -14,10 +14,23 @@ from typing import Any
 
 from core.domain.errors import NothingToUpdate
 
-from .enums import RequirementPriority, RequirementSource, RequirementStatus, RequirementType
+from .enums import (
+    RequirementPriority,
+    RequirementScope,
+    RequirementSource,
+    RequirementStatus,
+    RequirementType,
+)
 from .errors import ChangeReasonRequired, RequirementLocked, RequirementNotFound, RequirementVersionConflict
 from .normalization import normalize_structured_data
-from .requirements import IN_FORCE, INITIAL_STATUSES, check_transition, content_locked, validate_content
+from .requirements import (
+    CONFIDENCE_REQUIRED,
+    IN_FORCE,
+    INITIAL_STATUSES,
+    check_transition,
+    content_locked,
+    validate_content,
+)
 from .value_objects import (
     KEEP,
     Keep,
@@ -45,6 +58,8 @@ class RequirementContent:
     priority: RequirementPriority
     status: RequirementStatus
     constraint: StructuredConstraint | None
+    # What it applies to; "system" when the statement does not say (never invented).
+    scope: RequirementScope = RequirementScope.SYSTEM
 
     def validated(self) -> RequirementContent:
         validate_content(self.type, self.category, self.status, self.constraint)
@@ -84,13 +99,14 @@ class NewRequirement:
         source: RequirementSource = RequirementSource.USER,
         confidence: object = None,
         structured_data: object = None,
+        scope: RequirementScope = RequirementScope.SYSTEM,
     ) -> NewRequirement:
         if status not in INITIAL_STATUSES[source]:
             raise invalid("status", "not_allowed_at_creation")
-        if source is RequirementSource.AI and confidence is None:
-            raise invalid("confidence", "required_for_ai")
+        if source in CONFIDENCE_REQUIRED and confidence is None:
+            raise invalid("confidence", f"required_for_{source.value}")
         if source is RequirementSource.USER and confidence is not None:
-            raise invalid("confidence", "only_for_ai")
+            raise invalid("confidence", "not_for_user")
         return cls(
             project_id=project_id,
             content=RequirementContent(
@@ -103,6 +119,7 @@ class NewRequirement:
                 constraint=parse_structured_data(
                     normalize_structured_data(structured_data if structured_data is not None else {})
                 ),
+                scope=scope,
             ).validated(),
             source=source,
             confidence=parse_confidence(confidence) if confidence is not None else None,
@@ -121,6 +138,7 @@ class RequirementChanges:
     priority: RequirementPriority | None = None
     status: RequirementStatus | None = None
     structured_data: dict[str, Any] | Keep = KEEP
+    scope: RequirementScope | None = None
 
     @property
     def is_empty(self) -> bool:
@@ -180,6 +198,7 @@ class Requirement:
             else current.statement,
             priority=changes.priority or current.priority,
             status=changes.status or current.status,
+            scope=changes.scope or current.scope,
             constraint=parse_structured_data(normalize_structured_data(changes.structured_data))
             if not isinstance(changes.structured_data, Keep)
             else current.constraint,

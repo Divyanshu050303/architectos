@@ -27,7 +27,7 @@ create, change and delete requirements and create requirement sets.
 ```json
 {
   "id": "0199...", "projectId": "0199...", "reference": "REQ-12", "number": 12, "version": 2,
-  "type": "capacity", "category": "throughput", "title": "API throughput",
+  "type": "capacity", "category": "throughput", "scope": "api", "title": "API throughput",
   "statement": "The API must support 5,000 requests per second.",
   "priority": "critical", "status": "active", "source": "user", "confidence": null,
   "structuredData": {"metric": "requests_per_second", "operator": ">=", "value": "5000", "unit": "requests/second"},
@@ -40,12 +40,15 @@ create, change and delete requirements and create requirement sets.
 - `version` is the current version: send it back as `expectedVersion` when changing the requirement.
 - `structuredData` is what was stored (explicit unit); `normalizedData` is derived, in the canonical
   unit, and is what the engines consume. Numbers are exact decimal **strings**.
-- `confidence` is only set for `source: "ai"`: confidence in the interpretation, not in the
-  requirement being true, and unrelated to priority.
+- `scope`: `system` (also "unspecified"), `service`, `api`, `database`, `queue`, `user`, `region`,
+  `data`; defaults to `system`.
+- `confidence` is confidence in the interpretation, not in the requirement being true, and unrelated
+  to priority: required for `source` `ai` and `discovery`, optional for `system` and `imported`,
+  refused for `user`.
 - Enumerations are lower-case: `type` (`functional`, `non_functional`, `capacity`, `performance`,
   `availability`, `reliability`, `security`, `data`, `compliance`, `operational`, `cost`), `priority`
   (`critical`, `high`, `medium`, `low`), `status` (`draft`, `active`, `satisfied`, `invalid`,
-  `deprecated`), `source` (`user`, `ai`).
+  `deprecated`), `source` (`user`, `ai`, `system`, `imported`, `discovery`).
 
 ### Create
 
@@ -55,8 +58,9 @@ create, change and delete requirements and create requirement sets.
  "structuredData": {"metric": "rps", "operator": ">=", "quantity": "2k requests/sec"}}
 ```
 
-`status` is `draft` (default) or `active`. `source` defaults to `user`; `source: "ai"` requires
-`confidence` (0–1, at most 3 decimals) and `status: "draft"`. Convenient input is normalized
+`status` is `draft` (default) or `active`; only `source: "user"` (the default) may start `active`.
+Constraints use `>=`, `>`, `<=`, `<`, `==` (a target) with `value`, or `"between"` with `min` and
+`max` (inclusive). Convenient input is normalized
 deterministically (see [normalization](../domain/requirements.md#normalization)); ambiguous spellings
 such as `5m` or `gb` are refused.
 
@@ -67,8 +71,8 @@ such as `5m` or `gb` are refused.
  "value": "5000", "unit": "requests/second"}, "changeReason": "Traffic forecast increased from 2K to 5K RPS"}
 ```
 
-Any of `category`, `title`, `statement`, `priority`, `status`, `structuredData` (`{}` removes the
-constraint). Type, source, confidence and project never change. Every change creates a new immutable
+Any of `category`, `scope`, `title`, `statement`, `priority`, `status`, `structuredData` (`{}` removes
+the constraint). Type, source, confidence and project never change. Every change creates a new immutable
 version. `changeReason` is required when the requirement is active or satisfied. A change that leaves
 everything as it is returns the requirement unchanged (no version).
 
@@ -96,6 +100,7 @@ newest first; `limit` 1–100 (default 50).
 
 `validate` checks the current version against **today's** rules and whether it could become active,
 plus warnings (`missing_constraint`, `missing_percentile`, `low_confidence`, `not_ready_for_active`).
+Severities are `blocking`, `warning` and `info`.
 
 `analysis` covers draft, active and satisfied requirements; every finding names the exact
 `{id, reference, version}` it was computed from:
