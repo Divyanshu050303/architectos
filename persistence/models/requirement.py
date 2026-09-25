@@ -105,6 +105,9 @@ class RequirementRecord(UuidPrimaryKey, Timestamps, RequirementContent, Base):
     __table_args__ = (
         # Also serves the RESTRICT check on projects(id).
         UniqueConstraint("project_id", "number"),
+        # Target of the requirement set items' foreign key: an item's requirement must belong to
+        # the set's project, enforced by the database.
+        UniqueConstraint("id", "project_id"),
         # Listing a project's live requirements, newest first, keyset on (created_at, id).
         Index(
             "ix_requirements_project_id_created_at_id_live",

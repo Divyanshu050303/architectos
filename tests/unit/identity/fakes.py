@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.identity.entities import (
@@ -34,6 +34,7 @@ from core.domain.projects.queries import ProjectQuery, ProjectSort
 from core.domain.requirements.entities import NewRequirement, Requirement, RequirementVersion, Revision
 from core.domain.requirements.enums import RequirementStatus
 from core.domain.requirements.queries import RequirementQuery
+from core.domain.requirements.requirement_sets import NewRequirementSet, RequirementSet
 
 
 class FakeClock:
@@ -531,6 +532,9 @@ class FakeRequirementRepository:
         ]
         return sorted(found, key=lambda r: r.number)[:limit]
 
+    async def list_by_ids(self, project_id: uuid.UUID, requirement_ids: list[uuid.UUID]) -> list[Requirement]:
+        return [r for i in requirement_ids if (r := await self.get(project_id, i)) is not None]
+
     async def list_versions(
         self, project_id: uuid.UUID, requirement_id: uuid.UUID, *, after: int | None, limit: int
     ) -> list[RequirementVersion]:
@@ -545,6 +549,52 @@ class FakeRequirementRepository:
         return versions[0] if versions and versions[0].version == version else None
 
 
+class FakeRequirementSetRepository:
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, RequirementSet] = {}
+        self.planning_inputs: dict[uuid.UUID, dict[str, Any]] = {}
+
+    async def add(self, requirement_set: NewRequirementSet) -> RequirementSet:
+        numbers = [s.number for s in self.by_id.values() if s.project_id == requirement_set.project_id]
+        stored = RequirementSet(
+            id=uuid.uuid7(),
+            project_id=requirement_set.project_id,
+            number=max(numbers, default=0) + 1,
+            name=requirement_set.name,
+            description=requirement_set.description,
+            schema_version=requirement_set.schema_version,
+            content_hash=requirement_set.content_hash,
+            requirement_count=len(requirement_set.items),
+            created_by_user_id=requirement_set.created_by_user_id,
+            created_at=self._clock(),
+            items=requirement_set.items,
+        )
+        self.by_id[stored.id] = stored
+        self.planning_inputs[stored.id] = requirement_set.planning_input
+        return stored
+
+    async def get(self, project_id: uuid.UUID, set_id: uuid.UUID) -> RequirementSet | None:
+        found = self.by_id.get(set_id)
+        return found if found and found.project_id == project_id else None
+
+    async def list_for_project(
+        self, project_id: uuid.UUID, *, before_number: int | None, limit: int
+    ) -> list[RequirementSet]:
+        found = [
+            replace(s, items=())
+            for s in self.by_id.values()
+            if s.project_id == project_id and (before_number is None or s.number < before_number)
+        ]
+        return sorted(found, key=lambda s: s.number, reverse=True)[:limit]
+
+    async def get_planning_input(
+        self, project_id: uuid.UUID, set_id: uuid.UUID
+    ) -> tuple[RequirementSet, dict[str, Any]] | None:
+        found = await self.get(project_id, set_id)
+        return (replace(found, items=()), self.planning_inputs[set_id]) if found else None
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -557,6 +607,7 @@ class FakeUnitOfWork:
         self._audit = FakeAuditRepository()
         self._projects = FakeProjectRepository(clock, self._memberships)
         self._requirements = FakeRequirementRepository(clock)
+        self._requirement_sets = FakeRequirementSetRepository(clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -599,6 +650,10 @@ class FakeUnitOfWork:
     @property
     def requirements(self) -> FakeRequirementRepository:
         return self._requirements
+
+    @property
+    def requirement_sets(self) -> FakeRequirementSetRepository:
+        return self._requirement_sets
 
     async def __aenter__(self) -> Self:
         return self

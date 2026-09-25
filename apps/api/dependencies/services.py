@@ -25,6 +25,7 @@ from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
 from core.domain.projects.project_service import ProjectService
 from core.domain.requirements.requirement_service import RequirementService
+from core.domain.requirements.requirement_set_service import RequirementSetService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 from .database import DbSession
@@ -230,3 +231,12 @@ def get_requirement_service(
 
 
 RequirementServiceDep = Annotated[RequirementService, Depends(get_requirement_service)]
+
+
+def get_requirement_set_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> RequirementSetService:
+    return RequirementSetService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+RequirementSetServiceDep = Annotated[RequirementSetService, Depends(get_requirement_set_service)]

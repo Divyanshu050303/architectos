@@ -68,6 +68,10 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/requirements/{requirement_id}/validate"),
     ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}/versions"),
     ("GET", "/api/v1/projects/{project_id}/requirements/{requirement_id}/versions/{version}"),
+    ("POST", "/api/v1/projects/{project_id}/requirement-sets"),
+    ("GET", "/api/v1/projects/{project_id}/requirement-sets"),
+    ("GET", "/api/v1/projects/{project_id}/requirement-sets/{set_id}"),
+    ("GET", "/api/v1/projects/{project_id}/requirement-sets/{set_id}/planning-input"),
 }
 
 

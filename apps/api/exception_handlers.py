@@ -70,9 +70,12 @@ from core.domain.projects.errors import (
 from core.domain.requirements.errors import (
     ChangeReasonRequired,
     InvalidRequirement,
+    InvalidRequirementSet,
     InvalidStatusTransition,
     RequirementLocked,
     RequirementNotFound,
+    RequirementSetConflicts,
+    RequirementSetNotFound,
     RequirementVersionConflict,
     RequirementVersionNotFound,
 )
@@ -137,6 +140,9 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     RequirementVersionConflict: 409,
     InvalidStatusTransition: 409,
     RequirementLocked: 409,
+    RequirementSetNotFound: 404,
+    InvalidRequirementSet: 422,
+    RequirementSetConflicts: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

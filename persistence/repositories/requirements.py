@@ -223,6 +223,18 @@ class SqlAlchemyRequirementRepository:
         )
         return [to_requirement(r) for r in records]
 
+    async def list_by_ids(self, project_id: uuid.UUID, requirement_ids: list[uuid.UUID]) -> list[Requirement]:
+        if not requirement_ids:
+            return []
+        records = await self._session.scalars(
+            select(RequirementRecord).where(
+                RequirementRecord.project_id == project_id,
+                RequirementRecord.deleted_at.is_(None),
+                RequirementRecord.id.in_(requirement_ids),
+            )
+        )
+        return [to_requirement(r) for r in records]
+
     def _versions_of_live(self, project_id: uuid.UUID, requirement_id: uuid.UUID):  # type: ignore[no-untyped-def]
         return (
             select(RequirementVersionRecord)

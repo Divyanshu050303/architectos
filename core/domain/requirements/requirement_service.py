@@ -11,9 +11,9 @@ from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.organizations.permissions import Permission
 from core.domain.projects.entities import ProjectAccess
-from core.domain.projects.errors import ProjectNotFound
 from core.domain.unit_of_work import UnitOfWork
 
+from .access import project_access
 from .analysis import ANALYZED_STATUSES, ProjectAnalysis, ValidationReport, analyze, validate_requirement
 from .entities import NewRequirement, Requirement, RequirementChanges, RequirementVersion, Revision
 from .enums import RequirementPriority, RequirementSource, RequirementStatus, RequirementType
@@ -33,7 +33,7 @@ class RequirementService:
     ) -> pagination.Page[Requirement]:
         size = pagination.page_size(query.limit)
         async with self._uow as uow:
-            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            await project_access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
             rows = await uow.requirements.list_for_project(
                 project_id,
                 RequirementQuery(
@@ -58,7 +58,7 @@ class RequirementService:
         self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, user_id: uuid.UUID
     ) -> Requirement:
         async with self._uow as uow:
-            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            await project_access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
             requirement = await uow.requirements.get(project_id, requirement_id)
         if requirement is None:
             raise RequirementNotFound
@@ -76,7 +76,7 @@ class RequirementService:
         """The immutable history, oldest first. Only for requirements that are not deleted."""
         size = pagination.page_size(limit)
         async with self._uow as uow:
-            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            await project_access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
             rows = await uow.requirements.list_versions(
                 project_id, requirement_id, after=after, limit=size + 1
             )
@@ -91,7 +91,7 @@ class RequirementService:
         self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, version: int, user_id: uuid.UUID
     ) -> RequirementVersion:
         async with self._uow as uow:
-            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            await project_access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
             found = await uow.requirements.get_version(project_id, requirement_id, version)
             if found is None and await uow.requirements.get(project_id, requirement_id) is None:
                 raise RequirementNotFound
@@ -111,7 +111,7 @@ class RequirementService:
         """Conflicts, completeness, ambiguity and unbounded metrics over the project's draft, active
         and satisfied requirements (the first MAX_ANALYZED_REQUIREMENTS by number)."""
         async with self._uow as uow:
-            await self._access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
+            await project_access(uow, project_id, user_id, Permission.REQUIREMENT_READ)
             rows = await uow.requirements.list_by_status(
                 project_id, ANALYZED_STATUSES, limit=MAX_ANALYZED_REQUIREMENTS + 1
             )
@@ -146,7 +146,7 @@ class RequirementService:
             structured_data=structured_data,
         )
         async with self._uow as uow:
-            access = await self._access(uow, project_id, user_id, Permission.REQUIREMENT_CREATE, lock=True)
+            access = await project_access(uow, project_id, user_id, Permission.REQUIREMENT_CREATE, lock=True)
             requirement = await uow.requirements.add(new)
             await uow.audit.record(
                 _event(
@@ -172,7 +172,7 @@ class RequirementService:
         """Appends a version. Returns the requirement unchanged (no version, no audit) when the
         changes leave every field as it is."""
         async with self._uow as uow:
-            access = await self._access(uow, project_id, user_id, Permission.REQUIREMENT_UPDATE, lock=True)
+            access = await project_access(uow, project_id, user_id, Permission.REQUIREMENT_UPDATE, lock=True)
             current = await uow.requirements.get(project_id, requirement_id, for_update=True)
             if current is None:
                 raise RequirementNotFound
@@ -191,29 +191,12 @@ class RequirementService:
 
     async def delete(self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, user_id: uuid.UUID) -> None:
         async with self._uow as uow:
-            access = await self._access(uow, project_id, user_id, Permission.REQUIREMENT_DELETE, lock=True)
+            access = await project_access(uow, project_id, user_id, Permission.REQUIREMENT_DELETE, lock=True)
             current = await uow.requirements.get(project_id, requirement_id, for_update=True)
             if current is None:
                 raise RequirementNotFound
             await uow.requirements.save_deleted(current.delete(self._clock()))
             await uow.audit.record(_event(AuditAction.REQUIREMENT_DELETED, access, current, user_id, {}))
-
-    @staticmethod
-    async def _access(
-        uow: UnitOfWork,
-        project_id: uuid.UUID,
-        user_id: uuid.UUID,
-        permission: Permission,
-        *,
-        lock: bool = False,
-    ) -> ProjectAccess:
-        access = await uow.projects.get_for_member(project_id, user_id=user_id, for_update=lock)
-        if access is None:
-            raise ProjectNotFound
-        access.membership.require(permission)
-        if lock:
-            access.project.ensure_modifiable()
-        return access
 
 
 def _event(

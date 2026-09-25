@@ -48,3 +48,23 @@ class RequirementLocked(DomainError):
 class ChangeReasonRequired(DomainError):
     code = "change_reason_required"
     message = "Explain why an active or satisfied requirement is changing."
+
+
+class RequirementSetNotFound(DomainError):
+    code = "requirement_set_not_found"
+    message = "Requirement set not found."
+
+
+class InvalidRequirementSet(DomainError):
+    """``details`` = {"field": ..., "reason": ...}, or for a requirement that cannot be pinned
+    {"requirement_id": ..., "reason": "not_found" | "not_in_force" | "invalid" | "duplicate"}."""
+
+    code = "invalid_requirement_set"
+    message = "The requirement set is invalid."
+
+
+class RequirementSetConflicts(DomainError):
+    """``details`` = {"conflicts": [{"reason", "metric", "requirements": [references], "message"}]}."""
+
+    code = "requirement_set_conflicts"
+    message = "Some of these requirements contradict each other; resolve the conflicts first."

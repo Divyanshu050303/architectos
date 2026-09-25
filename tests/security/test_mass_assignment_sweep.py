@@ -48,6 +48,7 @@ VALID_BODIES: dict[str, dict[str, object]] = {
         "title": "Place an order quickly",
         "status": "draft",  # declared: status changes go through the lifecycle rules
     },
+    "create_requirement_set_api_v1_projects__project_id__requirement_sets_post": {"name": "Baseline"},
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",

@@ -89,6 +89,9 @@ REQUIREMENT = {
         ("/api/v1/projects/{project}/requirements/{requirement}", 4),  # + the requirement
         ("/api/v1/projects/{project}/requirements/analysis", 4),  # + one query for all analyzed
         ("/api/v1/projects/{project}/requirements/{requirement}/versions", 4),  # + one page of history
+        ("/api/v1/projects/{project}/requirement-sets", 4),  # + one page of summaries
+        ("/api/v1/projects/{project}/requirement-sets/{set}", 5),  # + the set + its pinned versions
+        ("/api/v1/projects/{project}/requirement-sets/{set}/planning-input", 4),  # + set and document
     ],
 )
 async def test_reads_stay_within_budget_regardless_of_size(
@@ -110,6 +113,12 @@ async def test_reads_stay_within_budget_regardless_of_size(
         .replace("{project}", project.json()["id"])
         .replace("{requirement}", requirement.json()["id"])
     )
+    if "{set}" in url:
+        await client.post(requirements, json=REQUIREMENT | {"status": "active"}, headers=auth)
+        requirement_set = await client.post(
+            f"/api/v1/projects/{project.json()['id']}/requirement-sets", json={}, headers=auth
+        )
+        url = url.replace("{set}", requirement_set.json()["id"])
 
     with counting(connection) as small:
         assert (await client.get(url, headers=auth)).status_code == 200

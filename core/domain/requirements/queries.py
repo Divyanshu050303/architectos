@@ -64,3 +64,17 @@ def decode_version_cursor(raw: str) -> int:
     if kind != _VERSION_KIND or not version.isdigit() or int(version) < 1:
         raise InvalidCursor
     return int(version)
+
+
+_SET_KIND = "requirement_set"
+
+
+def encode_set_cursor(number: int) -> str:
+    return pagination.encode_cursor([_SET_KIND, str(number)])
+
+
+def decode_set_cursor(raw: str) -> int:
+    kind, number = pagination.decode_cursor(raw, length=2)
+    if kind != _SET_KIND or not number.isdigit() or int(number) < 1:
+        raise InvalidCursor
+    return int(number)

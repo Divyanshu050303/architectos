@@ -32,6 +32,7 @@ class Permission(StrEnum):
     REQUIREMENT_CREATE = "requirement.create"
     REQUIREMENT_UPDATE = "requirement.update"  # includes status changes
     REQUIREMENT_DELETE = "requirement.delete"
+    REQUIREMENT_SET_CREATE = "requirement_set.create"  # reading sets needs requirement.read
 
     ARCHITECTURE_READ = "architecture.read"
     ARCHITECTURE_CREATE = "architecture.create"
@@ -58,6 +59,7 @@ _MEMBER = _VIEWER | {
     Permission.REQUIREMENT_CREATE,
     Permission.REQUIREMENT_UPDATE,
     Permission.REQUIREMENT_DELETE,
+    Permission.REQUIREMENT_SET_CREATE,
     Permission.ARCHITECTURE_CREATE,
     Permission.ARCHITECTURE_UPDATE,
     Permission.ARCHITECTURE_VALIDATE,
