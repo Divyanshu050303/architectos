@@ -17,6 +17,7 @@ from dataclasses import dataclass, replace
 from core.domain.requirements.candidates import ExtractionMethod, RequirementCandidate, SourceSpan
 from core.domain.requirements.entities import RequirementContent
 from core.domain.requirements.enums import RequirementStatus
+from core.domain.requirements.errors import InvalidRequirement
 from core.domain.requirements.value_objects import SetConstraint, parse_structured_data
 
 from .classifier import Classification, Unclassified, classify, priority_of, qualitative, scope_in
@@ -143,7 +144,11 @@ def extract(raw: str) -> Extraction:
             if isinstance(result, Unclassified):
                 unresolved.append(Unresolved(result.reason, span, result.options))
                 continue
-            candidate = _quantitative(sentence, bound, result, normalized.percentiles, lo, hi, span)
+            try:
+                candidate = _quantitative(sentence, bound, result, normalized.percentiles, lo, hi, span)
+            except InvalidRequirement as error:  # e.g. "between 20 and 10 GB": an empty range
+                unresolved.append(Unresolved(f"invalid_{error.details['reason']}", span))
+                continue
             candidates.append(candidate)
             notes.extend(Note(candidate.key, i) for i in bound.interpretations)
             if result.operator_implied:
