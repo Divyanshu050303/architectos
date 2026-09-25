@@ -31,6 +31,7 @@ from core.domain.projects.entities import NewProject, Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
 from core.domain.projects.queries import ProjectQuery, ProjectSort
+from core.domain.projects.repository import ProjectLock
 from core.domain.requirements.entities import NewRequirement, Requirement, RequirementVersion, Revision
 from core.domain.requirements.enums import RequirementStatus
 from core.domain.requirements.queries import RequirementQuery
@@ -381,7 +382,7 @@ class FakeProjectRepository:
         self.by_id: dict[uuid.UUID, Project] = {}
 
     async def get_for_member(
-        self, project_id: uuid.UUID, *, user_id: uuid.UUID, for_update: bool = False
+        self, project_id: uuid.UUID, *, user_id: uuid.UUID, lock: ProjectLock | None = None
     ) -> ProjectAccess | None:
         project = await self.get_live(project_id)
         if project is None:

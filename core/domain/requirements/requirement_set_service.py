@@ -9,6 +9,7 @@ from core.domain import pagination
 from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.organizations.permissions import Permission
+from core.domain.projects.repository import ProjectLock
 from core.domain.unit_of_work import UnitOfWork
 
 from .access import project_access
@@ -49,7 +50,7 @@ class RequirementSetService:
             _check_selection(requirement_ids)
         async with self._uow as uow:
             access = await project_access(
-                uow, project_id, user_id, Permission.REQUIREMENT_SET_CREATE, lock=True
+                uow, project_id, user_id, Permission.REQUIREMENT_SET_CREATE, lock=ProjectLock.EXCLUSIVE
             )
             chosen = await _select(uow, project_id, requirement_ids)
             conflicts = find_conflicts(chosen)

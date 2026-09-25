@@ -1,7 +1,8 @@
 """Requirement use cases. Each one resolves the project together with the caller's membership in
 its own transaction (a requirement is only ever reached through its project), checks the
-permission, and for writes locks the project row first: that serializes number allocation, and
-makes archiving and requirement changes mutually exclusive, so an archived project is frozen."""
+permission, and for writes locks the project row first (see ProjectLock): creation takes it
+exclusively, which serializes number allocation; edits and deletes share it, so they run in
+parallel with each other but never alongside archiving, which keeps archived projects frozen."""
 
 import uuid
 from typing import Any
@@ -11,6 +12,7 @@ from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.organizations.permissions import Permission
 from core.domain.projects.entities import ProjectAccess
+from core.domain.projects.repository import ProjectLock
 from core.domain.unit_of_work import UnitOfWork
 
 from .access import project_access
@@ -146,7 +148,9 @@ class RequirementService:
             structured_data=structured_data,
         )
         async with self._uow as uow:
-            access = await project_access(uow, project_id, user_id, Permission.REQUIREMENT_CREATE, lock=True)
+            access = await project_access(
+                uow, project_id, user_id, Permission.REQUIREMENT_CREATE, lock=ProjectLock.EXCLUSIVE
+            )
             requirement = await uow.requirements.add(new)
             await uow.audit.record(
                 _event(
@@ -172,7 +176,9 @@ class RequirementService:
         """Appends a version. Returns the requirement unchanged (no version, no audit) when the
         changes leave every field as it is."""
         async with self._uow as uow:
-            access = await project_access(uow, project_id, user_id, Permission.REQUIREMENT_UPDATE, lock=True)
+            access = await project_access(
+                uow, project_id, user_id, Permission.REQUIREMENT_UPDATE, lock=ProjectLock.SHARE
+            )
             current = await uow.requirements.get(project_id, requirement_id, for_update=True)
             if current is None:
                 raise RequirementNotFound
@@ -191,7 +197,9 @@ class RequirementService:
 
     async def delete(self, *, project_id: uuid.UUID, requirement_id: uuid.UUID, user_id: uuid.UUID) -> None:
         async with self._uow as uow:
-            access = await project_access(uow, project_id, user_id, Permission.REQUIREMENT_DELETE, lock=True)
+            access = await project_access(
+                uow, project_id, user_id, Permission.REQUIREMENT_DELETE, lock=ProjectLock.SHARE
+            )
             current = await uow.requirements.get(project_id, requirement_id, for_update=True)
             if current is None:
                 raise RequirementNotFound

@@ -1,8 +1,21 @@
 import uuid
+from enum import StrEnum
 from typing import Protocol
 
 from .entities import NewProject, Project, ProjectAccess
 from .queries import ProjectQuery
+
+
+class ProjectLock(StrEnum):
+    """How a write holds its project row until the transaction ends.
+
+    SHARE: for changes to one thing under the project (editing or deleting a requirement). Many
+    such writes run in parallel, but none while the project itself changes (archive, update).
+    EXCLUSIVE: for changes to the project, and for writes that must see a stable project-wide
+    state (allocating a requirement number, snapshotting a requirement set)."""
+
+    SHARE = "share"
+    EXCLUSIVE = "exclusive"
 
 
 class ProjectRepository(Protocol):
@@ -26,11 +39,11 @@ class ProjectRepository(Protocol):
         ...
 
     async def get_for_member(
-        self, project_id: uuid.UUID, *, user_id: uuid.UUID, for_update: bool = False
+        self, project_id: uuid.UUID, *, user_id: uuid.UUID, lock: ProjectLock | None = None
     ) -> ProjectAccess | None:
         """The tenant entry point: the project, found only if it is not deleted, its organization
-        is not deleted and ``user_id`` is a member of that organization (one query). With
-        ``for_update`` the project row is locked until the transaction ends."""
+        is not deleted and ``user_id`` is a member of that organization (one query). With ``lock`` the
+        project row is locked (see ProjectLock) until the transaction ends."""
         ...
 
     async def list_for_organization(self, organization_id: uuid.UUID, query: ProjectQuery) -> list[Project]:

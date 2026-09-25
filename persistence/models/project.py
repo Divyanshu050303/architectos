@@ -55,10 +55,12 @@ class ProjectRecord(UuidPrimaryKey, Timestamps, Base):
             unique=True,
             postgresql_where=text("deleted_at IS NULL"),
         ),
-        # Project listing: organization + optional status filter, newest first, keyset on
-        # (created_at, id). Deliberately not partial, so it also serves the RESTRICT check on
-        # organizations(id), which must see deleted rows too.
-        Index(None, "organization_id", "status", "created_at", "id"),
+        # Project listing, newest first, keyset on (created_at, id), with or without the status
+        # filter (two statuses: filtering while walking the index is cheap). Status is not a key
+        # column: in the middle of the key it would stop the index from providing the order of
+        # the default, unfiltered listing. Deliberately not partial, so it also serves the
+        # RESTRICT check on organizations(id), which must see deleted rows too.
+        Index(None, "organization_id", "created_at", "id"),
         CheckConstraint("char_length(name) BETWEEN 1 AND 100", name="name_length"),
         CheckConstraint(
             f"char_length(slug) BETWEEN 1 AND 63 AND slug ~ '{SLUG_PATTERN}'", name="slug_format"

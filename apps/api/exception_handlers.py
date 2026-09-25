@@ -154,6 +154,8 @@ BEARER_CHALLENGES: dict[type[DomainError], str] = {
 }
 
 HTTP_CODES: dict[int, tuple[str, str]] = {
+    # FastAPI answers bodies it cannot parse (e.g. JSON nested past the parser's limit) with 400.
+    400: ("malformed_request", "The request body could not be parsed."),
     404: ("not_found", "Not found."),
     405: ("method_not_allowed", "This method is not allowed here."),
 }

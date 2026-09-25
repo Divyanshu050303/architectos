@@ -11,6 +11,7 @@ from apps.api.email.mailer import BackgroundMailer
 from apps.api.email.messages import Links
 from apps.api.email.transport import EmailTransport
 from apps.api.middleware.rate_limit import RateLimiter, RateLimits
+from apps.api.middleware.request_id import current_request_id
 from core.domain.audit.audit_service import AuditService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
@@ -49,6 +50,7 @@ def get_client_info(request: Request) -> ClientInfo:
     return ClientInfo(
         user_agent=request.headers.get("user-agent"),
         ip_address=request.client.host if request.client else None,
+        request_id=current_request_id(),
     )
 
 

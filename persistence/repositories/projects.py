@@ -9,6 +9,7 @@ from core.domain.projects.entities import NewProject, Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
 from core.domain.projects.queries import ProjectQuery, ProjectSort
+from core.domain.projects.repository import ProjectLock
 from core.domain.projects.value_objects import ProjectSettings
 from persistence.models import OrganizationMemberRecord, OrganizationRecord, ProjectRecord
 
@@ -98,7 +99,7 @@ class SqlAlchemyProjectRepository:
         return to_project(record)
 
     async def get_for_member(
-        self, project_id: uuid.UUID, *, user_id: uuid.UUID, for_update: bool = False
+        self, project_id: uuid.UUID, *, user_id: uuid.UUID, lock: ProjectLock | None = None
     ) -> ProjectAccess | None:
         # Project, organization and membership in one statement: a project of another tenant, a
         # deleted project or a deleted organization simply produce no row.
@@ -117,8 +118,9 @@ class SqlAlchemyProjectRepository:
             )
             .execution_options(populate_existing=True)
         )
-        if for_update:
-            statement = statement.with_for_update(of=ProjectRecord)
+        if lock is not None:
+            # FOR SHARE / FOR UPDATE on the project row only (not the organization or membership).
+            statement = statement.with_for_update(of=ProjectRecord, read=lock is ProjectLock.SHARE)
         row = (await self._session.execute(statement)).first()
         if row is None:
             return None

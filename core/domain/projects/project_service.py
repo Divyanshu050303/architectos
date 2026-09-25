@@ -17,6 +17,7 @@ from core.domain.unit_of_work import UnitOfWork
 from .entities import NewProject, Project, ProjectAccess
 from .errors import ProjectNotFound
 from .queries import ProjectCursor, ProjectQuery, ProjectSort
+from .repository import ProjectLock
 from .value_objects import ProjectSettings
 
 
@@ -111,7 +112,9 @@ class ProjectService:
         if name is None and description is None and settings is None:
             raise NothingToUpdate
         async with self._uow as uow:
-            access = await uow.projects.get_for_member(project_id, user_id=user_id, for_update=True)
+            access = await uow.projects.get_for_member(
+                project_id, user_id=user_id, lock=ProjectLock.EXCLUSIVE
+            )
             if access is None:
                 raise ProjectNotFound
             access.membership.require(Permission.PROJECT_UPDATE)
@@ -166,7 +169,9 @@ class ProjectService:
         """Lock, re-authorize, apply one lifecycle step; save and audit only if the state changed."""
         now = self._clock()
         async with self._uow as uow:
-            access = await uow.projects.get_for_member(project_id, user_id=user_id, for_update=True)
+            access = await uow.projects.get_for_member(
+                project_id, user_id=user_id, lock=ProjectLock.EXCLUSIVE
+            )
             if access is None:
                 raise ProjectNotFound
             access.membership.require(permission)

@@ -54,5 +54,7 @@ class SqlAlchemyUnitOfWork:
             return
         if exc_type is None:
             await transaction.commit()
+            self.audit.publish_committed()
         else:
             await transaction.rollback()
+            self.audit.discard_uncommitted()
