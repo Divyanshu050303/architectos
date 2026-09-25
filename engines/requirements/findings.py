@@ -42,11 +42,13 @@ class Finding:
     severity: Severity
     message: str
     candidate_keys: tuple[str, ...] = ()
+    requirement_references: tuple[str, ...] = ()  # existing requirements concerned, e.g. "REQ-3@v2"
     span: SourceSpan | None = None
     field: str | None = None
     suggestion: str | None = None
     options: tuple[str, ...] = ()  # possible readings, for ambiguities and assumptions
     confidence: Decimal | None = None  # for assumptions: how safe the assumed reading is
+    metric: str | None = None  # for conflicts and consistency
 
     @property
     def key(self) -> str:
@@ -54,6 +56,7 @@ class Finding:
             self.kind.value,
             self.code,
             list(self.candidate_keys),
+            list(self.requirement_references),
             [self.span.start, self.span.end] if self.span else None,
             self.field,
         ]

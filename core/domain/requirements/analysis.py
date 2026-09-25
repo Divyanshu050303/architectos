@@ -22,7 +22,7 @@ from decimal import Decimal
 from enum import StrEnum
 from itertools import combinations
 
-from .entities import Requirement
+from .entities import Requirement, RequirementContent
 from .enums import RequirementScope, RequirementSource, RequirementStatus, RequirementType
 from .errors import InvalidRequirement
 from .normalization import CanonicalQuantity, canonical
@@ -182,38 +182,96 @@ class ProjectAnalysis:
 
 
 # (metric, scope, percentile, canonical unit): only requirements in one group are compared.
+class Relation(StrEnum):
+    """How two comparable requirements relate."""
+
+    DISJOINT = "disjoint"  # no value satisfies both: a conflict
+    EQUAL = "equal"  # they allow exactly the same values
+    FIRST_STRICTER = "first_stricter"  # everything the first allows, the second allows too
+    SECOND_STRICTER = "second_stricter"
+    OVERLAP = "overlap"  # compatible, neither contains the other (">= 100" and "<= 500")
+
+
+@dataclass(frozen=True, slots=True)
+class Comparison[T]:
+    first: T
+    second: T
+    metric: str
+    relation: Relation
+    first_bound: str  # human-readable, e.g. "<= 300 ms", "in {eu-west-1}"
+    second_bound: str
+    sets: bool = False  # a set membership (regions) rather than a quantity
+
+    @property
+    def reason(self) -> str:
+        """The conflict code, when the relation is DISJOINT."""
+        return "disjoint_sets" if self.sets else "disjoint_bounds"
+
+
+def _relate(first_in_second: bool, second_in_first: bool, intersect: bool) -> Relation:
+    if not intersect:
+        return Relation.DISJOINT
+    if first_in_second and second_in_first:
+        return Relation.EQUAL
+    if first_in_second:
+        return Relation.FIRST_STRICTER
+    if second_in_first:
+        return Relation.SECOND_STRICTER
+    return Relation.OVERLAP
+
+
+# (metric, scope, percentile, canonical unit): only requirements in one group are compared.
 type _Group = tuple[str, RequirementScope, Decimal | None, str]
 
 
-def find_conflicts(requirements: list[Requirement]) -> list[Conflict]:
-    """Pairs no value can satisfy together. Only like is compared with like: the same metric, scope,
-    percentile and canonical unit (latency p95 is not p99, an API is not a database, USD is not EUR)."""
-    quantities: dict[_Group, list[tuple[Requirement, CanonicalQuantity]]] = defaultdict(list)
-    sets: dict[tuple[str, RequirementScope], list[tuple[Requirement, SetConstraint]]] = defaultdict(list)
-    for requirement in requirements:
-        constraint, scope = requirement.content.constraint, requirement.content.scope
-        if isinstance(constraint, (QuantityConstraint, RangeConstraint)):
+def compare_like_with_like[T](items: list[tuple[T, RequirementContent]]) -> list[Comparison[T]]:
+    """Every pair of comparable requirements with how they relate. Only like is compared with like:
+    the same metric, scope, percentile and canonical unit (latency p95 is not p99, an API is not a
+    database, USD is not EUR), after exact conversion (600,000 requests/minute is 10,000/second)."""
+    quantities: dict[_Group, list[tuple[T, CanonicalQuantity]]] = defaultdict(list)
+    sets: dict[tuple[str, RequirementScope], list[tuple[T, SetConstraint]]] = defaultdict(list)
+    for item, content in items:
+        constraint = content.constraint
+        if isinstance(constraint, QuantityConstraint | RangeConstraint):
             quantity = canonical(constraint)
-            quantities[quantity.metric, scope, quantity.percentile, quantity.unit].append(
-                (requirement, quantity)
-            )
+            group = (quantity.metric, content.scope, quantity.percentile, quantity.unit)
+            quantities[group].append((item, quantity))
         elif isinstance(constraint, SetConstraint):
-            sets[constraint.metric, scope].append((requirement, constraint))
+            sets[constraint.metric, content.scope].append((item, constraint))
 
-    conflicts: list[Conflict] = []
+    comparisons: list[Comparison[T]] = []
     for (metric, _, _, _), members in quantities.items():
         for (first, a), (second, b) in combinations(members, 2):
-            if not a.interval.intersects(b.interval):
-                message = (
-                    f"{first.reference} requires {metric} {a.describe()}, but {second.reference} "
-                    f"requires {metric} {b.describe()}: no value satisfies both."
-                )
-                conflicts.append(Conflict("disjoint_bounds", metric, (first, second), message))
+            relation = _relate(
+                b.interval.contains(a.interval),
+                a.interval.contains(b.interval),
+                a.interval.intersects(b.interval),
+            )
+            comparisons.append(Comparison(first, second, metric, relation, a.describe(), b.describe()))
     for (metric, _), choices in sets.items():
         for (first, x), (second, y) in combinations(choices, 2):
-            if not set(x.values) & set(y.values):
-                message = f"{first.reference} and {second.reference} allow no {metric} in common."
-                conflicts.append(Conflict("disjoint_sets", metric, (first, second), message))
+            left, right = set(x.values), set(y.values)
+            relation = _relate(left <= right, right <= left, bool(left & right))
+            described = (f"in {{{', '.join(x.values)}}}", f"in {{{', '.join(y.values)}}}")
+            comparisons.append(Comparison(first, second, metric, relation, *described, sets=True))
+    return comparisons
+
+
+def find_conflicts(requirements: list[Requirement]) -> list[Conflict]:
+    """Pairs of requirements no value can satisfy together (see ``compare_like_with_like``)."""
+    conflicts: list[Conflict] = []
+    for comparison in compare_like_with_like([(r, r.content) for r in requirements]):
+        if comparison.relation is not Relation.DISJOINT:
+            continue
+        first, second, metric = comparison.first, comparison.second, comparison.metric
+        if comparison.reason == "disjoint_sets":
+            message = f"{first.reference} and {second.reference} allow no {metric} in common."
+        else:
+            message = (
+                f"{first.reference} requires {metric} {comparison.first_bound}, but {second.reference} "
+                f"requires {metric} {comparison.second_bound}: no value satisfies both."
+            )
+        conflicts.append(Conflict(comparison.reason, metric, (first, second), message))
     return conflicts
 
 
