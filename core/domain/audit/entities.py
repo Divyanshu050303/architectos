@@ -30,6 +30,11 @@ class AuditAction(StrEnum):
     PROJECT_ARCHIVED = "project.archived"
     PROJECT_RESTORED = "project.restored"
     PROJECT_DELETED = "project.deleted"
+    REQUIREMENT_CREATED = "requirement.created"
+    REQUIREMENT_UPDATED = "requirement.updated"  # content (anything but status) changed
+    REQUIREMENT_STATUS_CHANGED = "requirement.status_changed"
+    REQUIREMENT_VERSION_CREATED = "requirement.version_created"  # every revision
+    REQUIREMENT_DELETED = "requirement.deleted"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

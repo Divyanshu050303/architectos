@@ -13,6 +13,7 @@ from core.domain.projects.value_objects import ProjectSettings
 from persistence.models import OrganizationMemberRecord, OrganizationRecord, ProjectRecord
 
 from ._errors import violated_constraint
+from ._search import escape_like
 from .organizations import to_membership
 
 SLUG_UNIQUE_INDEX = "uq_projects_organization_id_slug_live"
@@ -131,7 +132,7 @@ class SqlAlchemyProjectRepository:
         if query.status is not None:
             statement = statement.where(ProjectRecord.status == query.status.value)
         if query.search:
-            pattern = f"%{_escape_like(query.search.strip().lower())}%"
+            pattern = f"%{escape_like(query.search.strip().lower())}%"
             statement = statement.where(
                 or_(
                     func.lower(ProjectRecord.name).like(pattern, escape="\\"),
@@ -159,8 +160,3 @@ _SORT_KEYS: dict[ProjectSort, tuple[ColumnElement[object], bool]] = {
     ProjectSort.UPDATED_AT: (ProjectRecord.updated_at, True),  # type: ignore[dict-item]
     ProjectSort.NAME: (func.lower(ProjectRecord.name), False),
 }
-
-
-def _escape_like(value: str) -> str:
-    """Search text is matched literally: LIKE wildcards in it are escaped."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")

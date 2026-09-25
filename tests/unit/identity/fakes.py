@@ -31,6 +31,8 @@ from core.domain.projects.entities import NewProject, Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
 from core.domain.projects.queries import ProjectQuery, ProjectSort
+from core.domain.requirements.entities import NewRequirement, Requirement, RequirementVersion, Revision
+from core.domain.requirements.queries import RequirementQuery
 
 
 class FakeClock:
@@ -441,6 +443,97 @@ class FakeProjectRepository:
         return stored
 
 
+class FakeRequirementRepository:
+    """Keeps every version, like the append-only table."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.by_id: dict[uuid.UUID, Requirement] = {}
+        self.versions: dict[uuid.UUID, list[RequirementVersion]] = {}
+
+    def _version_of(
+        self, requirement: Requirement, reason: str | None, author: uuid.UUID | None
+    ) -> RequirementVersion:
+        return RequirementVersion(
+            requirement_id=requirement.id,
+            version=requirement.version,
+            content=requirement.content,
+            source=requirement.source,
+            confidence=requirement.confidence,
+            change_reason=reason,
+            created_by_user_id=author,
+            created_at=self._clock(),
+        )
+
+    async def add(self, requirement: NewRequirement) -> Requirement:
+        numbers = [r.number for r in self.by_id.values() if r.project_id == requirement.project_id]
+        now = self._clock()
+        stored = Requirement(
+            id=uuid.uuid7(),
+            project_id=requirement.project_id,
+            number=max(numbers, default=0) + 1,
+            version=1,
+            content=requirement.content,
+            source=requirement.source,
+            confidence=requirement.confidence,
+            created_by_user_id=requirement.created_by_user_id,
+            created_at=now,
+            updated_at=now,
+        )
+        self.by_id[stored.id] = stored
+        self.versions[stored.id] = [self._version_of(stored, None, requirement.created_by_user_id)]
+        return stored
+
+    async def get(
+        self, project_id: uuid.UUID, requirement_id: uuid.UUID, *, for_update: bool = False
+    ) -> Requirement | None:
+        found = self.by_id.get(requirement_id)
+        return found if found and found.project_id == project_id and not found.is_deleted else None
+
+    async def save(self, revision: Revision) -> Requirement:
+        requirement = revision.requirement
+        assert self.by_id[requirement.id].version == requirement.version - 1
+        stored = replace(requirement, updated_at=self._clock())
+        self.by_id[stored.id] = stored
+        self.versions[stored.id].append(
+            self._version_of(stored, revision.change_reason, revision.author_user_id)
+        )
+        return stored
+
+    async def save_deleted(self, requirement: Requirement) -> None:
+        self.by_id[requirement.id] = requirement
+
+    async def list_for_project(self, project_id: uuid.UUID, query: RequirementQuery) -> list[Requirement]:
+        found = [r for r in self.by_id.values() if r.project_id == project_id and not r.is_deleted]
+        for attr in ("type", "category", "status", "priority"):
+            wanted = getattr(query, attr)
+            if wanted is not None:
+                found = [r for r in found if getattr(r.content, attr) == wanted]
+        if query.search:
+            term = query.search.lower()
+            found = [
+                r for r in found if term in r.content.title.lower() or term in r.content.statement.lower()
+            ]
+        found.sort(key=lambda r: (r.created_at, r.id), reverse=True)
+        if query.after is not None:
+            after = (query.after.created_at, query.after.id)
+            found = [r for r in found if (r.created_at, r.id) < after]
+        return found[: query.limit]
+
+    async def list_versions(
+        self, project_id: uuid.UUID, requirement_id: uuid.UUID, *, after: int | None, limit: int
+    ) -> list[RequirementVersion]:
+        if await self.get(project_id, requirement_id) is None:
+            return []
+        return [v for v in self.versions[requirement_id] if after is None or v.version > after][:limit]
+
+    async def get_version(
+        self, project_id: uuid.UUID, requirement_id: uuid.UUID, version: int
+    ) -> RequirementVersion | None:
+        versions = await self.list_versions(project_id, requirement_id, after=version - 1, limit=1)
+        return versions[0] if versions and versions[0].version == version else None
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -452,6 +545,7 @@ class FakeUnitOfWork:
         self._invitations = FakeInvitationRepository()
         self._audit = FakeAuditRepository()
         self._projects = FakeProjectRepository(clock, self._memberships)
+        self._requirements = FakeRequirementRepository(clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -490,6 +584,10 @@ class FakeUnitOfWork:
     @property
     def projects(self) -> FakeProjectRepository:
         return self._projects
+
+    @property
+    def requirements(self) -> FakeRequirementRepository:
+        return self._requirements
 
     async def __aenter__(self) -> Self:
         return self

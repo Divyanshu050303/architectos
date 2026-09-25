@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pydantic.alias_generators import to_camel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from apps.api.access_tokens import AccessTokenExpired, InvalidAccessToken, Unauthenticated
@@ -66,6 +67,15 @@ from core.domain.projects.errors import (
     ProjectNotFound,
     ProjectSlugTaken,
 )
+from core.domain.requirements.errors import (
+    ChangeReasonRequired,
+    InvalidRequirement,
+    InvalidStatusTransition,
+    RequirementLocked,
+    RequirementNotFound,
+    RequirementVersionConflict,
+    RequirementVersionNotFound,
+)
 
 logger = logging.getLogger("architectos.api")
 security_log = logging.getLogger("architectos.security")
@@ -120,6 +130,13 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidProjectDescription: 422,
     InvalidProjectSlug: 422,
     InvalidProjectSettings: 422,
+    RequirementNotFound: 404,
+    RequirementVersionNotFound: 404,
+    InvalidRequirement: 422,
+    ChangeReasonRequired: 422,
+    RequirementVersionConflict: 409,
+    InvalidStatusTransition: 409,
+    RequirementLocked: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.
@@ -153,8 +170,19 @@ def domain_error_response(error: DomainError) -> JSONResponse:
     if isinstance(error, RateLimited):
         headers["Retry-After"] = str(error.retry_after)
     return error_response(
-        _status_for(error), error.code, error.detail_message, error.details, headers=headers
+        _status_for(error), error.code, error.detail_message, _camel_details(error.details), headers=headers
     )
+
+
+def _camel_details(details: Any) -> Any:
+    """Domain details use snake_case (field paths like "structured_data.value", keys like
+    "current_version"); the JSON API is camelCase throughout."""
+    if not isinstance(details, dict):
+        return details
+    converted = {to_camel(key): value for key, value in details.items()}
+    if isinstance(converted.get("field"), str):
+        converted["field"] = ".".join(to_camel(part) for part in converted["field"].split("."))
+    return converted
 
 
 def _status_for(error: DomainError) -> int:

@@ -33,6 +33,8 @@ class Operation:
             .replace("{member_id}", str(uuid.uuid4()))
             .replace("{invitation_id}", str(uuid.uuid4()))
             .replace("{session_id}", str(uuid.uuid4()))
+            .replace("{project_id}", str(uuid.uuid4()))
+            .replace("{requirement_id}", str(uuid.uuid4()))
             .replace("{invitation_token}", "A" * 43)
         )
 

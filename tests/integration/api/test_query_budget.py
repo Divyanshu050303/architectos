@@ -66,6 +66,15 @@ async def grow(db: AsyncSession, org_id: str, size: int) -> None:
     await db.flush()
 
 
+REQUIREMENT = {
+    "type": "functional",
+    "category": "order",
+    "title": "Place an order",
+    "statement": "A customer can place an order.",
+    "priority": "high",
+}
+
+
 @pytest.mark.parametrize(
     ("path", "budget"),
     [
@@ -76,6 +85,8 @@ async def grow(db: AsyncSession, org_id: str, size: int) -> None:
         ("/api/v1/organizations/{org}/audit-log", 4),  # + one keyset page
         ("/api/v1/organizations/{org}/projects", 4),  # + one filtered, sorted page
         ("/api/v1/projects/{project}", 3),  # session + user + project/organization/membership join
+        ("/api/v1/projects/{project}/requirements", 4),  # + one filtered page
+        ("/api/v1/projects/{project}/requirements/{requirement}", 4),  # + the requirement
     ],
 )
 async def test_reads_stay_within_budget_regardless_of_size(
@@ -90,11 +101,19 @@ async def test_reads_stay_within_budget_regardless_of_size(
     project = await client.post(
         f"/api/v1/organizations/{org_id}/projects", json={"name": "Budget"}, headers=auth
     )
-    url = path.replace("{org}", org_id).replace("{project}", project.json()["id"])
+    requirements = f"/api/v1/projects/{project.json()['id']}/requirements"
+    requirement = await client.post(requirements, json=REQUIREMENT, headers=auth)
+    url = (
+        path.replace("{org}", org_id)
+        .replace("{project}", project.json()["id"])
+        .replace("{requirement}", requirement.json()["id"])
+    )
 
     with counting(connection) as small:
         assert (await client.get(url, headers=auth)).status_code == 200
     await grow(db, org_id, 25)
+    for i in range(25):
+        await client.post(requirements, json=REQUIREMENT | {"title": f"Grown {i}"}, headers=auth)
     with counting(connection) as large:
         assert (await client.get(url, headers=auth)).status_code == 200
 

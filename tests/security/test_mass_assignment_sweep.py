@@ -35,6 +35,19 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "change_role_api_v1_organizations__organization_id__members__member_id__patch": {"role": "viewer"},
     "create_project_api_v1_organizations__organization_id__projects_post": {"name": "Food Delivery"},
     "update_project_api_v1_projects__project_id__patch": {"name": "Orders"},
+    "create_requirement_api_v1_projects__project_id__requirements_post": {
+        "type": "functional",
+        "category": "order",
+        "title": "Place an order",
+        "statement": "A customer can place an order.",
+        "priority": "high",
+        "status": "draft",  # declared: users may create draft or active requirements
+    },
+    "update_requirement_api_v1_projects__project_id__requirements__requirement_id__patch": {
+        "expectedVersion": 1,
+        "title": "Place an order quickly",
+        "status": "draft",  # declared: status changes go through the lifecycle rules
+    },
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",
@@ -59,6 +72,13 @@ async def test_every_body_rejects_undeclared_privileged_fields(
         f"/api/v1/organizations/{org_id}/projects", json={"name": "Sweep"}, headers=ada
     )
     project_id = created.json()["id"]
+    requirement_id = (
+        await client.post(
+            f"/api/v1/projects/{project_id}/requirements",
+            json=VALID_BODIES["create_requirement_api_v1_projects__project_id__requirements_post"],
+            headers=ada,
+        )
+    ).json()["id"]
 
     for op in (o for o in inventory(app) if o.has_body):
         body = VALID_BODIES[op.operation_id] | {field: PRIVILEGED[field]}
@@ -66,7 +86,12 @@ async def test_every_body_rejects_undeclared_privileged_fields(
             continue  # a declared field (e.g. role on change_role) is validated by the endpoint itself
         response = await client.request(
             op.method,
-            op.url(organization_id=org_id, member_id=member_id, project_id=project_id),
+            op.url(
+                organization_id=org_id,
+                member_id=member_id,
+                project_id=project_id,
+                requirement_id=requirement_id,
+            ),
             json=body,
             headers=ada | WEB,
         )
