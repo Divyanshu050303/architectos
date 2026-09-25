@@ -8,6 +8,7 @@ from .organization import OrganizationRecord
 from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
 from .project import ProjectRecord
+from .requirement import RequirementRecord, RequirementVersionRecord
 from .session import SessionRecord
 from .user import UserRecord
 
@@ -20,6 +21,8 @@ __all__ = [
     "OrganizationRecord",
     "PasswordResetTokenRecord",
     "ProjectRecord",
+    "RequirementRecord",
+    "RequirementVersionRecord",
     "SessionRecord",
     "UserRecord",
 ]

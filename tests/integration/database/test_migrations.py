@@ -25,7 +25,8 @@ AUTH_TABLES = {
     "audit_logs",
 }
 PROJECT_TABLES = {"projects"}
-ALL_TABLES = AUTH_TABLES | PROJECT_TABLES
+REQUIREMENT_TABLES = {"requirements", "requirement_versions"}
+ALL_TABLES = AUTH_TABLES | PROJECT_TABLES | REQUIREMENT_TABLES
 
 
 @pytest.fixture
@@ -65,7 +66,9 @@ def test_upgrade_creates_every_table(empty_database_url: str) -> None:
     command.upgrade(alembic_config(empty_database_url), "head")
 
     assert _tables(empty_database_url) == ALL_TABLES
-    assert "audit_logs_reject_change" in _functions(empty_database_url)
+    assert {"audit_logs_reject_change", "requirement_versions_reject_change"} <= _functions(
+        empty_database_url
+    )
 
 
 def test_downgrade_removes_everything_and_upgrade_reapplies(empty_database_url: str) -> None:
@@ -74,7 +77,9 @@ def test_downgrade_removes_everything_and_upgrade_reapplies(empty_database_url: 
     command.downgrade(config, "base")
 
     assert _tables(empty_database_url) == set()
-    assert "audit_logs_reject_change" not in _functions(empty_database_url)
+    assert _functions(empty_database_url).isdisjoint(
+        {"audit_logs_reject_change", "requirement_versions_reject_change"}
+    )
 
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -136,3 +141,13 @@ def test_downgrading_projects_leaves_the_auth_schema_intact(empty_database_url: 
     command.upgrade(config, "head")
     command.downgrade(config, "0001")
     assert _tables(empty_database_url) == AUTH_TABLES
+
+
+def test_downgrading_requirements_leaves_projects_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0002")
+    assert _tables(empty_database_url) == AUTH_TABLES | PROJECT_TABLES
+    assert "requirement_versions_reject_change" not in _functions(empty_database_url)
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES
