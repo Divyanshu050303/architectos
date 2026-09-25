@@ -7,6 +7,7 @@ from .invitation import InvitationRecord
 from .organization import OrganizationRecord
 from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
+from .project import ProjectRecord
 from .session import SessionRecord
 from .user import UserRecord
 
@@ -18,6 +19,7 @@ __all__ = [
     "OrganizationMemberRecord",
     "OrganizationRecord",
     "PasswordResetTokenRecord",
+    "ProjectRecord",
     "SessionRecord",
     "UserRecord",
 ]
