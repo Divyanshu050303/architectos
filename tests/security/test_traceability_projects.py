@@ -64,6 +64,10 @@ PROJECTS_DONE: dict[str, list[str]] = {
     "migration tests": [
         f"{I}.database.test_migrations::test_downgrading_projects_leaves_the_auth_schema_intact"
     ],
+    "documentation": [
+        f"{S}.test_documentation::test_every_endpoint_is_documented_and_nothing_else_is",
+        f"{S}.test_documentation::test_the_decisions_are_recorded",
+    ],
 }
 
 REQUIREMENTS_DONE: dict[str, list[str]] = {
@@ -149,6 +153,10 @@ REQUIREMENTS_DONE: dict[str, list[str]] = {
     "migration tests": [
         f"{I}.database.test_migrations::test_downgrading_requirement_sets_leaves_requirements_intact"
     ],
+    "documentation": [
+        f"{S}.test_documentation::test_the_taxonomy_metrics_and_units_are_documented",
+        f"{S}.test_documentation::test_every_error_code_is_documented",
+    ],
 }
 
 SECURITY_MATRIX: dict[str, list[str]] = {
@@ -204,8 +212,6 @@ SECURITY_MATRIX: dict[str, list[str]] = {
     ],
 }
 
-# Items proven outside the test suite, until they can be.
-PENDING = {"documentation": "Phase 15 (docs/api, docs/domain and the ADRs)"}
 
 SPEC_PROJECTS = [
     "database model", "migration", "indexes", "constraints", "domain entity", "repository", "API schemas",
@@ -239,8 +245,8 @@ def test_item_is_proven_by_existing_tests(item: str, tests: list[str]) -> None:
         assert callable(getattr(module, function, None)), f"{item}: {reference} not found"
 
 
-def test_every_item_of_the_spec_is_mapped_or_explicitly_pending() -> None:
-    assert set(PROJECTS_DONE) | set(PENDING) == set(SPEC_PROJECTS)
-    assert set(REQUIREMENTS_DONE) | set(PENDING) == set(SPEC_REQUIREMENTS)
+def test_every_item_of_the_spec_is_mapped() -> None:
+    assert set(PROJECTS_DONE) == set(SPEC_PROJECTS)
+    assert set(REQUIREMENTS_DONE) == set(SPEC_REQUIREMENTS)
     assert len(SECURITY_MATRIX) == 15
     assert (len(SPEC_PROJECTS), len(SPEC_REQUIREMENTS)) == (27, 29)
