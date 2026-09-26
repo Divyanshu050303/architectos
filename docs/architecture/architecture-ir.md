@@ -98,7 +98,8 @@ reached:
   [the capacity engine](capacity-engine.md#demand-propagation)); pricing on nodes
   `pricing_service`, `pricing_sku` (else `instance_class` is matched exactly),
   `pricing_storage_sku`, `pricing_conditions`: how a component maps to its organization's
-  [pricing snapshots](../api/pricing.md), never inferred when absent.
+  [pricing snapshots](../api/pricing.md), never inferred when absent (see
+  [the cost engine](cost-engine.md#resource-mapping)).
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.
 - `extra`: settings the IR does not recognize, **preserved as found** (bounded; fractional numbers
