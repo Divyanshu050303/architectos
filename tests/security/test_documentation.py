@@ -6,6 +6,9 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
+from core.architecture_ir import commands as ir_commands
+from core.architecture_ir import errors as ir_errors
+from core.domain.architecture import errors as architecture_errors
 from core.domain.audit.entities import AuditAction
 from core.domain.errors import DomainError
 from core.domain.projects import errors as project_errors
@@ -17,7 +20,9 @@ from core.domain.requirements.value_objects import UNITS
 from .support import inventory
 
 DOCS = Path(__file__).resolve().parents[2] / "docs"
-API_DOCS = (DOCS / "api" / "projects.md").read_text() + (DOCS / "api" / "requirements.md").read_text()
+API_DOCS = "".join(
+    (DOCS / "api" / name).read_text() for name in ("projects.md", "requirements.md", "architecture.md")
+)
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
     DOCS / "domain" / "requirements.md"
 ).read_text()
@@ -36,8 +41,8 @@ def in_scope(path: str) -> bool:
 def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
-    # 7 project, 9 requirement, 4 requirement set and 3 requirement analysis endpoints
-    assert len(served) == 23
+    # 7 project, 9 requirement, 4 requirement set, 3 requirement analysis and 7 architecture endpoints
+    assert len(served) == 30
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -47,7 +52,7 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
 def test_every_error_code_is_documented() -> None:
     codes = {
         error.code
-        for module in (project_errors, requirement_errors)
+        for module in (project_errors, requirement_errors, architecture_errors, ir_errors, ir_commands)
         for error in vars(module).values()
         if isinstance(error, type) and issubclass(error, DomainError) and error is not DomainError
     }
@@ -56,7 +61,9 @@ def test_every_error_code_is_documented() -> None:
 
 def test_every_audit_action_is_documented() -> None:
     actions = {
-        a.value for a in AuditAction if a.value.split(".")[0] in {"project", "requirement", "requirement_set"}
+        a.value
+        for a in AuditAction
+        if a.value.split(".")[0] in {"project", "requirement", "requirement_set", "architecture"}
     }
     assert {a for a in actions if a not in API_DOCS} == set()
 
@@ -72,9 +79,11 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-007-requirement-versioning-and-sets.md",
         "ADR-008-project-write-locking.md",
         "ADR-009-requirements-engine.md",
+        "ADR-002-architecture-ir.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
         assert "## Consequences" in text
     assert (DOCS / "frontend" / "projects-requirements-contract.md").exists()
     assert (DOCS / "requirements-engine.md").exists()
+    assert (DOCS / "frontend" / "architecture-contract.md").exists()

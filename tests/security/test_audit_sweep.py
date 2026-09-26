@@ -1,5 +1,6 @@
-"""Every mutating project, requirement and requirement-set endpoint writes an audit entry for the
-right organization and resource, and no entry carries requirement text.
+"""Every mutating project, requirement, requirement-set and architecture endpoint writes an audit
+entry for the right organization and resource, and no entry carries requirement or architecture
+text.
 
 The endpoint list comes from OpenAPI: a new mutating endpoint under a project fails this test
 until it is classified here, either with a plan (how to call it and what it must record) or as
@@ -36,9 +37,20 @@ REQUIREMENT = {
         "unit": "requests/second",
     },
 }
+# An architecture whose names carry the canaries: the audit log must record none of them.
+ARCHITECTURE = {
+    "schema_version": 1,
+    "name": CANARY_TITLE,
+    "nodes": [{"id": "api", "kind": "service", "name": CANARY_TITLE, "description": CANARY_STATEMENT}],
+}
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 READ_ONLY = {"validate_requirement_api_v1_projects__project_id__requirements__requirement_id__validate_post"}
+# Mutations deliberately not audited, each with the reason.
+NOT_AUDITED = {
+    # Where boxes are drawn: presentation, never an architecture change or a revision.
+    "save_architecture_layout_api_v1_projects__project_id__architecture_layout_put",
+}
 _names = itertools.count()
 
 
@@ -60,6 +72,13 @@ async def nothing(client: AsyncClient, auth: dict[str, str], target: Target) -> 
 
 async def archive(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
     await client.post(f"/api/v1/projects/{target.project_id}/archive", headers=auth)
+
+
+async def with_architecture(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    response = await client.post(
+        f"/api/v1/projects/{target.project_id}/architecture", json={"ir": ARCHITECTURE}, headers=auth
+    )
+    assert response.status_code == 201, response.text
 
 
 @dataclass(frozen=True)
@@ -108,6 +127,19 @@ PLANS: dict[str, Plan] = {
     "promote_candidates_api_v1_projects__project_id__requirement_analyses__analysis_id__promote_post": Plan(
         {"requirement.promoted"}, "promoted", lambda target: {"candidateKeys": [target.candidate_key]}
     ),
+    "create_architecture_api_v1_projects__project_id__architecture_post": Plan(
+        {"architecture.created"}, "created", {"ir": ARCHITECTURE, "reason": CANARY_REASON}
+    ),
+    "edit_architecture_api_v1_projects__project_id__architecture_commands_post": Plan(
+        {"architecture.revised"},
+        "created",  # the response's id is the architecture's
+        {
+            "baseVersion": 1,
+            "commands": [{"type": "rename_node", "nodeId": "api", "name": CANARY_TITLE + " 2"}],
+            "reason": CANARY_REASON,
+        },
+        with_architecture,
+    ),
 }
 
 
@@ -117,12 +149,12 @@ def in_scope(path: str) -> bool:
 
 def test_every_mutating_project_endpoint_is_classified(app: FastAPI) -> None:
     mutating = {op.operation_id for op in inventory(app) if op.method in MUTATING and in_scope(op.path)}
-    assert mutating == set(PLANS) | READ_ONLY
+    assert mutating == set(PLANS) | READ_ONLY | NOT_AUDITED
 
 
 def test_every_project_scoped_audit_action_is_exercised() -> None:
     """No action is declared and then never written."""
-    scoped = {"project", "requirement", "requirement_set", "requirement_analysis"}
+    scoped = {"project", "requirement", "requirement_set", "requirement_analysis", "architecture"}
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
 
@@ -220,6 +252,7 @@ async def test_read_only_endpoints_write_nothing(
     org_id = (await client.post("/api/v1/organizations", json={"name": "Acme"}, headers=auth)).json()["id"]
     target = await fresh_target(client, auth, org_id)
     await client.post(f"/api/v1/projects/{target.project_id}/requirement-sets", json={}, headers=auth)
+    await with_architecture(client, auth, target)
     before = await audit_entries(client, auth, org_id)
 
     reads = [

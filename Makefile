@@ -7,7 +7,7 @@ UV := uv run
 API_PORT ?= 8000
 
 .PHONY: install db-up db-down migrate migration run lint format typecheck test test-unit \
-        test-integration test-api test-security test-eval eval coverage migrate-check check
+        test-integration test-api test-security test-eval eval schemas coverage migrate-check check
 
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
@@ -55,6 +55,9 @@ test-eval:          ## Requirements Engine regression: quality must not drop bel
 
 eval:               ## Requirements Engine evaluation report (metrics and every difference from the labels)
 	$(UV) python -m ai.evaluation.evaluator
+
+schemas:            ## Regenerate the published JSON Schemas (core/schemas) from the code
+	$(UV) python -m core.architecture_ir.schema > core/schemas/architecture.schema.json
 
 coverage:           ## Full suite with line coverage of the API, domain and persistence code
 	$(UV) pytest --cov=apps/api --cov=core --cov=persistence --cov-report=term-missing:skip-covered

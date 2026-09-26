@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     api_docs_enabled: bool | None = None
     # Largest accepted request body; JSON payloads here are small.
     max_request_body_bytes: int = Field(default=64 * 1024, ge=1024)
+    # A whole architecture document (creating an architecture) is larger: about 1 KiB per node.
+    max_architecture_body_bytes: int = Field(default=2 * 1024 * 1024, ge=64 * 1024, le=16 * 1024 * 1024)
     # Concurrent Argon2 hashes per process (each ~64 MiB).
     password_hash_concurrency: int = Field(default=4, ge=1, le=64)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

@@ -38,6 +38,8 @@ class AuditAction(StrEnum):
     REQUIREMENT_SET_CREATED = "requirement_set.created"
     REQUIREMENT_ANALYSIS_CREATED = "requirement_analysis.created"
     REQUIREMENT_PROMOTED = "requirement.promoted"  # created from an analysis's candidate
+    ARCHITECTURE_CREATED = "architecture.created"
+    ARCHITECTURE_REVISED = "architecture.revised"  # every new revision after the first
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from core.domain.client import ClientInfo
 from persistence.models import EmailVerificationTokenRecord, PasswordResetTokenRecord
+from persistence.repositories.architectures import SqlAlchemyArchitectureRepository
 from persistence.repositories.audit_logs import SqlAlchemyAuditRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.organizations import (
@@ -43,6 +44,7 @@ class SqlAlchemyUnitOfWork:
         self.requirements = SqlAlchemyRequirementRepository(session)
         self.requirement_sets = SqlAlchemyRequirementSetRepository(session)
         self.requirement_analyses = SqlAlchemyRequirementAnalysisRepository(session)
+        self.architectures = SqlAlchemyArchitectureRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

@@ -1,5 +1,7 @@
 """ASGI application factory. Run with: uvicorn --factory apps.api.main:create_app --no-access-log"""
 
+import re
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,6 +17,7 @@ from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import RequestIdMiddleware
 from apps.api.middleware.security_headers import SecurityHeadersMiddleware
 from apps.api.routes import (
+    architectures,
     auth,
     invitations,
     organizations,
@@ -27,6 +30,7 @@ from apps.api.routes import (
 from engines.requirements.factory import build_engine
 
 API_PREFIX = "/api/v1"
+ARCHITECTURE_CREATE_PATH = re.compile(rf"{API_PREFIX}/projects/[0-9a-fA-F-]{{36}}/architecture")
 
 
 def _rate_limiter(settings: Settings) -> RateLimiter:
@@ -69,13 +73,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_allowed_origins,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "Authorization", REQUEST_ID_HEADER, CSRF_HEADER],
         expose_headers=[REQUEST_ID_HEADER, "Retry-After"],
         # Credentials (the refresh cookie) are only accepted from the allow-listed origins above.
         allow_credentials=True,
     )
-    app.add_middleware(BodyLimitMiddleware, max_bytes=settings.max_request_body_bytes)
+    app.add_middleware(
+        BodyLimitMiddleware,
+        max_bytes=settings.max_request_body_bytes,
+        larger=[("POST", ARCHITECTURE_CREATE_PATH, settings.max_architecture_body_bytes)],
+    )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.environment == "production")
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(RequestIdMiddleware)
@@ -88,4 +96,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(requirements.router, prefix=API_PREFIX)
     app.include_router(requirement_sets.router, prefix=API_PREFIX)
     app.include_router(requirement_analyses.router, prefix=API_PREFIX)
+    app.include_router(architectures.router, prefix=API_PREFIX)
     return app

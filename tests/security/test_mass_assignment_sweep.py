@@ -55,6 +55,21 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "promote_candidates_api_v1_projects__project_id__requirement_analyses__analysis_id__promote_post": {
         "candidateKeys": ["cand_0000000000000000"]
     },
+    "create_architecture_api_v1_projects__project_id__architecture_post": {
+        "ir": {
+            "schema_version": 1,
+            "name": "Sweep",
+            "nodes": [{"id": "api", "kind": "service", "name": "API"}],
+        },
+        "source": "import",  # declared: user or import, never ai, discovery or system
+    },
+    "edit_architecture_api_v1_projects__project_id__architecture_commands_post": {
+        "baseVersion": 1,
+        "commands": [{"type": "change_replicas", "nodeId": "api", "replicas": 2}],
+    },
+    "save_architecture_layout_api_v1_projects__project_id__architecture_layout_put": {
+        "positions": {"api": {"x": 1, "y": 2}}
+    },
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",

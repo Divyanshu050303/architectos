@@ -2,9 +2,14 @@
 
 A declared Content-Length over the limit is answered with 413 immediately. A body without a
 declared length (chunked) is counted while it is read and cut off once over the limit.
+
+A few routes legitimately take larger bodies (a whole architecture document); each is listed with
+its own limit, matched on method and path, and every other route keeps the default.
 """
 
 import json
+import re
+from collections.abc import Sequence
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -36,18 +41,32 @@ async def _reject(send: Send) -> None:
 
 
 class BodyLimitMiddleware:
-    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        max_bytes: int,
+        larger: Sequence[tuple[str, re.Pattern[str], int]] = (),
+    ) -> None:
         self.app = app
         self.max_bytes = max_bytes
+        self.larger = tuple(larger)  # (method, full-path pattern, limit)
+
+    def _limit(self, scope: Scope) -> int:
+        for method, path, limit in self.larger:
+            if scope.get("method") == method and path.fullmatch(scope.get("path", "")):
+                return limit
+        return self.max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
+        max_bytes = self._limit(scope)
         declared = dict(scope["headers"]).get(b"content-length")
         if declared is not None:
             try:
-                too_large = int(declared) > self.max_bytes
+                too_large = int(declared) > max_bytes
             except ValueError:
                 too_large = True
             if too_large:
@@ -61,7 +80,7 @@ class BodyLimitMiddleware:
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
-                if received > self.max_bytes:
+                if received > max_bytes:
                     raise BodyTooLarge
             return message
 
