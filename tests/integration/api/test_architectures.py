@@ -308,3 +308,23 @@ async def test_a_large_architecture_can_be_created_but_not_an_absurd_one(
     }
     too_big = await client.post(url(world, "/commands"), json=edit_body, headers=world.ada)
     assert too_big.status_code == 413  # other architecture routes keep the default limit
+
+
+async def test_access_is_checked_before_the_body_is_validated(
+    client: AsyncClient, db: AsyncSession, outbox: InMemoryTransport, world: World
+) -> None:
+    """A stranger or a viewer never gets their document validated: 404 or 403 first, not 422."""
+    await created(client, world)
+    eve = await signed_in(client, outbox, "eve@example.com")
+    viewer = await member(client, db, outbox, world, "viewer")
+    invalid_ir = {"schema_version": 1, "name": "", "nodes": [{"id": "x", "kind": "teleporter", "name": "X"}]}
+    invalid_edit = {
+        "baseVersion": 1,
+        "commands": [{"type": "add_node", "node": {"id": "x", "kind": "teleporter"}}],
+    }
+    other = f"/api/v1/projects/{world.other_id}/architecture"
+    for headers, status, code in ((eve, 404, "project_not_found"), (viewer, 403, "permission_denied")):
+        created_response = await client.post(other, json={"ir": invalid_ir}, headers=headers)
+        edited_response = await client.post(url(world, "/commands"), json=invalid_edit, headers=headers)
+        for response in (created_response, edited_response):
+            assert (response.status_code, response.json()["error"]["code"]) == (status, code)

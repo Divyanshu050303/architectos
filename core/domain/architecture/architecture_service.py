@@ -83,6 +83,14 @@ class ArchitectureService:
         self._uow = uow
         self._clock = clock
 
+    async def authorize(self, *, project_id: uuid.UUID, user_id: uuid.UUID, permission: Permission) -> None:
+        """Refuses a caller without ``permission`` on the project (404 outside its organization,
+        403 without the permission), so the API checks access *before* doing any work on a
+        request body (parsing and validating a whole architecture). The write itself checks again
+        in its own transaction."""
+        async with self._uow as uow:
+            await project_access(uow, project_id, user_id, permission)
+
     # --- reading ---------------------------------------------------------------------------------
 
     async def current(

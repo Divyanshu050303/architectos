@@ -20,6 +20,7 @@ from apps.api.schemas.common import ErrorResponse
 from core.architecture_ir.serialization import from_dict
 from core.domain.architecture.entities import ArchitectureLayout
 from core.domain.architecture.versions import RevisionSource
+from core.domain.organizations.permissions import Permission
 
 router = APIRouter(prefix="/projects/{project_id}/architecture", tags=["architecture"])
 
@@ -64,6 +65,10 @@ async def create_architecture(
     limits: RateLimitsDep,
 ) -> ArchitectureResponse:
     await limits.enforce("create_architecture", user_id=current.user.id)
+    # Authorize before parsing: a stranger must not make us validate a 2 MiB document.
+    await architectures.authorize(
+        project_id=project_id, user_id=current.user.id, permission=Permission.ARCHITECTURE_CREATE
+    )
     architecture, revision = await architectures.create(
         project_id=project_id,
         user_id=current.user.id,
@@ -161,6 +166,9 @@ async def edit_architecture(
     limits: RateLimitsDep,
 ) -> EditArchitectureResponse:
     await limits.enforce("edit_architecture", user_id=current.user.id)
+    await architectures.authorize(
+        project_id=project_id, user_id=current.user.id, permission=Permission.ARCHITECTURE_UPDATE
+    )
     revised = await architectures.edit(
         project_id=project_id,
         user_id=current.user.id,
