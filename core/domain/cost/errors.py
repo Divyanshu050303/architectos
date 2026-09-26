@@ -57,3 +57,12 @@ class InvalidCostAnalysisTransition(DomainError):
 
     code = "invalid_cost_analysis_transition"
     message = "The cost analysis cannot move to that status from its current status."
+
+
+class IncompatibleCapacityAnalysis(DomainError):
+    """The cited capacity analysis cannot supply this cost analysis's usage: another architecture,
+    another revision (number or content), or no result (failed or unfinished).
+    ``details`` = {"reason": ...}."""
+
+    code = "incompatible_capacity_analysis"
+    message = "The capacity analysis does not describe the architecture revision being costed."

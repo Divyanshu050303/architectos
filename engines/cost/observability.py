@@ -9,6 +9,7 @@ from core.domain.cost.results import CostCategory
 from .calculator import Charge, CostModelMeta, NotPriced
 from .context import CostContext
 from .mapping import declares_storage, deployment, instance_hours, on_premises, storage, storage_sku, usage
+from .usage import transfer
 
 INGESTED = "capacity.ingested_gb_per_month"
 MANAGED = frozenset({"managed_service", "serverless"})
@@ -32,6 +33,15 @@ class ObservabilityModel:
         if skipped := on_premises(node):
             return (skipped,)
         if deployment(node) in MANAGED:
-            return (usage(node, context, "ingestion", CostCategory.OBSERVABILITY, PricingUnit.GB, INGESTED),)
+            return (
+                usage(
+                    node,
+                    context,
+                    "ingestion",
+                    CostCategory.OBSERVABILITY,
+                    PricingUnit.GB,
+                    transfer(node, context, INGESTED, "ingress"),
+                ),
+            )
         main = instance_hours(node, context, CostCategory.OBSERVABILITY)
         return (main, storage(node, context, storage_sku(node))) if declares_storage(node) else (main,)

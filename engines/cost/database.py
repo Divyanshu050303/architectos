@@ -9,6 +9,7 @@ from core.domain.cost.results import CostCategory
 from .calculator import Charge, CostModelMeta, NotPriced
 from .context import CostContext
 from .mapping import instance_hours, on_premises, serverless, storage, storage_sku, usage
+from .usage import work
 
 REQUESTS = "capacity.requests_per_month"
 
@@ -41,7 +42,14 @@ class DatabaseModel:
         if skipped := on_premises(node):
             return (skipped,)
         if serverless(node):
-            main = usage(node, context, "requests", CostCategory.DATABASE, PricingUnit.REQUEST, REQUESTS)
+            main = usage(
+                node,
+                context,
+                "requests",
+                CostCategory.DATABASE,
+                PricingUnit.REQUEST,
+                work(node, context, REQUESTS),
+            )
         else:
             main = instance_hours(node, context, CostCategory.DATABASE)
         if node.kind is NodeKind.CACHE:  # a cache's memory is its instance

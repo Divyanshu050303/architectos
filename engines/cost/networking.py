@@ -9,6 +9,7 @@ from core.domain.cost.results import CostCategory
 from .calculator import Charge, CostModelMeta, NotPriced
 from .context import CostContext
 from .mapping import hourly, on_premises, usage
+from .usage import transfer
 
 TRANSFER = "capacity.transfer_gb_per_month"
 
@@ -34,5 +35,14 @@ class NetworkingModel:
         if skipped := on_premises(node):
             return (skipped,)
         if node.kind is NodeKind.CDN:
-            return (usage(node, context, "data_transfer", CostCategory.NETWORK, PricingUnit.GB, TRANSFER),)
+            return (
+                usage(
+                    node,
+                    context,
+                    "data_transfer",
+                    CostCategory.NETWORK,
+                    PricingUnit.GB,
+                    transfer(node, context, TRANSFER, "egress"),
+                ),
+            )
         return (hourly(node, context, CostCategory.NETWORK),)

@@ -9,6 +9,7 @@ from core.domain.cost.results import CostCategory
 from .calculator import Charge, CostModelMeta, NotPriced
 from .context import CostContext
 from .mapping import instance_hours, on_premises, serverless, usage
+from .usage import work
 
 REQUESTS = "capacity.requests_per_month"
 
@@ -35,5 +36,14 @@ class ComputeModel:
         if skipped := on_premises(node):
             return (skipped,)
         if serverless(node):
-            return (usage(node, context, "requests", CostCategory.COMPUTE, PricingUnit.REQUEST, REQUESTS),)
+            return (
+                usage(
+                    node,
+                    context,
+                    "requests",
+                    CostCategory.COMPUTE,
+                    PricingUnit.REQUEST,
+                    work(node, context, REQUESTS),
+                ),
+            )
         return (instance_hours(node, context, CostCategory.COMPUTE),)

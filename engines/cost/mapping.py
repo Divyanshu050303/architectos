@@ -8,7 +8,11 @@
 - **Region**: the component's ``region``, else that of the innermost boundary around it that
   declares one (the architecture's own placement), else unknown.
 - **Conditions**: ``pricing_conditions`` (e.g. ``on_demand``), required on the price.
-- **Instances**: ``replicas``. Autoscaling bounds are not averaged and nothing is defaulted.
+- **Instances**: ``replicas``. Autoscaling bounds are not averaged and nothing is defaulted. When
+  the request asks for it (``replicas_from_capacity``), the replicas the cited capacity analysis
+  requires, where a capacity model defines horizontal scaling (else the declared ones, said so).
+- **Usage** (requests, transfer, ingestion, stored volume): from the cited capacity analysis
+  (``usage.py``); unknown without one.
 
 Every charge carries its mapping as evidence (``mapping``, ``instances``, ``operating_hours``), and
 the framework adds where the SKU and region were read, so each line can be traced to the
@@ -26,6 +30,7 @@ from core.domain.requirements.value_objects import decimal_to_str
 
 from .calculator import Charge, NotPriced
 from .context import CostContext
+from .usage import Usage
 
 SERVICE = "pricing_service"
 MAIN_SKU = "pricing_sku"
@@ -125,20 +130,41 @@ def _hours(context: CostContext) -> Evidence:
     return Evidence("operating_hours", decimal_to_str(context.request.operating_hours_per_month))
 
 
+def _replicas(node: Node, context: CostContext) -> tuple[int | None, tuple[Evidence, ...]]:
+    declared = _count(node, "replicas")
+    basis = context.capacity
+    if not context.request.replicas_from_capacity or basis is None:
+        return declared, (
+            Evidence("instances", f"{declared} (configuration.replicas)"),
+        ) if declared is not None else ()
+    option = basis.required_replicas(node.id)
+    if option is None:
+        noted = Evidence("capacity_scaling", "none required or supported: declared replicas billed")
+        return declared, (
+            Evidence("instances", f"{declared} (configuration.replicas)"),
+            noted,
+        ) if declared is not None else (noted,)
+    required = int(option.required.value)
+    return required, (
+        Evidence("instances", f"{required} (capacity analysis {basis.analysis_id})"),
+        Evidence("capacity_model", f"{option.model_id}@{basis.model_version(option.model_id)}"),
+        Evidence("declared_replicas", str(declared) if declared is not None else "not declared"),
+    )
+
+
 def instance_hours(node: Node, context: CostContext, category: CostCategory) -> Charge:
     """Instances x operating hours, at the instance's hourly price."""
-    replicas = _count(node, "replicas")
+    replicas, evidence = _replicas(node, context)
     if replicas is None:
         return charge(
             node, context, "instances", category, CostKind.FIXED, PricingUnit.INSTANCE_HOUR, None,
-            main_sku(node), missing=("configuration.replicas",),
+            main_sku(node), missing=("configuration.replicas",), evidence=evidence,
         )  # fmt: skip
     with arithmetic():
         hours = replicas * context.request.operating_hours_per_month
     return charge(
         node, context, "instances", category, CostKind.FIXED, PricingUnit.INSTANCE_HOUR, hours,
-        main_sku(node),
-        evidence=(Evidence("instances", f"{replicas} (configuration.replicas)"), _hours(context)),
+        main_sku(node), evidence=(*evidence, _hours(context)),
     )  # fmt: skip
 
 
@@ -184,11 +210,17 @@ def declares_storage(node: Node) -> bool:
 
 
 def usage(
-    node: Node, context: CostContext, resource: str, category: CostCategory, unit: PricingUnit, needs: str
+    node: Node,
+    context: CostContext,
+    resource: str,
+    category: CostCategory,
+    unit: PricingUnit,
+    measured: Usage,
+    sku: tuple[str | None, str, Evidence] | None = None,
 ) -> Charge:
-    """A usage-priced resource: its quantity comes from a capacity analysis (``needs``); until one
-    provides it, the line is unknown and says so."""
+    """A usage-priced resource, as much of it as the capacity analysis establishes (``usage.py``):
+    unknown, naming what is missing, when it does not."""
     return charge(
-        node, context, resource, category, CostKind.USAGE, unit, None, main_sku(node, instance_class=False),
-        missing=(needs,),
+        node, context, resource, category, CostKind.USAGE, unit, measured.quantity,
+        sku or main_sku(node, instance_class=False), missing=measured.missing, evidence=measured.evidence,
     )  # fmt: skip

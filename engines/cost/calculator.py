@@ -72,6 +72,15 @@ STALE_PRICING = Limitation(
     "Some prices were retrieved long before the pricing date, or at an unknown time: the lines "
     "that used them say so.",
 )
+CAPACITY_USAGE = Limitation(
+    "capacity_usage",
+    "Usage-priced lines use the cited capacity analysis's demand at the workload's average rate, "
+    "sustained for every operating hour; actual usage varies.",
+)
+NO_CAPACITY = Limitation(
+    "no_capacity_analysis",
+    "No capacity analysis is cited, so usage-priced resources (requests, transfer, ingestion) are unknown.",
+)
 NO_PROVIDER = Limitation(
     "no_provider", "The project has no cloud provider set, so no price could be looked up."
 )
@@ -384,6 +393,10 @@ def analyze(context: CostContext, registry: Registry) -> CostResult:
         limitations.append(STALE_PRICING)
     if context.provider is None:
         limitations.append(NO_PROVIDER)
+    if context.capacity is not None:
+        limitations.append(CAPACITY_USAGE)
+    elif any(m.startswith("capacity.") for line in lines for m in line.missing):
+        limitations.append(NO_CAPACITY)
     return CostResult(
         currency=context.request.currency,
         snapshot_id=context.snapshot.id,

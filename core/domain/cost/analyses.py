@@ -59,6 +59,9 @@ class CostAnalysisRequest:
     pricing_date: date  # prices must be effective on this day
     operating_hours_per_month: Decimal = HOURS_PER_MONTH  # 730: all month
     capacity_analysis_id: uuid.UUID | None = None
+    # Bill the replicas the capacity analysis says are required (where a capacity model defines
+    # scaling) instead of the declared ones; needs a capacity analysis.
+    replicas_from_capacity: bool = False
     assumptions: tuple[CostAssumption, ...] = ()
     label: str | None = None
 
@@ -82,6 +85,10 @@ class CostAnalysisRequest:
         if not 0 < hours <= HOURS_PER_MONTH:
             raise _invalid("operating_hours_per_month", "out_of_range")
         object.__setattr__(self, "operating_hours_per_month", hours)
+        if not isinstance(self.replicas_from_capacity, bool):
+            raise _invalid("replicas_from_capacity", "not_a_boolean")
+        if self.replicas_from_capacity and self.capacity_analysis_id is None:
+            raise _invalid("replicas_from_capacity", "needs_capacity_analysis")
         if not isinstance(self.pricing_date, date) or isinstance(self.pricing_date, datetime):
             raise _invalid("pricing_date", "not_a_date")
         if not isinstance(self.assumptions, tuple) or len(self.assumptions) > MAX_ASSUMPTIONS:
@@ -118,6 +125,7 @@ class CostAnalysisRequest:
             "pricing_date": self.pricing_date.isoformat(),
             "operating_hours_per_month": decimal_to_str(self.operating_hours_per_month),
             "capacity_analysis_id": str(self.capacity_analysis_id) if self.capacity_analysis_id else None,
+            "replicas_from_capacity": self.replicas_from_capacity,
             "assumptions": [a.to_dict() for a in self.assumptions],
         }
 
