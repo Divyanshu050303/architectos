@@ -122,6 +122,9 @@ PLANS: dict[str, Plan] = {
         {"project.updated"}, "project", {"name": "Renamed"}
     ),
     "archive_project_api_v1_projects__project_id__archive_post": Plan({"project.archived"}, "project"),
+    "put_architecture_policy_api_v1_projects__project_id__architecture_policy_put": Plan(
+        {"project.policy_updated"}, "project", {"prohibitedTechnologies": ["mongodb"], "requireTls": True}
+    ),
     "restore_project_api_v1_projects__project_id__restore_post": Plan(
         {"project.restored"}, "project", None, archive
     ),
@@ -186,6 +189,9 @@ PLANS: dict[str, Plan] = {
     ),
     f"restore_architecture{_ARCH}restore_post": Plan(
         {"architecture.restored"}, "architecture", None, with_archived_architecture
+    ),
+    f"run_validation{_ARCH}validations_post": Plan(
+        {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
     f"delete_architecture{_ARCH}delete": Plan(
         {"architecture.deleted"}, "architecture", None, with_archived_architecture
@@ -306,6 +312,12 @@ async def test_read_only_endpoints_write_nothing(
     target = await fresh_target(client, auth, org_id)
     await client.post(f"/api/v1/projects/{target.project_id}/requirement-sets", json={}, headers=auth)
     await with_architecture(client, auth, target)
+    run = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/validations",
+        json={},
+        headers=auth,
+    )
+    assert run.status_code == 201, run.text
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -322,6 +334,7 @@ async def test_read_only_endpoints_write_nothing(
         "set_id": sets["requirementSets"][0]["id"],
         "analysis_id": target.analysis_id,
         "architecture_id": target.architecture_id,
+        "run_id": run.json()["id"],
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

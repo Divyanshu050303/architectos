@@ -30,6 +30,7 @@ from core.domain.projects.project_service import ProjectService
 from core.domain.requirements.analysis_service import RequirementAnalysisService
 from core.domain.requirements.requirement_service import RequirementService
 from core.domain.requirements.requirement_set_service import RequirementSetService
+from core.domain.validation.validation_service import ValidationService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
 from .database import DbSession
@@ -254,6 +255,18 @@ def get_architecture_service(
 
 
 ArchitectureServiceDep = Annotated[ArchitectureService, Depends(get_architecture_service)]
+
+
+def get_validation_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> ValidationService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return ValidationService(
+        SqlAlchemyUnitOfWork(db, client), request.app.state.validation_engine, clock=clock
+    )
+
+
+ValidationServiceDep = Annotated[ValidationService, Depends(get_validation_service)]
 
 
 def get_requirement_analysis_service(

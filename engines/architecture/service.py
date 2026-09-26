@@ -81,7 +81,9 @@ def check_proposal(proposal: ArchitectureProposal, planning_input: PlanningInput
             )
         if provenance.verified:
             problems.append(
-                Violation("claims_verified", "An engine's output is never verified.", field, element, element_id)
+                Violation(
+                    "claims_verified", "An engine's output is never verified.", field, element, element_id
+                )
             )
     given = {uuid.UUID(r["id"]) for r in planning_input["requirements"]}
     cited = [

@@ -14,6 +14,7 @@ from .requirement_analysis import RequirementAnalysisRecord
 from .requirement_set import RequirementSetItemRecord, RequirementSetRecord
 from .session import SessionRecord
 from .user import UserRecord
+from .validation import ValidationFindingRecord, ValidationRunRecord
 
 __all__ = [
     "ArchitectureLayoutRecord",
@@ -34,4 +35,6 @@ __all__ = [
     "RequirementVersionRecord",
     "SessionRecord",
     "UserRecord",
+    "ValidationFindingRecord",
+    "ValidationRunRecord",
 ]

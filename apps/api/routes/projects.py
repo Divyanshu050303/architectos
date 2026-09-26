@@ -11,6 +11,8 @@ from apps.api.dependencies.permissions import (
 from apps.api.dependencies.services import ProjectServiceDep, RateLimitsDep
 from apps.api.schemas.common import ErrorResponse
 from apps.api.schemas.project import (
+    ArchitecturePolicyRequest,
+    ArchitecturePolicyResponse,
     CreateProjectRequest,
     ProjectPage,
     ProjectResponse,
@@ -129,6 +131,45 @@ async def update_project(
         settings=settings_or_none(body.settings),
     )
     return ProjectResponse.from_access(access)
+
+
+# --- architecture policy ------------------------------------------------------------------------
+
+
+@router.get(
+    "/projects/{project_id}/architecture-policy",
+    response_model=ArchitecturePolicyResponse,
+    responses=PROJECT_ERRORS,
+    dependencies=[require_project_permission(Permission.PROJECT_READ)],
+    summary="The project's architecture policy",
+    description="What validation enforces for every architecture of the project.",
+)
+async def get_architecture_policy(scoped: CurrentProject) -> ArchitecturePolicyResponse:
+    return ArchitecturePolicyResponse.from_access(scoped)
+
+
+@router.put(
+    "/projects/{project_id}/architecture-policy",
+    response_model=ArchitecturePolicyResponse,
+    responses=PROJECT_ERRORS
+    | {
+        409: {"model": ErrorResponse, "description": "project_archived"},
+        422: {"model": ErrorResponse, "description": "invalid_architecture_policy, validation_error"},
+    },
+    dependencies=[require_project_permission(Permission.PROJECT_POLICY_UPDATE)],
+    summary="Replace the project's architecture policy",
+    description=(
+        "Owners and admins. The whole policy is replaced; fields left out constrain nothing. "
+        "Existing validation runs keep the policy they were run with."
+    ),
+)
+async def put_architecture_policy(
+    body: ArchitecturePolicyRequest, scoped: CurrentProject, projects: ProjectServiceDep
+) -> ArchitecturePolicyResponse:
+    access = await projects.update_policy(
+        project_id=scoped.project.id, user_id=scoped.membership.user_id, policy=body.to_domain()
+    )
+    return ArchitecturePolicyResponse.from_access(access)
 
 
 # --- lifecycle ----------------------------------------------------------------------------------

@@ -22,6 +22,7 @@ from core.domain.requirements.repository import (
     RequirementRepository,
     RequirementSetRepository,
 )
+from core.domain.validation.repository import ValidationRunRepository
 
 
 class UnitOfWork(Protocol):
@@ -63,6 +64,9 @@ class UnitOfWork(Protocol):
 
     @property
     def architectures(self) -> ArchitectureRepository: ...
+
+    @property
+    def validations(self) -> ValidationRunRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

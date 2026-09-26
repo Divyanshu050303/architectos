@@ -44,3 +44,10 @@ class InvalidProjectSettings(DomainError):
 
     code = "invalid_project_settings"
     message = "The project settings are invalid."
+
+
+class InvalidArchitecturePolicy(DomainError):
+    """``details`` = {"field": ..., "reason": ...}."""
+
+    code = "invalid_architecture_policy"
+    message = "The architecture policy is invalid."

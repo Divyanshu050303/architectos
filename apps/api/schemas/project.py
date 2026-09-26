@@ -7,6 +7,7 @@ from pydantic import Field
 from core.domain.organizations.enums import Role
 from core.domain.projects.entities import Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
+from core.domain.projects.policies import MAX_POLICY_ENTRIES, ArchitecturePolicy
 from core.domain.projects.value_objects import CloudProvider, ProjectSettings
 
 from .common import ApiModel, RequestModel
@@ -86,3 +87,48 @@ class UpdateProjectRequest(RequestModel):
 
 def settings_or_none(model: ProjectSettingsInput | None) -> ProjectSettings | None:
     return model.to_domain() if model is not None else None
+
+
+# --- architecture policy ------------------------------------------------------------------------
+
+type PolicyNames = Annotated[list[Annotated[str, Field(max_length=64)]], Field(max_length=MAX_POLICY_ENTRIES)]
+
+
+class ArchitecturePolicyModel(ApiModel):
+    """What validation enforces for this project. Empty lists and null constrain nothing."""
+
+    allowed_technologies: PolicyNames = Field(
+        default_factory=list, description="When not empty, every stated technology must be one of these."
+    )
+    prohibited_technologies: PolicyNames = Field(default_factory=list, examples=[["mongodb"]])
+    allowed_regions: PolicyNames = Field(
+        default_factory=list, description="When not empty, every stated region must be one of these."
+    )
+    require_tls: bool = Field(default=False, description="Every communicating connection is encrypted.")
+    max_components: Annotated[int | None, Field(ge=1, le=1000)] = None
+
+    def to_domain(self) -> ArchitecturePolicy:
+        return ArchitecturePolicy.from_dict(self.model_dump(by_alias=False))
+
+    @classmethod
+    def from_domain(cls, policy: ArchitecturePolicy) -> ArchitecturePolicyModel:
+        return cls(**policy.to_dict())
+
+
+class ArchitecturePolicyRequest(ArchitecturePolicyModel, RequestModel):
+    """The whole policy: fields left out are reset to their default (no constraint)."""
+
+
+class ArchitecturePolicyResponse(ApiModel):
+    project_id: uuid.UUID
+    policy: ArchitecturePolicyModel
+    updated_at: datetime
+
+    @classmethod
+    def from_access(cls, access: ProjectAccess) -> ArchitecturePolicyResponse:
+        project = access.project
+        return cls(
+            project_id=project.id,
+            policy=ArchitecturePolicyModel.from_domain(project.policy),
+            updated_at=project.updated_at,
+        )

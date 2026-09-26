@@ -30,6 +30,7 @@ class AuditAction(StrEnum):
     PROJECT_ARCHIVED = "project.archived"
     PROJECT_RESTORED = "project.restored"
     PROJECT_DELETED = "project.deleted"
+    PROJECT_POLICY_UPDATED = "project.policy_updated"
     REQUIREMENT_CREATED = "requirement.created"
     REQUIREMENT_UPDATED = "requirement.updated"  # content (anything but status) changed
     REQUIREMENT_STATUS_CHANGED = "requirement.status_changed"
@@ -45,6 +46,7 @@ class AuditAction(StrEnum):
     ARCHITECTURE_ARCHIVED = "architecture.archived"
     ARCHITECTURE_RESTORED = "architecture.restored"  # back from the archive
     ARCHITECTURE_DELETED = "architecture.deleted"
+    ARCHITECTURE_VALIDATED = "architecture.validated"  # a validation run was stored
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

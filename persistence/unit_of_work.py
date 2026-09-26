@@ -19,6 +19,7 @@ from persistence.repositories.requirements import SqlAlchemyRequirementRepositor
 from persistence.repositories.sessions import SqlAlchemySessionRepository
 from persistence.repositories.single_use_tokens import SqlAlchemySingleUseTokenRepository
 from persistence.repositories.users import SqlAlchemyUserRepository
+from persistence.repositories.validations import SqlAlchemyValidationRunRepository
 
 
 class SqlAlchemyUnitOfWork:
@@ -45,6 +46,7 @@ class SqlAlchemyUnitOfWork:
         self.requirement_sets = SqlAlchemyRequirementSetRepository(session)
         self.requirement_analyses = SqlAlchemyRequirementAnalysisRepository(session)
         self.architectures = SqlAlchemyArchitectureRepository(session)
+        self.validations = SqlAlchemyValidationRunRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

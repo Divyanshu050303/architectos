@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.domain.projects.entities import NewProject, Project, ProjectAccess
 from core.domain.projects.enums import ProjectStatus
 from core.domain.projects.errors import ProjectSlugTaken
+from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.projects.queries import ProjectQuery, ProjectSort
 from core.domain.projects.repository import ProjectLock
 from core.domain.projects.value_objects import ProjectSettings
@@ -34,6 +35,7 @@ def to_project(record: ProjectRecord) -> Project:
         deleted_at=record.deleted_at,
         created_at=record.created_at,
         updated_at=record.updated_at,
+        policy=ArchitecturePolicy.from_dict(record.architecture_policy),
     )
 
 
@@ -86,6 +88,7 @@ class SqlAlchemyProjectRepository:
                 name=project.name,
                 description=project.description,
                 settings=project.settings.to_dict(),
+                architecture_policy=project.policy.to_dict(),
                 status=project.status.value,
                 archived_at=project.archived_at,
                 deleted_at=project.deleted_at,

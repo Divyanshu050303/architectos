@@ -37,6 +37,10 @@ class ProjectRecord(UuidPrimaryKey, Timestamps, Base):
     settings: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    # Typed and validated by the domain (ArchitecturePolicy); '{}' is the empty policy.
+    architecture_policy: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, server_default=text("'{}'::jsonb")
+    )
     # SET NULL: a project outlives the account of whoever created it.
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id", ondelete="SET NULL")
@@ -68,6 +72,7 @@ class ProjectRecord(UuidPrimaryKey, Timestamps, Base):
         CheckConstraint("char_length(description) <= 2000", name="description_length"),
         CheckConstraint(in_values("status", ProjectStatus), name="status"),
         CheckConstraint("jsonb_typeof(settings) = 'object'", name="settings_object"),
+        CheckConstraint("jsonb_typeof(architecture_policy) = 'object'", name="architecture_policy_object"),
         CheckConstraint("(status = 'archived') = (archived_at IS NOT NULL)", name="archived_state"),
         # Deletion is only possible from the archived state (archive first, then delete).
         CheckConstraint("deleted_at IS NULL OR status = 'archived'", name="deleted_requires_archived"),
