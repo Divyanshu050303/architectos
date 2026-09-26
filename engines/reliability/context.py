@@ -8,6 +8,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cached_property
+from typing import Any
 
 from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.topology import Topology
@@ -29,6 +30,13 @@ class ReliabilityContext:
     @cached_property
     def topology(self) -> Topology:
         return Topology(self.ir)
+
+    @cached_property
+    def memo(self) -> dict[Any, Any]:
+        """Work shared by the steps of this one analysis (closures, group compositions): every input
+        is immutable, so a result computed once holds for the whole analysis. Never shared between
+        analyses."""
+        return {}
 
     @cached_property
     def facts(self) -> Mapping[str, ComponentReliability]:

@@ -19,12 +19,12 @@ from collections import deque
 from core.architecture_ir.topology import Topology
 from core.domain.capacity.results import Certainty
 from core.domain.engine_results import Evidence
-from core.domain.reliability.results import FindingType, ReliabilityFinding
+from core.domain.reliability.results import FindingType, PathResult, ReliabilityFinding
 from core.domain.validation.results import Severity
 
 from .context import ReliabilityContext
 from .dependency import Role, role
-from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput
+from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput, names
 
 
 def affected(topology: Topology, node_id: str) -> tuple[str, ...]:
@@ -43,13 +43,25 @@ def affected(topology: Topology, node_id: str) -> tuple[str, ...]:
 def _elements(missing: tuple[str, ...], topology: Topology) -> tuple[str, ...]:
     """The nodes a missing input belongs to (``db.availability`` -> ``db``)."""
     return tuple(
-        sorted({m.split(".", 1)[0] for m in missing if topology.node(m.split(".", 1)[0]) is not None})
+        sorted({m.rsplit(".", 1)[0] for m in missing if topology.node(m.rsplit(".", 1)[0]) is not None})
     )
 
 
 def _in_scope(topology: Topology, node_id: str) -> bool:
     node = topology.node(node_id)
     return node is not None and node.kind not in OUT_OF_SCOPE
+
+
+def _missing(path: PathResult, progress: Progress, topology: Topology) -> tuple[str, ...]:
+    """Everything the path's availability lacks, in full (its estimate may shorten a long list)."""
+    lacking = {
+        f"{n}.availability"
+        for n in path.node_ids
+        if _in_scope(topology, n)
+        and ((c := progress.component(n)) is None or (e := c.estimate("availability")) is None or not e.known)
+    }
+    kept = {m for m in path.availability.missing if not m.startswith("more.")}
+    return tuple(sorted(lacking | kept))
 
 
 class PathFindings:
@@ -73,7 +85,8 @@ class PathFindings:
             estimate = path.availability
             if estimate.known:
                 continue
-            nodes = _elements(estimate.missing, topology) or (path.entry_id,)
+            missing = _missing(path, progress, topology)
+            nodes = _elements(missing, topology) or (path.entry_id,)
             findings.append(
                 ReliabilityFinding(
                     FindingType.AVAILABILITY_NOT_EVALUABLE,
@@ -81,13 +94,13 @@ class PathFindings:
                     Certainty.MODELED,
                     f"The availability of requests from {path.entry_id} cannot be estimated",
                     f"The path from {path.entry_id} requires {len(path.node_ids) - 1} components; its "
-                    f"availability needs inputs that are not declared: {', '.join(estimate.missing)}.",
+                    f"availability needs inputs that are not declared: {names(missing)}.",
                     "Declare the missing inputs (availability, or MTBF and MTTR with replicas; for "
                     "alternatives, independence, failover and the group minimum), or review whether each "
                     "dependency is required.",
                     node_ids=nodes,
                     evidence=(Evidence("entry", path.entry_id),),
-                    missing=estimate.missing,
+                    missing=missing,
                     model_id=self.meta.id,
                     model_version=self.meta.version,
                 )
@@ -103,7 +116,7 @@ class PathFindings:
                         Severity.LOW,
                         Certainty.CANDIDATE,
                         f"{node_id}'s reliability data is not confirmed",
-                        f"{', '.join(sorted(f.path for f in proposed))} on {node_id} are inferred or "
+                        f"{names(sorted(f.path for f in proposed))} on {node_id} are inferred or "
                         "proposed by a language model, not declared by a person or read from a system; the "
                         "estimates use them.",
                         "Confirm the values from a system or its owner, and record their provenance.",

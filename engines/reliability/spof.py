@@ -40,10 +40,11 @@ from core.domain.validation.results import Severity
 
 from .cascading_failure import affected
 from .context import ReliabilityContext
-from .dependency import Role, closure, entries, role, unstated
-from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput
+from .dependency import Role, closure_of, entries, role, unstated
+from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput, names
 
 T = FindingType
+SHOWN = 100  # element ids an evidence line lists before "and N more"
 PLACEMENT = ("region", "availability_zones", "multi_az")
 
 
@@ -167,7 +168,7 @@ class TopologyFindings:
 
     def run(self, context: ReliabilityContext, progress: Progress) -> StepOutput:
         topology = context.topology
-        closures = [closure(topology, entry) for entry in entries(context)]
+        closures = [closure_of(context, entry) for entry in entries(context)]
         needed: dict[str, list[str]] = defaultdict(list)  # component -> entries whose paths need it
         for found in closures:
             for node_id in found.components(topology):
@@ -224,7 +225,7 @@ class TopologyFindings:
         for members in cycles(topology, [n.id for n in in_scope]):
             findings.append(self._finding(
                 T.CIRCULAR_DEPENDENCY, Severity.MEDIUM, Certainty.MODELED, members,
-                f"{', '.join(members)} require each other",
+                f"{names(members)} require each other",
                 "These components depend on each other through required connections: a failure of any can "
                 "keep the others from recovering, and none can start first.",
                 "Review whether every dependency in the cycle is required, and how they start and recover.",
@@ -284,9 +285,7 @@ class TopologyFindings:
         weak[node_id] = certainty
         everywhere = len(needed_by) == paths
         severity = Severity.HIGH if everywhere else Severity.MEDIUM
-        scope = (
-            "every request path" if everywhere else f"the request paths from {', '.join(sorted(needed_by))}"
-        )
+        scope = "every request path" if everywhere else f"the request paths from {names(sorted(needed_by))}"
         return [self._finding(
             T.SINGLE_POINT_OF_FAILURE, severity, certainty, (node_id,),
             f"{name} is a single point of failure",
@@ -295,7 +294,7 @@ class TopologyFindings:
             "with a declared failover; then review how requests move to them.",
             evidence=(
                 *evidence,
-                *(Evidence("needed_by", e) for e in sorted(needed_by)),
+                Evidence("needed_by", names(sorted(needed_by), SHOWN)),
                 *self._reach(topology, node_id),
             ),
             missing=missing,
@@ -304,7 +303,7 @@ class TopologyFindings:
     @staticmethod
     def _reach(topology: Topology, node_id: str) -> tuple[Evidence, ...]:
         found = affected(topology, node_id)
-        return (Evidence("affects", ", ".join(found)),) if found else ()
+        return (Evidence("affects", names(found, SHOWN)),) if found else ()
 
     def _redundant(
         self,
@@ -401,7 +400,7 @@ class TopologyFindings:
                 found.append(self._finding(
                     T.INCONSISTENT_REDUNDANCY, Severity.MEDIUM, Certainty.MODELED, tuple(unrouted),
                     f"Part of the {label} is not on any request path",
-                    f"{', '.join(unrouted)} {verb} declared as alternatives to {', '.join(routed)}, but no "
+                    f"{names(unrouted)} {verb} declared as alternatives to {names(routed)}, but no "
                     f"request path reaches {pronoun}: the redundancy is declared, not routed.",
                     "Connect the alternatives the way requests would reach them (e.g. behind the same load "
                     "balancer), or review the group.",

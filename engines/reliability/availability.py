@@ -168,7 +168,10 @@ def k_of_n(a: Decimal, n: int, k: int) -> Decimal:
     total = Decimal(0)
     with arithmetic():
         for i in range(k, n + 1):
-            total += math.comb(n, i) * a**i * (1 - a) ** (n - i)
+            # x ** 0 is 1, stated: Decimal refuses 0 ** 0 (a = 1 with every replica up; a = 0 never here)
+            up = a**i if i else Decimal(1)
+            down = (1 - a) ** (n - i) if n - i else Decimal(1)
+            total += math.comb(n, i) * up * down
     return total
 
 

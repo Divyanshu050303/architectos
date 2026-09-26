@@ -34,7 +34,7 @@ from engines.validation.rules.requirements import SEVERITY_BY_PRIORITY
 
 from .availability import RUNNING
 from .context import ReliabilityContext
-from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput
+from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput, names
 from .sla import translate
 
 STORES = frozenset({NodeKind.DATABASE, NodeKind.STORAGE, NodeKind.QUEUE})
@@ -140,14 +140,10 @@ class Objectives:
             return result, ()
         if failing:
             verdict = Verdict.VIOLATED
-            explanation = (
-                f"{', '.join(failing)} {'misses' if len(failing) == 1 else 'miss'} {target} (modeled)."
-            )
+            explanation = f"{names(failing)} {'misses' if len(failing) == 1 else 'miss'} {target} (modeled)."
         elif unknown:
             verdict = Verdict.NOT_VERIFIABLE
-            explanation = (
-                f"Not established for {', '.join(s for s, _ in unknown)}: their values are not modeled."
-            )
+            explanation = f"Not established for {names(s for s, _ in unknown)}: their values are not modeled."
         else:
             verdict = Verdict.SATISFIED
             explanation = f"Every modeled value meets {target}."

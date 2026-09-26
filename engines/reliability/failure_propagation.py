@@ -25,7 +25,7 @@ share of requests per entry) the architecture does not declare.
 from collections import defaultdict
 from decimal import Decimal
 
-from core.domain.capacity.results import Estimate, Source
+from core.domain.capacity.results import MAX_ITEMS, Estimate, Source
 from core.domain.capacity.units import rounded_text
 from core.domain.engine_results import Evidence, Unsupported
 from core.domain.numbers import arithmetic
@@ -33,9 +33,11 @@ from core.domain.reliability.results import PathResult
 from core.domain.reliability.values import availability
 
 from .context import ReliabilityContext
-from .dependency import Closure, closure, entries
-from .engine import ARCHITECTURE, Progress, StepMeta, StepOutput
+from .dependency import Closure, closure_of, entries
+from .engine import ARCHITECTURE, Progress, StepMeta, StepOutput, names
 
+LISTED = 150
+SHOWN = 100  # values an evidence line lists before "and N more" (the components hold them all)
 BASIS = (
     "series: product of every required component's availability; declared alternatives (redundancy groups): "
     "P(at least k of n branches)"
@@ -74,14 +76,18 @@ class Composition:
         self.missing: set[str] = set()
         self.evidence: list[Evidence] = [Evidence("assumption", INDEPENDENCE)]
 
-    def value(self, node_id: str) -> Decimal | None:
+    def _lookup(self, node_id: str) -> Decimal | None:
         component = self.progress.component(node_id)
         estimate = component.estimate("availability") if component else None
-        if estimate is None or estimate.quantity is None:
+        return estimate.quantity.value if estimate is not None and estimate.quantity is not None else None
+
+    def value(self, node_id: str) -> Decimal | None:
+        value = self._lookup(node_id)
+        if value is None:
             self.missing.add(f"{node_id}.availability")
-            return None
-        self.evidence.append(Evidence(f"{node_id}.availability", rounded_text(estimate.quantity.value)))
-        return estimate.quantity.value
+        else:
+            self.evidence.append(Evidence(f"{node_id}.availability", rounded_text(value)))
+        return value
 
     def groups(self) -> dict[str, list[str]]:
         found: dict[str, list[str]] = defaultdict(list)
@@ -113,9 +119,9 @@ class Composition:
 
     def _branches(self, group: str, members: list[str], members_of: set[str]) -> dict[str, set[str]] | None:
         """Each member's exclusive branch, or None (and what is missing) when they cannot be told apart."""
-        topology, required = self.context.topology, set(self.required)
-        without = set(closure(topology, self.found.entry, avoid=frozenset(members)).node_ids)
-        reach = {m: set(closure(topology, m).node_ids) & required for m in members}
+        required = set(self.required)
+        without = set(closure_of(self.context, self.found.entry, avoid=frozenset(members)).node_ids)
+        reach = {m: set(closure_of(self.context, m).node_ids) & required for m in members}
         common = set.intersection(*reach.values())
         exclusive = {m: reach[m] - without - common | {m} for m in members}
         if sum(len(b) for b in exclusive.values()) != len(set().union(*exclusive.values())):
@@ -128,6 +134,21 @@ class Composition:
         return exclusive
 
     def _group(self, group: str, members: list[str], branches: dict[str, set[str]]) -> Decimal | None:
+        """The group's availability; computed once per analysis for the same members and branches
+        (many entries often reach the same group)."""
+        key = ("group", group, tuple(members), tuple(frozenset(branches[m]) for m in members))
+        memo = self.context.memo
+        if key not in memo:
+            memo[key] = self._compose_group(group, members, branches)
+        composed: tuple[Decimal | None, tuple[str, ...], tuple[Evidence, ...]] = memo[key]
+        value, missing, evidence = composed
+        self.missing.update(missing)
+        self.evidence.extend(evidence)
+        return value
+
+    def _compose_group(
+        self, group: str, members: list[str], branches: dict[str, set[str]]
+    ) -> tuple[Decimal | None, tuple[str, ...], tuple[Evidence, ...]]:
         facts = [self.context.facts[m] for m in members]
         problems: list[str] = []
         for member, fact in zip(members, facts, strict=True):
@@ -140,29 +161,59 @@ class Composition:
         if not isinstance(k, int) or k > len(members):
             problems.append(f"consistent.redundancy_group.{group}.min_healthy")
         if problems or not isinstance(k, int):
-            self.missing.update(problems)
-            return None
+            return None, tuple(problems), ()
         order = {n: i for i, n in enumerate(self.required)}
+        missing: list[str] = []
+        evidence: list[Evidence] = []
         values: list[Decimal] = []
         for member in members:
-            parts = [self.value(n) for n in sorted(branches[member], key=order.__getitem__)]
-            if all(p is not None for p in parts):
-                values.append(_product([p for p in parts if p is not None]))
+            parts: list[Decimal] = []
+            for node_id in sorted(branches[member], key=order.__getitem__):
+                part = self._lookup(node_id)
+                if part is None:
+                    missing.append(f"{node_id}.availability")
+                else:
+                    parts.append(part)
+                    evidence.append(Evidence(f"{node_id}.availability", rounded_text(part)))
+            if len(parts) == len(branches[member]):
+                values.append(_product(parts))
         if len(values) != len(members):
-            return None
+            return None, tuple(missing), tuple(evidence)
         value = at_least(k, values)
-        shown = ", ".join(f"{m} ({rounded_text(v)})" for m, v in zip(members, values, strict=True))
-        self.evidence.append(Evidence(f"redundancy_group.{group}", f"{k} of {len(members)}: {shown}"))
-        self.evidence.append(Evidence("assumption", FAILOVER))
-        return value
+        shown = [f"{m} ({rounded_text(v)})" for m, v in zip(members, values, strict=True)]
+        evidence.append(
+            Evidence(f"redundancy_group.{group}", f"{k} of {len(members)}: {names(shown, SHOWN)}")
+        )
+        evidence.append(Evidence("assumption", FAILOVER))
+        return value, tuple(missing), tuple(evidence)
+
+
+def _compact(evidence: tuple[Evidence, ...]) -> tuple[Evidence, ...]:
+    """At most ``LISTED`` component values one by one; beyond, they are folded into one ``series``
+    line (every value still shown), so a path through hundreds of components stays within an
+    estimate's bounds."""
+    values = [e for e in evidence if e.label.endswith(".availability")]
+    if len(values) <= LISTED:
+        return evidence
+    others = tuple(e for e in evidence if not e.label.endswith(".availability"))
+    folded = names((f"{e.label.removesuffix('.availability')} {e.value}" for e in values), SHOWN)
+    return (*others, Evidence("series", folded))
+
+
+def _bounded(missing: tuple[str, ...]) -> tuple[str, ...]:
+    """An estimate names at most ``MAX_ITEMS`` missing inputs: beyond, the count of the rest (the
+    path's ``availability_not_evaluable`` finding lists them all)."""
+    if len(missing) <= MAX_ITEMS:
+        return missing
+    return (*missing[: MAX_ITEMS - 1], f"more.{len(missing) - MAX_ITEMS + 1}_inputs")
 
 
 def compose(context: ReliabilityContext, progress: Progress, found: Closure, meta: StepMeta) -> Estimate:
     composition = Composition(context, progress, found)
     value = composition.compose()
-    evidence = tuple(dict.fromkeys(composition.evidence))  # once each, in order
+    evidence = _compact(tuple(dict.fromkeys(composition.evidence)))  # once each, in order
     if value is None:
-        missing = tuple(sorted(composition.missing)) or ("components",)
+        missing = _bounded(tuple(sorted(composition.missing)) or ("components",))
         return Estimate(
             found.entry, "availability", None, Source.UNKNOWN, BASIS, inputs=evidence, missing=missing
         )
@@ -204,7 +255,7 @@ class RequestPaths:
             return StepOutput(unsupported=(Unsupported(ARCHITECTURE, "no_entry", message),))
         paths = []
         for entry in starts:
-            found = closure(context.topology, entry)
+            found = closure_of(context, entry)
             estimate = compose(context, progress, found, self.meta)
             paths.append(PathResult(entry, found.node_ids, found.required, estimate, found.optional))
         return StepOutput(paths=tuple(paths))

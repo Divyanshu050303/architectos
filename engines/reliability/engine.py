@@ -28,6 +28,7 @@ calculated is explicit:
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Protocol
 
 from core.architecture_ir.component import NodeKind
@@ -144,7 +145,7 @@ class StepMeta:
         }
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class Progress:
     """What the analysis has established so far, as the steps see it."""
 
@@ -152,8 +153,12 @@ class Progress:
     paths: tuple[PathResult, ...] = ()
     findings: tuple[ReliabilityFinding, ...] = ()
 
+    @cached_property
+    def _by_id(self) -> dict[str, ComponentResult]:
+        return {c.node_id: c for c in self.components}
+
     def component(self, node_id: str) -> ComponentResult | None:
-        return next((c for c in self.components if c.node_id == node_id), None)
+        return self._by_id.get(node_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,6 +174,14 @@ class ArchitectureStep(Protocol):
     def meta(self) -> StepMeta: ...
 
     def run(self, context: ReliabilityContext, progress: Progress) -> StepOutput: ...
+
+
+def names(ids: Iterable[str], shown: int = 20) -> str:
+    """Element ids for a sentence: the first ``shown``, then how many more (the element lists of a
+    finding or verdict carry them all)."""
+    listed = list(ids)
+    head = ", ".join(listed[:shown])
+    return head if len(listed) <= shown else f"{head} and {len(listed) - shown} more"
 
 
 class DuplicateModel(ValueError):

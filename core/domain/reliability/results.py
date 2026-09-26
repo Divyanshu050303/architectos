@@ -28,6 +28,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, Self
 
+from core.architecture_ir.model import MAX_CONNECTIONS, MAX_NODES
 from core.domain.capacity.results import Certainty, ComponentStatus, Estimate
 from core.domain.engine_results import (
     MAX_ID,
@@ -35,8 +36,6 @@ from core.domain.engine_results import (
     Limitation,
     ModelSet,
     Unsupported,
-    evidence_problem,
-    ids_problem,
     read_evidence,
     text_problem,
 )
@@ -45,13 +44,31 @@ from core.domain.validation.results import Severity, Verdict
 from .errors import InvalidReliabilityResult
 
 FINDING_ID = re.compile(r"^rel_[0-9a-f]{16}$")
-MAX_PATH = 1000
+# Lists about elements are bounded by the largest architecture (1,000 nodes, 5,000 connections),
+# not by a smaller fixed count: a path, a cycle or a finding can name every one of them.
+MAX_PATH = MAX_NODES + MAX_CONNECTIONS
+MAX_ELEMENTS = MAX_NODES + MAX_CONNECTIONS
 
 
 def _check(problems: list[str | None]) -> None:
     found = [p for p in problems if p]
     if found:
         raise InvalidReliabilityResult(details={"fields": found})
+
+
+def _ids(values: object, name: str) -> str | None:
+    if not isinstance(values, tuple) or len(values) > MAX_ELEMENTS:
+        return name
+    return None if all(isinstance(v, str) and 0 < len(v) <= MAX_ID for v in values) else name
+
+
+def _evidence(values: object) -> str | None:
+    if not isinstance(values, tuple) or len(values) > MAX_ELEMENTS:
+        return "evidence"
+    ok = all(
+        isinstance(e, Evidence) and isinstance(e.label, str) and isinstance(e.value, str) for e in values
+    )
+    return None if ok else "evidence"
 
 
 def _path_ids(values: object, name: str, *, empty: bool = True) -> str | None:
@@ -118,12 +135,12 @@ class ReliabilityFinding:
                 text_problem(self.title, "title"),
                 text_problem(self.explanation, "explanation"),
                 text_problem(self.recommendation, "recommendation"),
-                ids_problem(self.node_ids, "node_ids"),
-                ids_problem(self.connection_ids, "connection_ids"),
+                _ids(self.node_ids, "node_ids"),
+                _ids(self.connection_ids, "connection_ids"),
                 None if self.node_ids or self.connection_ids else "node_ids",
-                evidence_problem(self.evidence),
-                ids_problem(self.assumptions, "assumptions"),
-                ids_problem(self.missing, "missing"),
+                _evidence(self.evidence),
+                _ids(self.assumptions, "assumptions"),
+                _ids(self.missing, "missing"),
                 None if (self.model_id is None) == (self.model_version is None) else "model_version",
                 text_problem(self.objective, "objective", required=False),
             ]
@@ -216,9 +233,9 @@ class ObjectiveResult:
                 text_problem(self.target, "target"),
                 None if isinstance(self.verdict, Verdict) else "verdict",
                 text_problem(self.explanation, "explanation"),
-                ids_problem(self.node_ids, "node_ids"),
-                evidence_problem(self.actual),
-                ids_problem(self.missing, "missing"),
+                _ids(self.node_ids, "node_ids"),
+                _evidence(self.actual),
+                _ids(self.missing, "missing"),
                 # missing evidence is never success
                 None if self.verdict is not Verdict.SATISFIED or not self.missing else "verdict",
                 text_problem(self.requirement_id, "requirement_id", required=False),
@@ -326,8 +343,8 @@ class ComponentResult:
                 None if isinstance(self.node_id, str) and 0 < len(self.node_id) <= MAX_ID else "node_id",
                 None if isinstance(self.status, ComponentStatus) else "status",
                 None if all(isinstance(e, Estimate) for e in self.estimates) else "estimates",
-                evidence_problem(self.inputs),
-                ids_problem(self.missing, "missing"),
+                _evidence(self.inputs),
+                _ids(self.missing, "missing"),
             ]
         )
 

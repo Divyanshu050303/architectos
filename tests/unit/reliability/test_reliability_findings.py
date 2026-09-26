@@ -113,7 +113,7 @@ def test_a_single_point_lists_everything_its_failure_can_reach() -> None:
     [db] = [f for f in of(run(*shop()), T.SINGLE_POINT_OF_FAILURE) if f.node_ids == ("db",)]
     evidence = {e.label: e.value for e in db.evidence if e.label in {"affects", "configuration.replicas"}}
     assert evidence == {"affects": "admin, backoffice, eu, lb, us, web", "configuration.replicas": "1"}
-    assert [e.value for e in db.evidence if e.label == "needed_by"] == ["admin", "web"]
+    assert [e.value for e in db.evidence if e.label == "needed_by"] == ["admin, web"]
     assert db.severity is Severity.HIGH  # every entry's path needs it
 
 

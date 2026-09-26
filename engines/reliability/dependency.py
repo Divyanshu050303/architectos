@@ -98,6 +98,15 @@ def closure(topology: Topology, entry: str, avoid: frozenset[str] = frozenset())
     return Closure(entry, tuple(order), tuple(sorted(required)), tuple(sorted(optional)))
 
 
+def closure_of(context: ReliabilityContext, entry: str, avoid: frozenset[str] = frozenset()) -> Closure:
+    """``closure``, computed once per analysis for each (entry, avoid)."""
+    key = ("closure", entry, avoid)
+    if key not in context.memo:
+        context.memo[key] = closure(context.topology, entry, avoid)
+    found: Closure = context.memo[key]
+    return found
+
+
 def entries(context: ReliabilityContext) -> tuple[str, ...]:
     requested = context.request.entries
     if requested is not None:
