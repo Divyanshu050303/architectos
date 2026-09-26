@@ -607,3 +607,31 @@ def _architecture(data: Mapping[str, Any]) -> ArchitectureIR:
         schema_version=data["schema_version"],
         **elements,
     )
+
+
+# --- single elements (for edit commands) -----------------------------------------------------------
+
+
+def node_from_dict(data: object) -> Node:
+    """One node in canonical JSON form; raises ``InvalidArchitecture`` naming it."""
+    node, problems = _element(data, "node", ElementType.NODE, "id", _node_parts)
+    if node is None:
+        raise InvalidArchitecture(problems)
+    return node
+
+
+def connection_from_dict(data: object) -> Connection:
+    """One connection in canonical JSON form; raises ``InvalidArchitecture`` naming it."""
+    connection, problems = _element(data, "connection", ElementType.CONNECTION, "id", _connection_parts)
+    if connection is None:
+        raise InvalidArchitecture(problems)
+    return connection
+
+
+def property_values(values: Mapping[str, Any]) -> dict[str, Any]:
+    """Configuration values as JSON gives them, converted exactly like a node's (numbers from
+    numbers or decimal strings); ``None`` is kept (it clears a property in an edit)."""
+    return {
+        key: None if value is None else _property_value(value, NODE_PROPERTIES.get(key))
+        for key, value in values.items()
+    }

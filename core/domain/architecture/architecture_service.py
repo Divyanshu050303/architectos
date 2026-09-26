@@ -12,6 +12,7 @@ never names or configuration from the architecture.
 
 import uuid
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 
 from core.architecture_ir.commands import Command, apply_commands
 from core.architecture_ir.diff import ArchitectureDiff, ChangeKind
@@ -66,6 +67,17 @@ def _referenced_requirements(ir: ArchitectureIR) -> set[uuid.UUID]:
     return {r.requirement_id for r in refs}
 
 
+@dataclass(frozen=True, slots=True)
+class Revised:
+    """The outcome of a revision: the architecture, its new current revision, what changed, and
+    the layout (read in the same transaction)."""
+
+    architecture: Architecture
+    revision: ArchitectureRevision
+    changes: ArchitectureDiff
+    layout: ArchitectureLayout
+
+
 class ArchitectureService:
     def __init__(self, uow: UnitOfWork, *, clock: Clock = utc_now) -> None:
         self._uow = uow
@@ -88,13 +100,21 @@ class ArchitectureService:
     async def revision(
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, number: int
     ) -> ArchitectureRevision:
+        _, revision, _ = await self.version(project_id=project_id, user_id=user_id, number=number)
+        return revision
+
+    async def version(
+        self, *, project_id: uuid.UUID, user_id: uuid.UUID, number: int
+    ) -> tuple[Architecture, ArchitectureRevision, ArchitectureLayout]:
+        """A past (or the current) revision, with the architecture and its layout."""
         async with self._uow as uow:
             await project_access(uow, project_id, user_id, Permission.ARCHITECTURE_READ)
-            await _architecture(uow, project_id)
+            architecture = await _architecture(uow, project_id)
             revision = await uow.architectures.get_revision(project_id, number)
+            layout = await uow.architectures.get_layout(project_id)
         if revision is None:
             raise ArchitectureRevisionNotFound
-        return revision
+        return architecture, revision, layout
 
     async def history(
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, cursor: str | None = None, limit: int = 50
@@ -162,7 +182,7 @@ class ArchitectureService:
         base_version: int,
         commands: Sequence[Command],
         reason: str | None = None,
-    ) -> tuple[ArchitectureRevision, ArchitectureDiff]:
+    ) -> Revised:
         """A new revision: ``commands`` applied to revision ``base_version``, which must be current.
         Every field they set is attributed to this user's edit."""
         edit = Provenance(ProvenanceSource.USER_EDIT, actor=f"user:{user_id}", recorded_at=self._clock())
@@ -185,7 +205,7 @@ class ArchitectureService:
         source: RevisionSource,
         reason: str | None = None,
         requirement_set_id: uuid.UUID | None = None,
-    ) -> tuple[ArchitectureRevision, ArchitectureDiff]:
+    ) -> Revised:
         """A new revision holding ``ir`` as a whole: an approved proposal, an import, a discovery
         or the Architecture Engine's output. Same concurrency rule as ``edit``."""
         return await self._revise(
@@ -223,7 +243,7 @@ class ArchitectureService:
         source: RevisionSource,
         reason: str | None,
         requirement_set_id: uuid.UUID | None = None,
-    ) -> tuple[ArchitectureRevision, ArchitectureDiff]:
+    ) -> Revised:
         async with self._uow as uow:
             access = await project_access(
                 uow, project_id, user_id, Permission.ARCHITECTURE_UPDATE, lock=ProjectLock.SHARE
@@ -248,7 +268,8 @@ class ArchitectureService:
             await _record(
                 uow, access, AuditAction.ARCHITECTURE_REVISED, user_id, architecture, revision, changes
             )
-        return revision, changes
+            layout = await uow.architectures.get_layout(project_id)
+        return Revised(architecture, revision, changes, layout)
 
 
 async def _architecture(uow: UnitOfWork, project_id: uuid.UUID, *, for_update: bool = False) -> Architecture:

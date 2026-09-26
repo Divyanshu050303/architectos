@@ -13,6 +13,7 @@ from apps.api.email.transport import EmailTransport
 from apps.api.metrics import LogMetrics
 from apps.api.middleware.rate_limit import RateLimiter, RateLimits
 from apps.api.middleware.request_id import current_request_id
+from core.domain.architecture.architecture_service import ArchitectureService
 from core.domain.audit.audit_service import AuditService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
@@ -244,6 +245,15 @@ def get_requirement_set_service(
 
 
 RequirementSetServiceDep = Annotated[RequirementSetService, Depends(get_requirement_set_service)]
+
+
+def get_architecture_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> ArchitectureService:
+    return ArchitectureService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+ArchitectureServiceDep = Annotated[ArchitectureService, Depends(get_architecture_service)]
 
 
 def get_requirement_analysis_service(

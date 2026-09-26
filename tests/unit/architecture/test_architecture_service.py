@@ -23,12 +23,8 @@ from core.domain.architecture.errors import (
 )
 from core.domain.architecture.versions import RevisionSource
 from core.domain.audit.entities import AuditAction
-from core.domain.identity.entities import NewUser, User
-from core.domain.organizations.enums import Role
 from core.domain.organizations.errors import PermissionDenied
-from core.domain.organizations.organization_service import OrganizationService
 from core.domain.pagination import InvalidCursor
-from core.domain.projects.entities import Project
 from core.domain.projects.errors import ProjectArchived, ProjectNotFound
 from core.domain.projects.project_service import ProjectService
 from core.domain.requirements.enums import RequirementPriority, RequirementStatus, RequirementType
@@ -37,10 +33,7 @@ from core.domain.requirements.requirement_service import RequirementService
 from tests.unit.architecture_ir.builders import api_and_postgres, node
 from tests.unit.identity.fakes import FakeClock, FakeUnitOfWork
 
-
-class World:
-    def __init__(self, ada: User, vic: User, eve: User, project: Project, other: Project) -> None:
-        self.ada, self.vic, self.eve, self.project, self.other = ada, vic, eve, project, other
+from .world import World, make_world
 
 
 @pytest.fixture
@@ -60,21 +53,7 @@ def service(uow: FakeUnitOfWork, clock: FakeClock) -> ArchitectureService:
 
 @pytest.fixture
 async def world(uow: FakeUnitOfWork, clock: FakeClock) -> World:
-    users = []
-    for email in ("ada@example.com", "vic@example.com", "eve@example.com"):
-        user = await uow.users.add(NewUser(email, email[:3], "$argon2id$x"))
-        await uow.users.mark_email_verified(user.id, clock.now)
-        stored = await uow.users.get(user.id)
-        assert stored is not None
-        users.append(stored)
-    ada, vic, eve = users
-    acme = await OrganizationService(uow, clock=clock).create(user=ada, name="Acme")
-    await OrganizationService(uow, clock=clock).create(user=eve, name="Globex")
-    await uow.memberships.add(organization_id=acme.organization.id, user_id=vic.id, role=Role.VIEWER)
-    projects = ProjectService(uow, clock=clock)
-    project = await projects.create(membership=acme.membership, name="Food Delivery")
-    other = await projects.create(membership=acme.membership, name="Payments")
-    return World(ada, vic, eve, project, other)
+    return await make_world(uow, clock)
 
 
 async def created(service: ArchitectureService, world: World, **overrides: Any) -> Any:
@@ -136,13 +115,15 @@ async def test_edits_create_revisions_and_history_is_kept(
     service: ArchitectureService, uow: FakeUnitOfWork, world: World, clock: FakeClock
 ) -> None:
     await created(service, world)
-    second, changes = await service.edit(
+    revised = await service.edit(
         project_id=world.project.id,
         user_id=world.ada.id,
         base_version=1,
         commands=[ChangeReplicas("api", 6), AddNode(node("cache", NodeKind.CACHE, name="Cache"))],
         reason="Black Friday",
     )
+    second, changes = revised.revision, revised.changes
+    assert revised.architecture.current_revision == 2
     assert (second.number, second.parent_number, second.reason) == (2, 1, "Black Friday")
     assert second.summary == changes.summary() == "1 node added (Cache); 1 node modified."
     api = second.ir.node("api")
@@ -197,7 +178,7 @@ async def test_replacing_the_whole_architecture(service: ArchitectureService, wo
     proposal = dataclasses.replace(
         api_and_postgres(), nodes=(*api_and_postgres().nodes, node("q", NodeKind.QUEUE))
     )
-    revision, changes = await service.replace(
+    replaced = await service.replace(
         project_id=world.project.id,
         user_id=world.ada.id,
         base_version=1,
@@ -205,6 +186,7 @@ async def test_replacing_the_whole_architecture(service: ArchitectureService, wo
         source=RevisionSource.AI,
         reason="Approved proposal",
     )
+    revision, changes = replaced.revision, replaced.changes
     assert (revision.number, revision.source) == (2, RevisionSource.AI)
     assert [c.element_id for c in changes.nodes] == ["q"]
 

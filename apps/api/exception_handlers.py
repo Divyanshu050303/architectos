@@ -21,6 +21,17 @@ from apps.api.middleware.rate_limit import RateLimited
 from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import current_request_id
 from apps.api.middleware.security_headers import security_headers
+from core.architecture_ir.commands import InvalidArchitectureCommand
+from core.architecture_ir.errors import InvalidArchitecture
+from core.domain.architecture.errors import (
+    ArchitectureAlreadyExists,
+    ArchitectureNotFound,
+    ArchitectureRevisionNotFound,
+    ArchitectureUnchanged,
+    ArchitectureVersionConflict,
+    InvalidLayout,
+    InvalidRevision,
+)
 from core.domain.audit.errors import InvalidCursor
 from core.domain.errors import DomainError
 from core.domain.identity.errors import (
@@ -151,6 +162,15 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     RequirementAnalysisNotFound: 404,
     CandidateAlreadyPromoted: 409,
     InvalidPromotion: 422,
+    InvalidArchitecture: 422,
+    InvalidArchitectureCommand: 422,
+    ArchitectureNotFound: 404,
+    ArchitectureRevisionNotFound: 404,
+    ArchitectureAlreadyExists: 409,
+    ArchitectureVersionConflict: 409,
+    ArchitectureUnchanged: 422,
+    InvalidRevision: 422,
+    InvalidLayout: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.
@@ -190,12 +210,24 @@ def domain_error_response(error: DomainError) -> JSONResponse:
     )
 
 
+def _camel_keys(value: Any) -> Any:
+    """Object keys in camelCase at any depth (values untouched)."""
+    if isinstance(value, dict):
+        return {
+            to_camel(key) if isinstance(key, str) else key: _camel_keys(item) for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_camel_keys(item) for item in value]
+    return value
+
+
 def _camel_details(details: Any) -> Any:
     """Domain details use snake_case (field paths like "structured_data.value", keys like
-    "current_version"); the JSON API is camelCase throughout."""
+    "current_version"); the JSON API is camelCase throughout. Nested keys are converted too (e.g.
+    each architecture violation's element_id); nested field paths name IR fields and are kept."""
     if not isinstance(details, dict):
         return details
-    converted = {to_camel(key): value for key, value in details.items()}
+    converted = {to_camel(key): _camel_keys(value) for key, value in details.items()}
     if isinstance(converted.get("field"), str):
         converted["field"] = ".".join(to_camel(part) for part in converted["field"].split("."))
     return converted

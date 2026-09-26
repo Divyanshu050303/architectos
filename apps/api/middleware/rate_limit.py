@@ -107,6 +107,10 @@ POLICIES: dict[str, dict[str, Rule]] = {
     "create_requirement_set": {"user": Rule(100, timedelta(hours=1))},
     # Each analysis may call a language model: bounded per user and per client address.
     "analyze_requirements": {"user": Rule(60, timedelta(hours=1)), "ip": Rule(120, timedelta(hours=1))},
+    "create_architecture": {"user": Rule(30, timedelta(hours=1))},
+    # Every save of an edit is a revision; generous for real editing, bounded against scripts.
+    "edit_architecture": {"user": Rule(600, timedelta(hours=1))},
+    "save_architecture_layout": {"user": Rule(1200, timedelta(hours=1))},
     "create_invitation": {"user": Rule(50, timedelta(hours=1))},
     "accept_invitation": {"ip": Rule(30, timedelta(hours=1))},
 }

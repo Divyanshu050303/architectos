@@ -39,7 +39,7 @@ class Operation:
             .replace("{set_id}", str(uuid.uuid4()))
             .replace("{analysis_id}", str(uuid.uuid4()))
             .replace("{invitation_token}", "A" * 43)
-        )
+        ) + ("?from=1&to=1" if url.endswith("/architecture/compare") else "")
 
 
 def inventory(app: FastAPI) -> list[Operation]:
