@@ -99,8 +99,25 @@ async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing
             headers=ada,
         )
     ).json()
+    snapshot = (
+        await client.post(
+            f"/api/v1/organizations/{org_id}/pricing-snapshots",
+            json=VALID_BODIES[
+                "create_pricing_snapshot_api_v1_organizations__organization_id__pricing_snapshots_post"
+            ],
+            headers=ada,
+        )
+    ).json()
+    cost = (
+        await client.post(
+            f"/api/v1/projects/{project['id']}/architectures/{architecture['id']}/cost-analyses",
+            json={"snapshotId": snapshot["id"]},
+            headers=ada,
+        )
+    ).json()
     ids = {
         "capacity_analysis_id": analysis["id"],
+        "cost_analysis_id": cost["id"],
         "project_id": project["id"],
         "requirement_id": requirement["id"],
         "architecture_id": architecture["id"],

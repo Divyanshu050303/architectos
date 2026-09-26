@@ -66,3 +66,8 @@ class IncompatibleCapacityAnalysis(DomainError):
 
     code = "incompatible_capacity_analysis"
     message = "The capacity analysis does not describe the architecture revision being costed."
+
+
+class CostAnalysisNotFound(DomainError):
+    code = "cost_analysis_not_found"
+    message = "Cost analysis not found."

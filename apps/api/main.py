@@ -20,6 +20,7 @@ from apps.api.routes import (
     architectures,
     auth,
     capacity,
+    cost,
     invitations,
     organizations,
     pricing,
@@ -31,6 +32,7 @@ from apps.api.routes import (
     validations,
 )
 from engines.capacity.service import DeterministicCapacityEngine
+from engines.cost.service import DeterministicCostEngine
 from engines.requirements.factory import build_engine
 from engines.validation.service import DeterministicValidationEngine
 
@@ -70,6 +72,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.validation_engine = DeterministicValidationEngine()
     app.state.capacity_engine = DeterministicCapacityEngine()
+    app.state.cost_engine = DeterministicCostEngine(capacity=app.state.capacity_engine)
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -116,4 +119,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(validations.router, prefix=API_PREFIX)
     app.include_router(capacity.router, prefix=API_PREFIX)
     app.include_router(pricing.router, prefix=API_PREFIX)
+    app.include_router(cost.router, prefix=API_PREFIX)
     return app

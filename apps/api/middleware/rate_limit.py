@@ -115,6 +115,7 @@ POLICIES: dict[str, dict[str, Rule]] = {
     "run_validation": {"user": Rule(120, timedelta(hours=1))},
     "run_capacity_analysis": {"user": Rule(120, timedelta(hours=1))},
     "create_pricing_snapshot": {"user": Rule(30, timedelta(hours=1))},
+    "run_cost_analysis": {"user": Rule(120, timedelta(hours=1))},
     "create_invitation": {"user": Rule(50, timedelta(hours=1))},
     "accept_invitation": {"ip": Rule(30, timedelta(hours=1))},
 }

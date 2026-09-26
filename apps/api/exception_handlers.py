@@ -44,6 +44,9 @@ from core.domain.capacity.errors import (
     InvalidWorkload,
 )
 from core.domain.cost.errors import (
+    CostAnalysisNotFound,
+    IncompatibleCapacityAnalysis,
+    InvalidCostRequest,
     InvalidMoney,
     InvalidPricingRecord,
     InvalidPricingSnapshot,
@@ -204,6 +207,9 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidPricingRecord: 422,
     InvalidPricingSnapshot: 422,
     PricingSnapshotNotFound: 404,
+    InvalidCostRequest: 422,
+    IncompatibleCapacityAnalysis: 422,
+    CostAnalysisNotFound: 404,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

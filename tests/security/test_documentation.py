@@ -11,6 +11,7 @@ from core.architecture_ir import errors as ir_errors
 from core.domain.architecture import errors as architecture_errors
 from core.domain.audit.entities import AuditAction
 from core.domain.capacity import errors as capacity_errors
+from core.domain.cost import errors as cost_errors
 from core.domain.errors import DomainError
 from core.domain.projects import errors as project_errors
 from core.domain.requirements import errors as requirement_errors
@@ -24,7 +25,14 @@ from .support import inventory
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 API_DOCS = "".join(
     (DOCS / "api" / name).read_text()
-    for name in ("projects.md", "requirements.md", "architecture.md", "validation.md", "capacity.md")
+    for name in (
+        "projects.md",
+        "requirements.md",
+        "architecture.md",
+        "validation.md",
+        "capacity.md",
+        "cost.md",
+    )
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
     DOCS / "domain" / "requirements.md"
@@ -45,8 +53,9 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
-    # validation and 6 capacity endpoints (GET /validation/rules, /capacity/models are not project-scoped)
-    assert len(served) == 49
+    # validation, 6 capacity and 4 cost endpoints (GET /validation/rules, /capacity/models and
+    # /cost/models are not project-scoped)
+    assert len(served) == 53
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -69,6 +78,11 @@ def test_every_error_code_is_documented() -> None:
             capacity_errors.InvalidCapacityConfig,
             capacity_errors.InvalidScenario,
             capacity_errors.CapacityAnalysisNotFound,
+            cost_errors.InvalidCostRequest,
+            cost_errors.IncompatibleCapacityAnalysis,
+            cost_errors.CostAnalysisNotFound,
+            cost_errors.PricingSnapshotNotFound,
+            cost_errors.InvalidMoney,
         )
     }
     assert {code for code in codes if code not in API_DOCS} == set()

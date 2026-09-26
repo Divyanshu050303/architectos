@@ -18,6 +18,7 @@ from core.domain.audit.audit_service import AuditService
 from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
+from core.domain.cost.cost_service import CostService
 from core.domain.cost.snapshots import PricingService
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
@@ -288,6 +289,16 @@ def get_pricing_service(
 
 
 PricingServiceDep = Annotated[PricingService, Depends(get_pricing_service)]
+
+
+def get_cost_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> CostService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return CostService(SqlAlchemyUnitOfWork(db, client), request.app.state.cost_engine, clock=clock)
+
+
+CostServiceDep = Annotated[CostService, Depends(get_cost_service)]
 
 
 def get_requirement_analysis_service(

@@ -11,9 +11,10 @@ produced a result: anything else is refused (``IncompatibleCapacityAnalysis``), 
 """
 
 import uuid
-from collections.abc import Iterable
-from dataclasses import dataclass, replace
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from decimal import Decimal
+from typing import Any
 
 from core.domain.capacity.analyses import AnalysisReport
 from core.domain.capacity.results import (
@@ -66,6 +67,7 @@ class CapacityBasis:
     incomplete: frozenset[str] = frozenset()  # nodes whose demand is a lower bound
     no_entry: bool = False
     scaling: tuple[ScalingOption, ...] = ()
+    request_inputs: Mapping[str, Any] = field(default_factory=dict)  # to run it again under a scenario
 
     @classmethod
     def of(cls, report: AnalysisReport, components: Iterable[ComponentResult]) -> CapacityBasis:
@@ -85,6 +87,7 @@ class CapacityBasis:
             tuple(sorted(components, key=lambda c: c.node_id)),
             *_gaps(report.unsupported),
             report.scaling,
+            report.inputs,
         )
 
     def for_scenario(

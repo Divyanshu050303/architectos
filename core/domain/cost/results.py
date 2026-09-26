@@ -278,6 +278,15 @@ class Totals:
     def annual(self) -> Money:
         return convert(self.monthly, BillingPeriod.MONTH, BillingPeriod.YEAR)
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Totals:
+        try:
+            return cls(
+                data["currency"], Money.from_dict(data["monthly"]), data["unknown_items"], data["unsupported"]
+            )
+        except (KeyError, TypeError) as error:
+            raise InvalidCostResult(details={"fields": [type(error).__name__]}) from None
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "currency": self.currency,

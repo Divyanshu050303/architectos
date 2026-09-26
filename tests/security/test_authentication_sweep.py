@@ -123,6 +123,15 @@ SPECIFIED = PUBLIC | {
     ("GET", "/api/v1/organizations/{organization_id}/pricing-snapshots"),
     ("GET", "/api/v1/organizations/{organization_id}/pricing-snapshots/{snapshot_id}"),
     ("GET", "/api/v1/organizations/{organization_id}/pricing-snapshots/{snapshot_id}/records"),
+    # Milestone 8: cost analyses of an architecture.
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/cost-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/cost-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/cost-analyses/{cost_analysis_id}"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/cost-analyses/{cost_analysis_id}/line-items",
+    ),
+    ("GET", "/api/v1/cost/models"),
 }
 
 

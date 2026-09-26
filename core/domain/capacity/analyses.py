@@ -82,6 +82,23 @@ class AnalysisRequest:
         ):
             raise InvalidWorkload(details={"field": "label", "reason": "invalid_text"})
 
+    @classmethod
+    def from_inputs(cls, inputs: Mapping[str, Any]) -> AnalysisRequest:
+        """The request an analysis stored (``inputs()``), e.g. to run it again under a scenario."""
+        try:
+            return cls(
+                uuid.UUID(inputs["architecture_id"]),
+                inputs["revision_number"],
+                WorkloadProfile.from_dict(inputs["workload"]),
+                tuple(inputs["models"]) if inputs.get("models") is not None else None,
+                dict(inputs.get("parameters") or {}),
+                tuple(WorkloadAssumption.from_dict(a) for a in inputs.get("assumptions") or ()),
+                None,
+                tuple(inputs["entries"]) if inputs.get("entries") is not None else None,
+            )
+        except KeyError, TypeError, ValueError:
+            raise InvalidWorkload(details={"field": "inputs", "reason": "unreadable"}) from None
+
     def inputs(self) -> dict[str, Any]:
         """Everything the result depends on besides the revision content, canonically (what the
         context fingerprint hashes and what is stored with the analysis)."""
