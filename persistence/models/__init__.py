@@ -3,6 +3,7 @@
 from .architecture import ArchitectureLayoutRecord, ArchitectureRecord, ArchitectureRevisionRecord
 from .audit_log import AuditLogRecord
 from .base import Base
+from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, CapacityComponentRecord
 from .email_verification_token import EmailVerificationTokenRecord
 from .invitation import InvitationRecord
 from .organization import OrganizationRecord
@@ -22,6 +23,9 @@ __all__ = [
     "ArchitectureRevisionRecord",
     "AuditLogRecord",
     "Base",
+    "CapacityAnalysisRecord",
+    "CapacityBottleneckRecord",
+    "CapacityComponentRecord",
     "EmailVerificationTokenRecord",
     "InvitationRecord",
     "OrganizationMemberRecord",

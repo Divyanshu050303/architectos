@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
+from core.domain.parameters import ParamSpec, ParamType, parameter_problem
 from core.domain.validation.errors import InvalidFinding, InvalidValidationConfig
 from core.domain.validation.results import (
     Category,
@@ -67,37 +68,6 @@ class Input(StrEnum):
 
     REQUIREMENTS = "requirements"
     POLICY = "policy"
-
-
-class ParamType(StrEnum):
-    INTEGER = "integer"
-    BOOLEAN = "boolean"
-    TEXT = "text"
-
-
-@dataclass(frozen=True, slots=True)
-class ParamSpec:
-    type: ParamType
-    description: str
-    default: Any = None
-    minimum: int | None = None
-    maximum: int | None = None
-    choices: frozenset[str] = frozenset()
-
-    def problem(self, value: object) -> str | None:
-        match self.type:
-            case ParamType.INTEGER:
-                if isinstance(value, bool) or not isinstance(value, int):
-                    return "not_an_integer"
-                too_small = self.minimum is not None and value < self.minimum
-                too_large = self.maximum is not None and value > self.maximum
-                return "out_of_range" if too_small or too_large else None
-            case ParamType.BOOLEAN:
-                return None if isinstance(value, bool) else "not_a_boolean"
-            case ParamType.TEXT:
-                if not isinstance(value, str) or len(value) > 200:
-                    return "not_text"
-                return "not_a_choice" if self.choices and value not in self.choices else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,15 +181,10 @@ class Registry:
 
 
 def _check_parameters(meta: RuleMeta, params: Mapping[str, Any]) -> None:
-    for name, value in sorted(params.items()):
-        spec = meta.parameters.get(name)
-        if spec is None:
-            raise InvalidValidationConfig(
-                details={"reason": "unknown_parameter", "rule_id": meta.id, "parameter": name}
-            )
-        problem = spec.problem(value)
-        if problem is not None:
-            raise InvalidValidationConfig(details={"reason": problem, "rule_id": meta.id, "parameter": name})
+    problem = parameter_problem(meta.parameters, params)
+    if problem is not None:
+        name, reason = problem
+        raise InvalidValidationConfig(details={"reason": reason, "rule_id": meta.id, "parameter": name})
 
 
 def _parameters(meta: RuleMeta, given: Mapping[str, Any]) -> dict[str, Any]:
@@ -274,3 +239,6 @@ def validate(context: ValidationContext, registry: Registry) -> ValidationResult
         failures=tuple(failures),
         limitations=limitations(context),
     )
+
+
+__all__ = ["ParamSpec", "ParamType"]  # re-exported: the rules import them from here

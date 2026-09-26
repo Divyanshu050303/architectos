@@ -7,6 +7,7 @@ from core.domain.client import ClientInfo
 from persistence.models import EmailVerificationTokenRecord, PasswordResetTokenRecord
 from persistence.repositories.architectures import SqlAlchemyArchitectureRepository
 from persistence.repositories.audit_logs import SqlAlchemyAuditRepository
+from persistence.repositories.capacity import SqlAlchemyCapacityAnalysisRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
@@ -47,6 +48,7 @@ class SqlAlchemyUnitOfWork:
         self.requirement_analyses = SqlAlchemyRequirementAnalysisRepository(session)
         self.architectures = SqlAlchemyArchitectureRepository(session)
         self.validations = SqlAlchemyValidationRunRepository(session)
+        self.capacity = SqlAlchemyCapacityAnalysisRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

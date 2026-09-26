@@ -19,6 +19,7 @@ from apps.api.middleware.security_headers import SecurityHeadersMiddleware
 from apps.api.routes import (
     architectures,
     auth,
+    capacity,
     invitations,
     organizations,
     projects,
@@ -28,6 +29,7 @@ from apps.api.routes import (
     users,
     validations,
 )
+from engines.capacity.service import DeterministicCapacityEngine
 from engines.requirements.factory import build_engine
 from engines.validation.service import DeterministicValidationEngine
 
@@ -64,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         max_output_tokens=settings.requirements_llm_max_output_tokens,
     )
     app.state.validation_engine = DeterministicValidationEngine()
+    app.state.capacity_engine = DeterministicCapacityEngine()
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -107,4 +110,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(requirement_analyses.router, prefix=API_PREFIX)
     app.include_router(architectures.router, prefix=API_PREFIX)
     app.include_router(validations.router, prefix=API_PREFIX)
+    app.include_router(capacity.router, prefix=API_PREFIX)
     return app

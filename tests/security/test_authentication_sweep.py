@@ -98,6 +98,26 @@ SPECIFIED = PUBLIC | {
     ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/validations/{run_id}"),
     ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/validations/{run_id}/findings"),
     ("GET", "/api/v1/validation/rules"),
+    # Milestone 7 (deterministic capacity engine).
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses/{capacity_analysis_id}",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses/{capacity_analysis_id}/components",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses/{capacity_analysis_id}/bottlenecks",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses/{capacity_analysis_id}/scenarios",
+    ),
+    ("GET", "/api/v1/capacity/models"),
 }
 
 

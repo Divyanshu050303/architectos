@@ -40,6 +40,7 @@ class Permission(StrEnum):
     ARCHITECTURE_UPDATE = "architecture.update"
     ARCHITECTURE_DELETE = "architecture.delete"
     ARCHITECTURE_VALIDATE = "architecture.validate"
+    ARCHITECTURE_ANALYZE = "architecture.analyze"  # capacity analyses
     ARCHITECTURE_SIMULATE = "architecture.simulate"
     ARCHITECTURE_EVOLVE = "architecture.evolve"
 
@@ -64,6 +65,7 @@ _MEMBER = _VIEWER | {
     Permission.ARCHITECTURE_CREATE,
     Permission.ARCHITECTURE_UPDATE,
     Permission.ARCHITECTURE_VALIDATE,
+    Permission.ARCHITECTURE_ANALYZE,
     Permission.ARCHITECTURE_SIMULATE,
     Permission.ARCHITECTURE_EVOLVE,
 }

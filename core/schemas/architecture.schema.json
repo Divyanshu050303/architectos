@@ -176,11 +176,16 @@
         "unknown": {
           "items": {
             "enum": [
+              "access",
+              "cache_hit_ratio",
+              "calls_per_request",
               "dead_letter",
+              "pool_size",
               "port",
               "retries",
               "timeout_seconds",
-              "tls"
+              "tls",
+              "traffic_ratio"
             ]
           },
           "type": "array",
@@ -189,9 +194,33 @@
         "values": {
           "additionalProperties": false,
           "properties": {
+            "access": {
+              "description": "Which side of the workload's read/write mix this data access carries.",
+              "enum": [
+                "read",
+                "read_write",
+                "write"
+              ]
+            },
+            "cache_hit_ratio": {
+              "description": "Share of this traffic a cache in front of the target answers; only misses arrive.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "calls_per_request": {
+              "description": "Calls made over this connection per unit of work that uses it (fan-out).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
             "dead_letter": {
               "description": "Messages that keep failing go to a dead-letter queue.",
               "type": "boolean"
+            },
+            "pool_size": {
+              "description": "Connections each replica of the source keeps open to the target (a connection pool).",
+              "maximum": 100000,
+              "minimum": 0,
+              "type": "integer"
             },
             "port": {
               "description": "Target port.",
@@ -212,6 +241,11 @@
             "tls": {
               "description": "Traffic is encrypted in transit.",
               "type": "boolean"
+            },
+            "traffic_ratio": {
+              "description": "Share of the source's work that uses this connection (0.3 = 30 %).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             }
           },
           "type": "object"
@@ -407,6 +441,7 @@
               "backup_enabled",
               "backup_retention_seconds",
               "boundary_type",
+              "cpu_core_seconds_per_request",
               "cpu_limit_cores",
               "cpu_request_cores",
               "deployment_model",
@@ -416,6 +451,7 @@
               "memory_limit_bytes",
               "memory_request_bytes",
               "multi_az",
+              "network_bandwidth_bytes_per_second",
               "partitions",
               "persistence",
               "region",
@@ -424,7 +460,9 @@
               "replication_mode",
               "retention_seconds",
               "runtime",
-              "storage_bytes"
+              "storage_bytes",
+              "throughput_limit_per_second",
+              "throughput_per_replica_per_second"
             ]
           },
           "type": "array",
@@ -476,6 +514,11 @@
                 "system",
                 "trust_zone"
               ]
+            },
+            "cpu_core_seconds_per_request": {
+              "description": "CPU time one unit of work costs, in core-seconds (0.02 = 20 ms of one core).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             },
             "cpu_limit_cores": {
               "description": "CPU limit per instance, in cores.",
@@ -535,6 +578,11 @@
               "description": "Runs across availability zones.",
               "type": "boolean"
             },
+            "network_bandwidth_bytes_per_second": {
+              "description": "Network throughput available to the component, in bytes per second.",
+              "minimum": 0,
+              "type": "integer"
+            },
             "partitions": {
               "description": "Partitions (or shards) of the queue or topic.",
               "minimum": 1,
@@ -586,6 +634,16 @@
               "description": "Provisioned storage, in bytes.",
               "minimum": 0,
               "type": "integer"
+            },
+            "throughput_limit_per_second": {
+              "description": "Most units of work (requests, operations or events) the component handles per second, in total.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "throughput_per_replica_per_second": {
+              "description": "Most units of work one replica handles per second.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             }
           },
           "type": "object"
