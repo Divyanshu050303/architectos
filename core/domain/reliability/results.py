@@ -83,6 +83,8 @@ class FindingType(StrEnum):
     OBJECTIVE_NOT_EVALUABLE = "objective_not_evaluable"
     UNMODELED_DEPENDENCY = "unmodeled_dependency"
     CIRCULAR_DEPENDENCY = "circular_dependency"
+    AVAILABILITY_NOT_EVALUABLE = "availability_not_evaluable"
+    UNVERIFIED_RELIABILITY_DATA = "unverified_reliability_data"
 
 
 @dataclass(frozen=True, slots=True)

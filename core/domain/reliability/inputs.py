@@ -64,6 +64,12 @@ class Fact:
     value: ConfigValue | None  # None exactly when the source is unknown
     source: Source
     provenance: str | None = None  # e.g. "terraform", "user_edit"
+    inferred: bool = False  # the architecture says the value was inferred, not stated or read
+
+    @property
+    def proposed(self) -> bool:
+        """Inferred, or proposed by a language model: not declared by a person or read from a system."""
+        return self.inferred or self.provenance == "llm_proposal"
 
     @property
     def path(self) -> str:
@@ -71,7 +77,8 @@ class Fact:
 
     def evidence(self) -> Evidence:
         shown = "unknown" if self.value is None else _text(self.value)
-        return Evidence(self.path, shown + (f" ({self.provenance})" if self.provenance else ""))
+        origin = ", ".join(x for x in (self.provenance, "inferred" if self.inferred else None) if x)
+        return Evidence(self.path, shown + (f" ({origin})" if origin else ""))
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +92,11 @@ class ComponentReliability:
         for name in PROPERTIES:
             origin = node.field_provenance.get(f"configuration.{name}") or node.provenance
             provenance = origin.source.value if origin is not None else None
+            inferred = origin is not None and origin.inferred
             if config.is_unknown(name):
-                facts[name] = Fact(name, None, Source.UNKNOWN, provenance)
+                facts[name] = Fact(name, None, Source.UNKNOWN, provenance, inferred)
             elif (value := config.get(name)) is not None:
-                facts[name] = Fact(name, value, Source.DECLARED, provenance)
+                facts[name] = Fact(name, value, Source.DECLARED, provenance, inferred)
         return cls(node.id, facts)
 
     def known(self, name: str) -> ConfigValue | None:

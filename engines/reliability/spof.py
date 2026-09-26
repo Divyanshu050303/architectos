@@ -38,6 +38,7 @@ from core.domain.reliability.inputs import ComponentReliability
 from core.domain.reliability.results import FindingType, ReliabilityFinding
 from core.domain.validation.results import Severity
 
+from .cascading_failure import affected
 from .context import ReliabilityContext
 from .dependency import Role, closure, entries, role, unstated
 from .engine import OUT_OF_SCOPE, Progress, StepMeta, StepOutput
@@ -179,7 +180,7 @@ class TopologyFindings:
             facts = context.facts[node.id]
             spares = redundancy(context, node.id, groups)
             findings += self._redundancy(
-                node.id, node.name, facts, spares, needed.get(node.id, []), len(closures), weak
+                topology, node.id, node.name, facts, spares, needed.get(node.id, []), len(closures), weak
             )
             if spares.redundant:
                 findings += self._redundant(context, node.id, node.name, facts, spares)
@@ -206,7 +207,8 @@ class TopologyFindings:
                     f"{source} cannot do its job without {target} (critical), and {target} has no "
                     "declared redundancy or alternative.",
                     f"Review what {connection.source_id} can do while {target} is down; consider redundancy.",
-                    connections=(connection.id,), evidence=(Evidence(f"{connection.id}.critical", "true"),),
+                    connections=(connection.id,),
+                    evidence=(Evidence(f"{connection.id}.critical", "true"), *self._reach(topology, target)),
                 ))  # fmt: skip
             if unstated(connection) and any(connection.source_id in c.node_ids for c in closures):
                 findings.append(self._finding(
@@ -250,6 +252,7 @@ class TopologyFindings:
 
     def _redundancy(
         self,
+        topology: Topology,
         node_id: str,
         name: str,
         facts: ComponentReliability,
@@ -290,8 +293,18 @@ class TopologyFindings:
             f"{scope.capitalize()} needs {name}, and {why}: its failure interrupts them.",
             "Consider replicas or an alternative (a redundancy group), in separate failure domains, "
             "with a declared failover; then review how requests move to them.",
-            evidence=(*evidence, *(Evidence("needed_by", e) for e in sorted(needed_by))), missing=missing,
+            evidence=(
+                *evidence,
+                *(Evidence("needed_by", e) for e in sorted(needed_by)),
+                *self._reach(topology, node_id),
+            ),
+            missing=missing,
         )]  # fmt: skip
+
+    @staticmethod
+    def _reach(topology: Topology, node_id: str) -> tuple[Evidence, ...]:
+        found = affected(topology, node_id)
+        return (Evidence("affects", ", ".join(found)),) if found else ()
 
     def _redundant(
         self,
