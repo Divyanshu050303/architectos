@@ -29,6 +29,7 @@ from core.domain.capacity.workload import WorkloadProfile, WorkloadType
 
 from .analyses import CostAnalysisRequest
 from .errors import IncompatibleCapacityAnalysis
+from .money import arithmetic
 
 USABLE = frozenset(
     {
@@ -137,7 +138,9 @@ class CapacityBasis:
             return Decimal(1), "a batch's design rate is its average rate"
         if load.average_rate is None:
             return None, "workload.average_rate"
-        return load.average_rate.canonical / load.design_rate, "workload.average_rate / workload.peak_rate"
+        with arithmetic():
+            ratio = load.average_rate.canonical / load.design_rate
+        return ratio, "workload.average_rate / workload.peak_rate"
 
     def required_replicas(self, node_id: str) -> ScalingOption | None:
         """The replicas a capacity model requires of ``node_id``, if one defines horizontal scaling."""

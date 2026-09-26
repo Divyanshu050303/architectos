@@ -13,6 +13,10 @@ calculation needs. The steps, in order, each ending the lookup when nothing is l
    with the same latest effective date are ``ambiguous``: none is picked;
 7. the winner's unit must be the unit the calculation needs (else ``unit_mismatch``).
 
+The steps work on one ``PriceIndex`` per snapshot (records grouped by provider, service and SKU, in
+the snapshot's order), built once per analysis: a lookup then reads only that SKU's records instead
+of the whole price list. The index is derived from the immutable snapshot, never stored or shared.
+
 **Freshness** is reported with every price found: when it took effect, when it was retrieved, and
 whether it is ``stale`` — retrieved more than ``max_age_days`` (default 90) before the pricing day,
 or retrieved at an unknown time. A stale price is used, and flagged: it is never presented as
@@ -105,14 +109,25 @@ class Lookup:
                 return f"The price for {wanted} is per {self.detail}, not the unit this cost needs."
 
 
+class PriceIndex:
+    """A snapshot's records by (provider, service, SKU), each group in the snapshot's order."""
+
+    def __init__(self, snapshot: PricingSnapshot) -> None:
+        self.snapshot = snapshot
+        groups: dict[tuple[str, str, str], list[PricingRecord]] = {}
+        for record in snapshot.records:
+            groups.setdefault((record.provider, record.service, record.sku), []).append(record)
+        self._groups = {key: tuple(records) for key, records in groups.items()}
+
+    def records(self, provider: str, service: str, sku: str) -> tuple[PricingRecord, ...]:
+        return self._groups.get((provider, service, sku), ())
+
+
 def lookup(  # noqa: PLR0911 -- one documented step per return
-    snapshot: PricingSnapshot, query: PriceQuery, *, max_age_days: int = DEFAULT_MAX_AGE_DAYS
+    prices: PricingSnapshot | PriceIndex, query: PriceQuery, *, max_age_days: int = DEFAULT_MAX_AGE_DAYS
 ) -> Lookup:
-    same = [
-        r
-        for r in snapshot.records
-        if (r.provider, r.service, r.sku) == (query.provider, query.service, query.sku)
-    ]
+    index = prices if isinstance(prices, PriceIndex) else PriceIndex(prices)
+    same = list(index.records(query.provider, query.service, query.sku))
     if not same:
         return Lookup(LookupOutcome.NOT_FOUND, query, missing=("price",))
     here = [r for r in same if r.region == query.region]

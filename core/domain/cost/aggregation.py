@@ -29,7 +29,7 @@ from typing import Any
 
 from core.domain.requirements.value_objects import decimal_to_str
 
-from .money import BillingPeriod, Money, convert, stored
+from .money import BillingPeriod, Money, arithmetic, convert, stored
 from .pricing import PricingModel
 from .results import CostCategory, CostKind, CostResult, CostStatus, LineItem, Share, Totals, breakdown
 
@@ -170,7 +170,10 @@ def summarize(result: CostResult, *, top: int = TOP_ITEMS) -> CostSummary:
     grand = totals.monthly.amount
 
     def share(amount: Money) -> Decimal | None:
-        return stored(amount.amount / grand) if grand else None
+        if not grand:
+            return None
+        with arithmetic():
+            return stored(amount.amount / grand)
 
     ranked = sorted(priced, key=lambda pair: (-pair[1].amount, *pair[0].sort_key()))
     items = tuple(

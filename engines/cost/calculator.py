@@ -272,7 +272,7 @@ def price(node: Node, meta: CostModelMeta, charge: Charge, context: CostContext)
         charge.conditions,
         charge.unit,
     )
-    found = lookup(context.snapshot, query)
+    found = lookup(context.prices, query)
     if not found.found or found.record is None or found.freshness is None:
         return _unknown(node, meta, charge, found.missing or ("price",), found.message), False
     record, freshness = found.record, found.freshness
@@ -400,7 +400,7 @@ def analyze(context: CostContext, registry: Registry) -> CostResult:
     return CostResult(
         currency=context.request.currency,
         snapshot_id=context.snapshot.id,
-        snapshot_hash=context.snapshot.content_hash,
+        snapshot_hash=context.snapshot_hash,
         model_set=registry.model_set(),
         context_fingerprint=context.fingerprint,
         line_items=tuple(lines),

@@ -17,6 +17,7 @@ looked up in the project's organization only, the capacity analysis in the same 
 (another one is indistinguishable from a missing one). Audit entries carry identifiers and counts.
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import Callable, Mapping
@@ -147,8 +148,10 @@ class CostService:
             requested_at=now,
             label=label,
         ).start(now)
-        # 2. Calculate, holding no transaction and no lock.
-        output = self._run(analysis.id, lambda: self._engine.analyze(
+        # 2. Calculate, holding no transaction and no lock, on a worker thread: the engine is pure
+        #    and CPU-bound (seconds at the size limits with scenarios), and must not stall the event
+        #    loop serving everyone else's requests meanwhile.
+        output = await self._run(analysis.id, lambda: self._engine.analyze(
             revision.ir, info, request, snapshot, provider, basis, scenarios
         ))  # fmt: skip
         # 3. Store, re-authorized under the project lock.
@@ -179,9 +182,11 @@ class CostService:
             )
         return report
 
-    def _run(self, analysis_id: uuid.UUID, run: Callable[[], CostEngineOutput]) -> CostEngineOutput | None:
+    async def _run(
+        self, analysis_id: uuid.UUID, run: Callable[[], CostEngineOutput]
+    ) -> CostEngineOutput | None:
         try:
-            output = run()
+            output = await asyncio.to_thread(run)
         except DomainError:
             raise  # a request the engine refuses: 4xx, nothing stored
         except Exception:  # an engine bug: recorded as a failed analysis, never a partial result

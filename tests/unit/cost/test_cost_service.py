@@ -2,6 +2,7 @@
 reading, and access."""
 
 import dataclasses
+import threading
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -332,3 +333,26 @@ async def test_an_archive_during_the_calculation_refuses_the_store(
         await analyze(CostService(uow, ArchivingMeanwhile(), clock=clock), world, aid, snapshot)
     assert uow.cost.reports == {}
     assert len(uow.audit.events) == recorded
+
+
+async def test_the_engine_runs_off_the_event_loop(
+    uow: FakeUnitOfWork, clock: FakeClock, world: World
+) -> None:
+    """A CPU-bound analysis (seconds at the size limits) must not stall other requests meanwhile."""
+    aid, snapshot = await setup(uow, clock, world)
+    real = DeterministicCostEngine()
+    loop_thread = threading.get_ident()
+    seen: list[int] = []
+
+    class Recording:
+        def analyze(self, *args: Any) -> Any:
+            seen.append(threading.get_ident())
+            return real.analyze(*args)
+
+        def models(self) -> Any:
+            return real.models()
+
+    report = await analyze(CostService(uow, Recording(), clock=clock), world, aid, snapshot)
+    assert report.analysis.status == "partial"
+    assert seen
+    assert seen[0] != loop_thread

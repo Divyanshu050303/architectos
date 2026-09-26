@@ -15,6 +15,7 @@ from core.architecture_ir.topology import Topology
 from core.domain.cost.analyses import CostAnalysisRequest
 from core.domain.cost.capacity import CapacityBasis
 from core.domain.cost.errors import IncompatibleCapacityAnalysis
+from core.domain.cost.lookup import PriceIndex
 from core.domain.cost.pricing import PricingSnapshot
 from core.domain.validation.options import RevisionInfo
 
@@ -39,6 +40,15 @@ class CostContext:
     def topology(self) -> Topology:
         return Topology(self.ir)
 
+    @cached_property
+    def prices(self) -> PriceIndex:
+        """The snapshot's records by SKU, built once per analysis."""
+        return PriceIndex(self.snapshot)
+
+    @cached_property
+    def snapshot_hash(self) -> str:
+        return self.snapshot.content_hash
+
     @property
     def fingerprint(self) -> str:
         document = {
@@ -49,7 +59,7 @@ class CostContext:
                 self.revision.schema_version,
             ],
             "request": self.request.inputs(),
-            "snapshot": [str(self.snapshot.id), self.snapshot.content_hash],
+            "snapshot": [str(self.snapshot.id), self.snapshot_hash],
             "provider": self.provider,
             "capacity": [str(self.capacity.analysis_id), self.capacity.result_fingerprint]
             if self.capacity

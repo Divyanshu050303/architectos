@@ -39,7 +39,7 @@ from core.domain.engine_results import (
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .errors import InvalidCostResult
-from .money import BillingPeriod, Money, convert, stored
+from .money import BillingPeriod, Money, arithmetic, convert, stored
 from .pricing import IDENTIFIER, PricingModel, PricingRecord, PricingSource, PricingUnit
 
 MODEL_ID = re.compile(r"^[a-z][a-z0-9_.-]{2,63}$")
@@ -346,10 +346,11 @@ def breakdown(
         else:
             unknown[name] += 1
     grand = sum((m.amount for m in known.values()), Decimal(0))
-    shares = [
-        Share(name, money, stored(money.amount / grand) if grand else None, priced[name], unknown[name])
-        for name, money in known.items()
-    ]
+    with arithmetic():
+        shares = [
+            Share(name, money, stored(money.amount / grand) if grand else None, priced[name], unknown[name])
+            for name, money in known.items()
+        ]
     return tuple(sorted(shares, key=lambda s: (-s.monthly.amount, s.key is None, s.key or "")))
 
 
