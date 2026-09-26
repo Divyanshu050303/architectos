@@ -81,3 +81,40 @@ def test_the_largest_architecture_validates_completely_and_deterministically() -
         "configuration.retries-without-timeout",
         "completeness.unknown-values",
     }
+
+
+SECRET = "hunter2-do-not-leak"
+
+
+def test_secret_values_never_reach_findings_or_verdicts() -> None:
+    """Rules report named IR fields only: settings kept in ``extra``, labels in ``metadata`` and
+    descriptions never appear in a finding, whatever their names."""
+    base = largest()
+    leaky = tuple(
+        Node(
+            n.id,
+            n.kind,
+            n.name,
+            description=f"uses {SECRET}",
+            technology=n.technology,
+            configuration=Configuration(
+                dict(n.configuration.values),
+                unknown=n.configuration.unknown,
+                extra={"db_password": SECRET, "connection_string": f"postgres://u:{SECRET}@h/db"},
+            ),
+            metadata={"api_key": SECRET},
+        )
+        for n in base.nodes[:50]
+    )
+    ir = ArchitectureIR(
+        "Leaky",
+        nodes=leaky,
+        connections=tuple(c for c in base.connections if c.source_id < "n0050" and c.target_id < "n0050"),
+    )
+    policy = ArchitecturePolicy(prohibited_technologies=frozenset({"mongodb"}), require_tls=True)
+    result = DeterministicValidationEngine().validate(
+        ir, RevisionInfo("leaky", 1, "0" * 64), requirements=(), policy=policy, config=ValidationConfig()
+    )
+    assert result.findings
+    assert SECRET not in repr([f.to_dict() for f in result.findings])
+    assert SECRET not in repr([r.to_dict() for r in result.requirement_results])

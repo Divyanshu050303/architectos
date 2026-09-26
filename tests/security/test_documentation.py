@@ -85,6 +85,7 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-009-requirements-engine.md",
         "ADR-002-architecture-ir.md",
         "ADR-010-architecture-records-and-versioning.md",
+        "ADR-011-deterministic-validation.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
@@ -92,3 +93,5 @@ def test_the_decisions_are_recorded() -> None:
     assert (DOCS / "frontend" / "projects-requirements-contract.md").exists()
     assert (DOCS / "requirements-engine.md").exists()
     assert (DOCS / "frontend" / "architecture-contract.md").exists()
+    assert (DOCS / "frontend" / "validation-contract.md").exists()
+    assert (DOCS / "architecture" / "validation-engine.md").exists()

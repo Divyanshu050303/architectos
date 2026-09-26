@@ -329,3 +329,25 @@ def test_the_rule_catalog_describes_every_rule(uow: FakeUnitOfWork) -> None:
         {"id", "version", "category", "severity", "profiles", "mandatory", "parameters"} <= set(r)
         for r in rules
     )
+
+
+async def test_a_storage_failure_is_raised_not_swallowed(
+    service: ValidationService,
+    uow: FakeUnitOfWork,
+    clock: FakeClock,
+    world: World,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The run and its audit entry are written in one transaction: a failing write propagates (the
+    API answers 500 without internals) and the unit of work rolls everything back."""
+    aid = await architecture(uow, clock, world)
+
+    async def failing(*args: Any, **kwargs: Any) -> Any:
+        raise ConnectionError("database went away")
+
+    monkeypatch.setattr(uow.validations, "add", failing)
+    recorded = len(uow.audit.events)
+    with pytest.raises(ConnectionError):
+        await validate(service, world, aid)
+    assert len(uow.audit.events) == recorded
+    assert uow.rollbacks >= 1
