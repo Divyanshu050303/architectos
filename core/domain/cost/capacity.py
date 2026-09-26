@@ -26,10 +26,10 @@ from core.domain.capacity.results import (
 )
 from core.domain.capacity.scenarios import ScalingKind, ScalingOption
 from core.domain.capacity.workload import WorkloadProfile, WorkloadType
+from core.domain.numbers import arithmetic
 
 from .analyses import CostAnalysisRequest
 from .errors import IncompatibleCapacityAnalysis
-from .money import arithmetic
 
 USABLE = frozenset(
     {

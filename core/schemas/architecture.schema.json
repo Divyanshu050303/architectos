@@ -437,8 +437,10 @@
               "autoscaling_max_replicas",
               "autoscaling_min_replicas",
               "autoscaling_target_cpu_ratio",
+              "availability",
               "availability_zones",
               "backup_enabled",
+              "backup_interval_seconds",
               "backup_retention_seconds",
               "boundary_type",
               "cpu_core_seconds_per_request",
@@ -446,10 +448,16 @@
               "cpu_request_cores",
               "deployment_model",
               "eviction_policy",
+              "failover_mode",
+              "failover_seconds",
+              "failure_independence",
               "instance_class",
               "max_connections",
               "memory_limit_bytes",
               "memory_request_bytes",
+              "min_healthy_replicas",
+              "mtbf_seconds",
+              "mttr_seconds",
               "multi_az",
               "network_bandwidth_bytes_per_second",
               "partitions",
@@ -458,9 +466,13 @@
               "pricing_service",
               "pricing_sku",
               "pricing_storage_sku",
+              "redundancy_group",
+              "redundancy_group_min_healthy",
               "region",
+              "replica_availability",
               "replicas",
               "replication_factor",
+              "replication_lag_seconds",
               "replication_mode",
               "retention_seconds",
               "runtime",
@@ -490,6 +502,11 @@
               "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
             },
+            "availability": {
+              "description": "Availability of the component as a whole (0.999 = 99.9 %), e.g. as its provider commits to.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
             "availability_zones": {
               "description": "Availability zones used.",
               "items": {
@@ -501,6 +518,11 @@
             "backup_enabled": {
               "description": "Backups are taken.",
               "type": "boolean"
+            },
+            "backup_interval_seconds": {
+              "description": "Time between backups, in seconds (the data a restore can lose).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             },
             "backup_retention_seconds": {
               "description": "How long backups are kept, in seconds.",
@@ -558,6 +580,27 @@
                 "volatile_ttl"
               ]
             },
+            "failover_mode": {
+              "description": "How work moves off a failed replica or member.",
+              "enum": [
+                "automatic",
+                "manual",
+                "none"
+              ]
+            },
+            "failover_seconds": {
+              "description": "Time for a failover to complete, in seconds.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "failure_independence": {
+              "description": "Whether its replicas (and its redundancy group's members) fail independently of each other.",
+              "enum": [
+                "correlated",
+                "independent",
+                "unknown"
+              ]
+            },
             "instance_class": {
               "description": "Provider instance class, e.g. db.r6g.large.",
               "minLength": 1,
@@ -577,6 +620,21 @@
               "description": "Memory reserved per instance, in bytes.",
               "minimum": 0,
               "type": "integer"
+            },
+            "min_healthy_replicas": {
+              "description": "Fewest healthy replicas the component needs to serve (k of n).",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "mtbf_seconds": {
+              "description": "Mean time between failures of one replica, in seconds.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "mttr_seconds": {
+              "description": "Mean time to repair one replica, in seconds.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             },
             "multi_az": {
               "description": "Runs across availability zones.",
@@ -626,10 +684,26 @@
               "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$",
               "type": "string"
             },
+            "redundancy_group": {
+              "description": "Components with the same group are interchangeable alternatives (e.g. one service per region).",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            "redundancy_group_min_healthy": {
+              "description": "Fewest healthy members the redundancy group needs to serve.",
+              "minimum": 1,
+              "type": "integer"
+            },
             "region": {
               "description": "Cloud region, e.g. eu-west-1.",
               "minLength": 1,
               "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            },
+            "replica_availability": {
+              "description": "Availability of one replica (0.99 = 99 %).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
             },
             "replicas": {
@@ -641,6 +715,11 @@
               "description": "Copies of each message kept.",
               "minimum": 1,
               "type": "integer"
+            },
+            "replication_lag_seconds": {
+              "description": "Most data asynchronous replication can lose on failover, in seconds.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             },
             "replication_mode": {
               "description": "How data is replicated.",

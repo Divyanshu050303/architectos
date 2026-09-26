@@ -14,6 +14,7 @@ from core.domain.capacity import errors as capacity_errors
 from core.domain.cost import errors as cost_errors
 from core.domain.errors import DomainError
 from core.domain.projects import errors as project_errors
+from core.domain.reliability import errors as reliability_errors
 from core.domain.requirements import errors as requirement_errors
 from core.domain.requirements.enums import RequirementType
 from core.domain.requirements.requirements import METRICS
@@ -32,6 +33,7 @@ API_DOCS = "".join(
         "validation.md",
         "capacity.md",
         "cost.md",
+        "reliability.md",
     )
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
@@ -53,9 +55,9 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
-    # validation, 6 capacity and 4 cost endpoints (GET /validation/rules, /capacity/models and
-    # /cost/models are not project-scoped)
-    assert len(served) == 53
+    # validation, 6 capacity, 4 cost and 5 reliability endpoints (GET /validation/rules,
+    # /capacity/models, /cost/models and /reliability/models are not project-scoped)
+    assert len(served) == 58
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -83,6 +85,8 @@ def test_every_error_code_is_documented() -> None:
             cost_errors.CostAnalysisNotFound,
             cost_errors.PricingSnapshotNotFound,
             cost_errors.InvalidMoney,
+            reliability_errors.InvalidReliabilityRequest,
+            reliability_errors.ReliabilityAnalysisNotFound,
         )
     }
     assert {code for code in codes if code not in API_DOCS} == set()
@@ -113,6 +117,7 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-011-deterministic-validation.md",
         "ADR-012-deterministic-capacity.md",
         "ADR-013-deterministic-cost.md",
+        "ADR-014-deterministic-reliability.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
@@ -126,3 +131,5 @@ def test_the_decisions_are_recorded() -> None:
     assert (DOCS / "architecture" / "capacity-engine.md").exists()
     assert (DOCS / "frontend" / "cost-contract.md").exists()
     assert (DOCS / "architecture" / "cost-engine.md").exists()
+    assert (DOCS / "frontend" / "reliability-contract.md").exists()
+    assert (DOCS / "architecture" / "reliability-engine.md").exists()

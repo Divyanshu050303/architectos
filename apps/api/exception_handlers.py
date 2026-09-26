@@ -98,6 +98,7 @@ from core.domain.projects.errors import (
     ProjectNotFound,
     ProjectSlugTaken,
 )
+from core.domain.reliability.errors import InvalidReliabilityRequest, ReliabilityAnalysisNotFound
 from core.domain.requirements.errors import (
     CandidateAlreadyPromoted,
     ChangeReasonRequired,
@@ -210,6 +211,8 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidCostRequest: 422,
     IncompatibleCapacityAnalysis: 422,
     CostAnalysisNotFound: 404,
+    InvalidReliabilityRequest: 422,
+    ReliabilityAnalysisNotFound: 404,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

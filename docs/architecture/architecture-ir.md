@@ -99,7 +99,12 @@ reached:
   `pricing_service`, `pricing_sku` (else `instance_class` is matched exactly),
   `pricing_storage_sku`, `pricing_conditions`: how a component maps to its organization's
   [pricing snapshots](../api/pricing.md), never inferred when absent (see
-  [the cost engine](cost-engine.md#resource-mapping)).
+  [the cost engine](cost-engine.md#resource-mapping)); reliability on nodes `availability`
+  (the component as a whole) and `replica_availability` (fractions, 0.999 = 99.9 %),
+  `mtbf_seconds`, `mttr_seconds`, `min_healthy_replicas`, `failure_independence`
+  (`independent`/`correlated`/`unknown`), `failover_mode` (`none`/`manual`/`automatic`),
+  `failover_seconds`, `redundancy_group`, `redundancy_group_min_healthy`,
+  `replication_lag_seconds`, `backup_interval_seconds`: declared, never defaulted.
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.
 - `extra`: settings the IR does not recognize, **preserved as found** (bounded; fractional numbers

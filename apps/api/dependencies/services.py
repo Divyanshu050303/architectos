@@ -30,6 +30,7 @@ from core.domain.organizations.invitation_service import InvitationService, Invi
 from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
 from core.domain.projects.project_service import ProjectService
+from core.domain.reliability.reliability_service import ReliabilityService
 from core.domain.requirements.analysis_service import RequirementAnalysisService
 from core.domain.requirements.requirement_service import RequirementService
 from core.domain.requirements.requirement_set_service import RequirementSetService
@@ -299,6 +300,18 @@ def get_cost_service(
 
 
 CostServiceDep = Annotated[CostService, Depends(get_cost_service)]
+
+
+def get_reliability_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> ReliabilityService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return ReliabilityService(
+        SqlAlchemyUnitOfWork(db, client), request.app.state.reliability_engine, clock=clock
+    )
+
+
+ReliabilityServiceDep = Annotated[ReliabilityService, Depends(get_reliability_service)]
 
 
 def get_requirement_analysis_service(

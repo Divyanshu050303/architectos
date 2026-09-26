@@ -27,9 +27,10 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any
 
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 
-from .money import BillingPeriod, Money, arithmetic, convert, stored
+from .money import BillingPeriod, Money, convert, stored
 from .pricing import PricingModel
 from .results import CostCategory, CostKind, CostResult, CostStatus, LineItem, Share, Totals, breakdown
 

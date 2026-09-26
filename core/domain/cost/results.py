@@ -36,10 +36,11 @@ from core.domain.engine_results import (
     read_evidence,
     text_problem,
 )
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .errors import InvalidCostResult
-from .money import BillingPeriod, Money, arithmetic, convert, stored
+from .money import BillingPeriod, Money, convert, stored
 from .pricing import IDENTIFIER, PricingModel, PricingRecord, PricingSource, PricingUnit
 
 MODEL_ID = re.compile(r"^[a-z][a-z0-9_.-]{2,63}$")

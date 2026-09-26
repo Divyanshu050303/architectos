@@ -132,6 +132,22 @@ SPECIFIED = PUBLIC | {
         "/api/v1/projects/{project_id}/architectures/{architecture_id}/cost-analyses/{cost_analysis_id}/line-items",
     ),
     ("GET", "/api/v1/cost/models"),
+    # Milestone 9: reliability analyses of an architecture.
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/reliability-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/reliability-analyses"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/reliability-analyses/{reliability_analysis_id}",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/reliability-analyses/{reliability_analysis_id}/components",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/reliability-analyses/{reliability_analysis_id}/findings",
+    ),
+    ("GET", "/api/v1/reliability/models"),
 }
 
 

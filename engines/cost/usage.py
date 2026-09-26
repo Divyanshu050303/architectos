@@ -23,8 +23,8 @@ from core.architecture_ir.node import Node
 from core.domain.capacity.results import ComponentResult, Estimate
 from core.domain.capacity.units import Dimension, unit_for
 from core.domain.cost.capacity import CapacityBasis
-from core.domain.cost.money import arithmetic
 from core.domain.engine_results import Evidence
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .context import CostContext

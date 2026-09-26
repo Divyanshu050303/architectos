@@ -261,6 +261,8 @@ def test_there_is_one_validation_framework() -> None:
         "engines/capacity/engine.py: Registry",
         # Likewise the cost engine's registry of cost models (Milestone 8): models bill charges.
         "engines/cost/calculator.py: Registry",
+        # And the reliability engine's registry of reliability models and steps (Milestone 9).
+        "engines/reliability/engine.py: Registry",
     }
     assert set(found) - allowed == set()
 
