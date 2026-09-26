@@ -232,6 +232,9 @@ PLANS: dict[str, Plan] = {
         lambda target: {"snapshotId": target.snapshot_id, "pricingDate": "2026-09-26", "label": "Audited"},
         with_prices,
     ),
+    f"run_reliability_analysis{_ARCH}reliability_analyses_post": Plan(
+        {"architecture.reliability_analyzed"}, "architecture", {"label": "Audited"}, with_architecture
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -372,6 +375,12 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     assert cost.status_code == 201, cost.text
+    reliability = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/reliability-analyses",
+        json={},
+        headers=auth,
+    )
+    assert reliability.status_code == 201, reliability.text
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -391,6 +400,7 @@ async def test_read_only_endpoints_write_nothing(
         "run_id": run.json()["id"],
         "capacity_analysis_id": analysis.json()["id"],
         "cost_analysis_id": cost.json()["id"],
+        "reliability_analysis_id": reliability.json()["id"],
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

@@ -19,6 +19,7 @@ from core.domain.organizations.repository import (
     OrganizationRepository,
 )
 from core.domain.projects.repository import ProjectRepository
+from core.domain.reliability.repository import ReliabilityAnalysisRepository
 from core.domain.requirements.repository import (
     RequirementAnalysisRepository,
     RequirementRepository,
@@ -78,6 +79,9 @@ class UnitOfWork(Protocol):
 
     @property
     def cost(self) -> CostAnalysisRepository: ...
+
+    @property
+    def reliability(self) -> ReliabilityAnalysisRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

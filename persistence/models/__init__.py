@@ -12,6 +12,7 @@ from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
 from .pricing import PricingRecordRow, PricingSnapshotRecord
 from .project import ProjectRecord
+from .reliability import ReliabilityAnalysisRecord, ReliabilityComponentRecord, ReliabilityFindingRecord
 from .requirement import RequirementRecord, RequirementVersionRecord
 from .requirement_analysis import RequirementAnalysisRecord
 from .requirement_set import RequirementSetItemRecord, RequirementSetRecord
@@ -38,6 +39,9 @@ __all__ = [
     "PricingRecordRow",
     "PricingSnapshotRecord",
     "ProjectRecord",
+    "ReliabilityAnalysisRecord",
+    "ReliabilityComponentRecord",
+    "ReliabilityFindingRecord",
     "RequirementAnalysisRecord",
     "RequirementRecord",
     "RequirementSetItemRecord",
