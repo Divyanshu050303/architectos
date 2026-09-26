@@ -16,12 +16,14 @@ from core.domain.requirements import errors as requirement_errors
 from core.domain.requirements.enums import RequirementType
 from core.domain.requirements.requirements import METRICS
 from core.domain.requirements.value_objects import UNITS
+from core.domain.validation.errors import InvalidValidationConfig, ValidationRunNotFound
 
 from .support import inventory
 
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 API_DOCS = "".join(
-    (DOCS / "api" / name).read_text() for name in ("projects.md", "requirements.md", "architecture.md")
+    (DOCS / "api" / name).read_text()
+    for name in ("projects.md", "requirements.md", "architecture.md", "validation.md")
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
     DOCS / "domain" / "requirements.md"
@@ -41,8 +43,9 @@ def in_scope(path: str) -> bool:
 def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
-    # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis and 14 architecture endpoints
-    assert len(served) == 39
+    # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture and 4
+    # validation endpoints (GET /validation/rules is not project-scoped)
+    assert len(served) == 43
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -56,6 +59,7 @@ def test_every_error_code_is_documented() -> None:
         for error in vars(module).values()
         if isinstance(error, type) and issubclass(error, DomainError) and error is not DomainError
     }
+    codes |= {InvalidValidationConfig.code, ValidationRunNotFound.code}  # the others are never returned
     assert {code for code in codes if code not in API_DOCS} == set()
 
 

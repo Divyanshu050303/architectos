@@ -11,12 +11,14 @@ architecture.
 """
 
 import uuid
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from .errors import InvalidRunTransition
-from .results import Summary, ValidationResult
+from .results import Limitation, RequirementResult, RuleFailure, RuleSet, Summary, ValidationResult
 
 
 class RunStatus(StrEnum):
@@ -77,3 +79,54 @@ class ValidationRun:
     def fail(self, error: RunError, at: datetime) -> ValidationRun:
         self._move(RunStatus.FAILED)
         return replace(self, status=RunStatus.FAILED, completed_at=at, error=error)
+
+
+@dataclass(frozen=True, slots=True)
+class RunInputs:
+    """What a run was given besides the revision, recorded with it so a result can be explained
+    later (the project's policy and requirements may change afterwards)."""
+
+    config: Mapping[str, Any] = field(default_factory=dict)  # ValidationConfig.to_dict()
+    policy: Mapping[str, Any] | None = None  # the policy in force, None when it constrained nothing
+    requirements: tuple[tuple[str, int, str], ...] = ()  # (id, version, status) of each one given
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "config": dict(self.config),
+            "policy": dict(self.policy) if self.policy is not None else None,
+            "requirements": [list(r) for r in self.requirements],
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class RunReport:
+    """A stored run as read back: everything but its findings, which are read page by page.
+    ``run.result`` is None here; the summary and the rest are stored with the run."""
+
+    run: ValidationRun
+    inputs: RunInputs
+    rule_set: RuleSet | None = None
+    context_fingerprint: str | None = None
+    result_fingerprint: str | None = None
+    summary: Summary | None = None
+    requirement_results: tuple[RequirementResult, ...] = ()
+    failures: tuple[RuleFailure, ...] = ()
+    limitations: tuple[Limitation, ...] = ()
+
+    @classmethod
+    def of(cls, run: ValidationRun, inputs: RunInputs) -> RunReport:
+        """The report of a run just executed (its result still attached)."""
+        result = run.result
+        if result is None:
+            return cls(replace(run, result=None), inputs)
+        return cls(
+            replace(run, result=None),
+            inputs,
+            result.rule_set,
+            result.context_fingerprint,
+            result.fingerprint,
+            result.summary,
+            result.requirement_results,
+            result.failures,
+            result.limitations,
+        )

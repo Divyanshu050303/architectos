@@ -26,8 +26,10 @@ from apps.api.routes import (
     requirement_sets,
     requirements,
     users,
+    validations,
 )
 from engines.requirements.factory import build_engine
+from engines.validation.service import DeterministicValidationEngine
 
 API_PREFIX = "/api/v1"
 _UUID = "[0-9a-fA-F-]{36}"
@@ -61,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         timeout_seconds=settings.requirements_llm_timeout_seconds,
         max_output_tokens=settings.requirements_llm_max_output_tokens,
     )
+    app.state.validation_engine = DeterministicValidationEngine()
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -103,4 +106,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(requirement_sets.router, prefix=API_PREFIX)
     app.include_router(requirement_analyses.router, prefix=API_PREFIX)
     app.include_router(architectures.router, prefix=API_PREFIX)
+    app.include_router(validations.router, prefix=API_PREFIX)
     return app

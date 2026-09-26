@@ -23,3 +23,11 @@ class InvalidValidationConfig(DomainError):
 
     code = "invalid_validation_config"
     message = "The validation configuration is invalid."
+
+
+class ValidationRunNotFound(DomainError):
+    """No such run for this architecture (also when it belongs to another architecture, project or
+    tenant: indistinguishable on purpose)."""
+
+    code = "validation_run_not_found"
+    message = "Validation run not found."

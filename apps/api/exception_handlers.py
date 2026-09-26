@@ -98,6 +98,7 @@ from core.domain.requirements.errors import (
     RequirementVersionConflict,
     RequirementVersionNotFound,
 )
+from core.domain.validation.errors import InvalidValidationConfig, ValidationRunNotFound
 
 logger = logging.getLogger("architectos.api")
 security_log = logging.getLogger("architectos.security")
@@ -179,6 +180,8 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidRevision: 422,
     InvalidLayout: 422,
     InvalidArchitecturePolicy: 422,
+    InvalidValidationConfig: 422,
+    ValidationRunNotFound: 404,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

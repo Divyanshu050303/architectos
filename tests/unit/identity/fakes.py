@@ -52,6 +52,9 @@ from core.domain.requirements.enums import RequirementStatus
 from core.domain.requirements.errors import CandidateAlreadyPromoted
 from core.domain.requirements.queries import RequirementQuery
 from core.domain.requirements.requirement_sets import NewRequirementSet, RequirementSet
+from core.domain.validation.queries import FindingQuery, RunQuery
+from core.domain.validation.results import Finding
+from core.domain.validation.runs import RunInputs, RunReport, ValidationRun
 
 
 class FakeClock:
@@ -778,6 +781,55 @@ class FakeArchitectureRepository:
         return layout
 
 
+class FakeValidationRunRepository:
+    """Keeps each run's report and findings, like the append-only tables."""
+
+    def __init__(self) -> None:
+        self.reports: dict[uuid.UUID, RunReport] = {}
+        self.findings: dict[uuid.UUID, tuple[Finding, ...]] = {}
+
+    async def add(self, run: ValidationRun, inputs: RunInputs) -> RunReport:
+        report = RunReport.of(run, inputs)
+        self.reports[run.id] = report
+        self.findings[run.id] = run.result.findings if run.result is not None else ()
+        return report
+
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, run_id: uuid.UUID
+    ) -> RunReport | None:
+        report = self.reports.get(run_id)
+        if report is None or (report.run.project_id, report.run.architecture_id) != (
+            project_id,
+            architecture_id,
+        ):
+            return None
+        return report
+
+    async def list_for_architecture(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: RunQuery
+    ) -> list[RunReport]:
+        found = [
+            r
+            for r in self.reports.values()
+            if (r.run.project_id, r.run.architecture_id) == (project_id, architecture_id)
+            and (query.revision is None or r.run.revision_number == query.revision)
+            and (query.after is None or (r.run.requested_at, r.run.id) < query.after)
+        ]
+        return sorted(found, key=lambda r: (r.run.requested_at, r.run.id), reverse=True)[: query.limit]
+
+    async def list_findings(self, run_id: uuid.UUID, query: FindingQuery) -> list[tuple[int, Finding]]:
+        return [
+            (position, f)
+            for position, f in enumerate(self.findings.get(run_id, ()))
+            if (query.after is None or position > query.after)
+            and (query.severity is None or f.severity is query.severity)
+            and (query.category is None or f.category is query.category)
+            and (query.blocking is None or f.blocking is query.blocking)
+            and (query.rule_id is None or f.rule_id == query.rule_id)
+            and (query.entity_id is None or query.entity_id in f.entity_ids)
+        ][: query.limit]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -793,6 +845,7 @@ class FakeUnitOfWork:
         self._requirement_sets = FakeRequirementSetRepository(clock)
         self._requirement_analyses = FakeRequirementAnalysisRepository(clock)
         self._architectures = FakeArchitectureRepository(clock)
+        self._validations = FakeValidationRunRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -847,6 +900,10 @@ class FakeUnitOfWork:
     @property
     def architectures(self) -> FakeArchitectureRepository:
         return self._architectures
+
+    @property
+    def validations(self) -> FakeValidationRunRepository:
+        return self._validations
 
     async def __aenter__(self) -> Self:
         return self

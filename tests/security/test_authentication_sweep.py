@@ -92,6 +92,12 @@ SPECIFIED = PUBLIC | {
     ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/versions/{version}"),
     ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/versions/{version}/restore"),
     ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/compare"),
+    # Milestone 6 (deterministic validation).
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/validations"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/validations"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/validations/{run_id}"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/validations/{run_id}/findings"),
+    ("GET", "/api/v1/validation/rules"),
 }
 
 

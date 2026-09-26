@@ -74,7 +74,24 @@ async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing
             headers=ada,
         )
     ).json()
-    ids = {"project_id": project["id"], "requirement_id": requirement["id"]}
+    architecture = (
+        await client.post(
+            f"/api/v1/projects/{project['id']}/architectures", json={"name": "Secret design"}, headers=ada
+        )
+    ).json()
+    run = (
+        await client.post(
+            f"/api/v1/projects/{project['id']}/architectures/{architecture['id']}/validations",
+            json={},
+            headers=ada,
+        )
+    ).json()
+    ids = {
+        "project_id": project["id"],
+        "requirement_id": requirement["id"],
+        "architecture_id": architecture["id"],
+        "run_id": run["id"],
+    }
 
     async def state() -> tuple[object, ...]:
         return (

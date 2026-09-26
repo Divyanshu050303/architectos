@@ -81,6 +81,9 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     },
     "restore_architecture_version_api_v1_projects__project_id__architectures__architecture_id"
     "__versions__version__restore_post": {"baseVersion": 1},
+    "run_validation_api_v1_projects__project_id__architectures__architecture_id__validations_post": {
+        "profile": "default"
+    },
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",
