@@ -44,6 +44,7 @@ REGION = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")  # e.g. eu-west-1, eu-west-1a
 # lower-case identifiers ("rds", "on_demand"); SKUs are the provider's ("db.r6g.large").
 PRICING_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 PRICING_SKU = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$")
+REDUNDANCY_GROUP = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")  # e.g. "api-regions"
 CONNECTION = "connection"
 
 
@@ -310,6 +311,88 @@ NODE_PROPERTIES: dict[str, PropertySpec] = {
             _DEPLOYED,
             "Conditions the price must carry, e.g. on_demand.",
             pattern=PRICING_IDENTIFIER,
+        ),
+        # reliability (read by the reliability engine: declared by the architect or read from a system;
+        # nothing is assumed when they are absent). Availability is a fraction (0.999 = 99.9 %).
+        _spec(
+            "availability",
+            _D,
+            _DEPLOYED,
+            "Availability of the component as a whole (0.999 = 99.9 %), e.g. as its provider commits to.",
+            minimum="0",
+            maximum="1",
+        ),
+        _spec(
+            "replica_availability",
+            _D,
+            _RUNNING,
+            "Availability of one replica (0.99 = 99 %).",
+            minimum="0",
+            maximum="1",
+        ),
+        _spec(
+            "mtbf_seconds",
+            _D,
+            _RUNNING,
+            "Mean time between failures of one replica, in seconds.",
+            minimum="0",
+        ),
+        _spec("mttr_seconds", _D, _RUNNING, "Mean time to repair one replica, in seconds.", minimum="0"),
+        _spec(
+            "min_healthy_replicas",
+            _I,
+            _RUNNING,
+            "Fewest healthy replicas the component needs to serve (k of n).",
+            minimum="1",
+        ),
+        _spec(
+            "failure_independence",
+            _C,
+            _DEPLOYED,
+            "Whether its replicas (and its redundancy group's members) fail independently of each other.",
+            choices={"independent", "correlated", "unknown"},
+        ),
+        _spec(
+            "failover_mode",
+            _C,
+            _DEPLOYED - {K.EXTERNAL},
+            "How work moves off a failed replica or member.",
+            choices={"none", "manual", "automatic"},
+        ),
+        _spec(
+            "failover_seconds",
+            _D,
+            _DEPLOYED - {K.EXTERNAL},
+            "Time for a failover to complete, in seconds.",
+            minimum="0",
+        ),
+        _spec(
+            "redundancy_group",
+            _T,
+            _DEPLOYED,
+            "Components with the same group are interchangeable alternatives (e.g. one service per region).",
+            pattern=REDUNDANCY_GROUP,
+        ),
+        _spec(
+            "redundancy_group_min_healthy",
+            _I,
+            _DEPLOYED,
+            "Fewest healthy members the redundancy group needs to serve.",
+            minimum="1",
+        ),
+        _spec(
+            "replication_lag_seconds",
+            _D,
+            _DATA | {K.QUEUE},
+            "Most data asynchronous replication can lose on failover, in seconds.",
+            minimum="0",
+        ),
+        _spec(
+            "backup_interval_seconds",
+            _D,
+            _DATA,
+            "Time between backups, in seconds (the data a restore can lose).",
+            minimum="0",
         ),
         # boundaries
         _spec(

@@ -18,13 +18,12 @@ days). Months therefore all have the same length here; a calendar month has 672 
 
 import decimal
 import re
-from collections.abc import Iterator
-from contextlib import contextmanager
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Self
 
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .errors import CurrencyMismatch, InvalidMoney
@@ -39,15 +38,6 @@ MINOR_UNITS: dict[str, int] = {
                      "GNF", "KMF", "RWF", "VUV"), 0),
     **dict.fromkeys(("BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"), 3),
 }  # fmt: skip
-
-
-@contextmanager
-def arithmetic() -> Iterator[None]:
-    """The context every monetary calculation runs in: 34 digits, half-even."""
-    with decimal.localcontext() as context:
-        context.prec = 34
-        context.rounding = decimal.ROUND_HALF_EVEN
-        yield
 
 
 def currency(value: object, field: str = "currency") -> str:

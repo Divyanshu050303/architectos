@@ -26,12 +26,13 @@ from typing import Any
 
 from core.domain.capacity.scenarios import Scenario
 from core.domain.engine_results import Evidence
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .aggregation import Sensitivity, sensitivity
 from .analyses import CostAnalysisRequest
 from .errors import InvalidCostRequest, InvalidMoney
-from .money import HOURS_PER_MONTH, BillingPeriod, Money, amount, arithmetic, convert, stored
+from .money import HOURS_PER_MONTH, BillingPeriod, Money, amount, convert, stored
 from .results import CostResult, LineItem, LineStatus
 
 MAX_COST_SCENARIOS = 10

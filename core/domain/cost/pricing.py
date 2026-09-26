@@ -29,11 +29,12 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Self
 
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 from core.domain.text import has_forbidden_characters
 
 from .errors import InvalidMoney, InvalidPricingRecord, InvalidPricingSnapshot
-from .money import amount, arithmetic, currency, stored
+from .money import amount, currency, stored
 
 IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")  # provider, service, record id
 SKU = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$")  # e.g. "db.r6g.large", "AmazonS3:TimedStorage"

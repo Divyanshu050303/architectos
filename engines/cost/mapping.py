@@ -22,10 +22,10 @@ configuration behind it. A component that runs on premises is not priced (``NotP
 from decimal import Decimal
 
 from core.architecture_ir.node import Node
-from core.domain.cost.money import arithmetic
 from core.domain.cost.pricing import SKU, PricingUnit
 from core.domain.cost.results import CostCategory, CostKind
 from core.domain.engine_results import Evidence
+from core.domain.numbers import arithmetic
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .calculator import Charge, NotPriced
