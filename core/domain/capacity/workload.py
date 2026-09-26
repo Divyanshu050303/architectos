@@ -107,6 +107,18 @@ class WorkloadAssumption:
             "value": self.value.to_dict() if self.value is not None else None,
         }
 
+    @classmethod
+    def from_dict(cls, raw: object) -> WorkloadAssumption:
+        """Strict: {key, statement, value?}, the value a {value, unit} quantity."""
+        if not isinstance(raw, Mapping) or set(raw) - {"key", "statement", "value"}:
+            raise _invalid("assumptions", "invalid_assumption")
+        value = raw.get("value")
+        try:
+            parsed = Quantity.from_dict(value, "assumptions.value") if value is not None else None
+        except InvalidQuantity as error:
+            raise _invalid(error.details["field"], error.details["reason"]) from None
+        return cls(raw.get("key"), raw.get("statement"), parsed)  # type: ignore[arg-type]
+
 
 @dataclass(frozen=True, slots=True)
 class WorkloadProfile:
@@ -303,16 +315,7 @@ class WorkloadProfile:
         raw_assumptions = data.get("assumptions") or []
         if not isinstance(raw_assumptions, list) or len(raw_assumptions) > MAX_ASSUMPTIONS:
             raise _invalid("assumptions", "too_many")
-        assumptions = []
-        for raw in raw_assumptions:
-            if not isinstance(raw, Mapping) or set(raw) - {"key", "statement", "value"}:
-                raise _invalid("assumptions", "invalid_assumption")
-            value = raw.get("value")
-            try:
-                parsed = Quantity.from_dict(value, "assumptions.value") if value is not None else None
-            except InvalidQuantity as error:
-                raise _invalid(error.details["field"], error.details["reason"]) from None
-            assumptions.append(WorkloadAssumption(raw.get("key"), raw.get("statement"), parsed))  # type: ignore[arg-type]
+        assumptions = [WorkloadAssumption.from_dict(raw) for raw in raw_assumptions]
         raw_requirements = data.get("requirement_ids") or []
         if not isinstance(raw_requirements, list):
             raise _invalid("requirement_ids", "not_a_list")

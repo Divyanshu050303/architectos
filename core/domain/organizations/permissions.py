@@ -22,6 +22,8 @@ class Permission(StrEnum):
 
     AUDIT_READ = "audit.read"
 
+    PRICING_MANAGE = "pricing.manage"  # create an organization's pricing snapshots
+
     PROJECT_READ = "project.read"
     PROJECT_CREATE = "project.create"
     PROJECT_UPDATE = "project.update"
@@ -76,6 +78,7 @@ _ADMIN = _MEMBER | {
     Permission.MEMBER_REMOVE,
     Permission.MEMBER_UPDATE_ROLE,
     Permission.AUDIT_READ,
+    Permission.PRICING_MANAGE,
     Permission.PROJECT_ARCHIVE,
     Permission.PROJECT_DELETE,
     Permission.PROJECT_POLICY_UPDATE,

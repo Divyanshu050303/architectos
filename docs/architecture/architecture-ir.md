@@ -95,7 +95,11 @@ reached:
   and for traffic `traffic_ratio`, `calls_per_request`, `cache_hit_ratio`, `access`, `pool_size`;
   capacity on nodes `throughput_limit_per_second`, `throughput_per_replica_per_second`,
   `cpu_core_seconds_per_request`, `network_bandwidth_bytes_per_second` (see
-  [the capacity engine](capacity-engine.md#demand-propagation)).
+  [the capacity engine](capacity-engine.md#demand-propagation)); pricing on nodes
+  `pricing_service`, `pricing_sku` (else `instance_class` is matched exactly),
+  `pricing_storage_sku`, `pricing_conditions`: how a component maps to its organization's
+  [pricing snapshots](../api/pricing.md), never inferred when absent (see
+  [the cost engine](cost-engine.md#resource-mapping)).
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.
 - `extra`: settings the IR does not recognize, **preserved as found** (bounded; fractional numbers

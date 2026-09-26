@@ -259,6 +259,8 @@ def test_there_is_one_validation_framework() -> None:
         # The capacity engine's registry of capacity models (Milestone 7): a different contract
         # (models estimate capacity; rules report findings), not a second validation framework.
         "engines/capacity/engine.py: Registry",
+        # Likewise the cost engine's registry of cost models (Milestone 8): models bill charges.
+        "engines/cost/calculator.py: Registry",
     }
     assert set(found) - allowed == set()
 

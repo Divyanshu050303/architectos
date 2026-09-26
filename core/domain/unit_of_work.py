@@ -11,6 +11,7 @@ from typing import Protocol, Self
 from core.domain.architecture.repository import ArchitectureRepository
 from core.domain.audit.repository import AuditRepository
 from core.domain.capacity.repository import CapacityAnalysisRepository
+from core.domain.cost.repository import CostAnalysisRepository, PricingSnapshotRepository
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
 from core.domain.organizations.repository import (
     InvitationRepository,
@@ -71,6 +72,12 @@ class UnitOfWork(Protocol):
 
     @property
     def capacity(self) -> CapacityAnalysisRepository: ...
+
+    @property
+    def pricing(self) -> PricingSnapshotRepository: ...
+
+    @property
+    def cost(self) -> CostAnalysisRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

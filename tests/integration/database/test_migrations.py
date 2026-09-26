@@ -31,6 +31,8 @@ ANALYSIS_TABLES = {"requirement_analyses"}
 ARCHITECTURE_TABLES = {"architectures", "architecture_revisions", "architecture_layouts"}
 VALIDATION_TABLES = {"validation_runs", "validation_findings"}
 CAPACITY_TABLES = {"capacity_analyses", "capacity_components", "capacity_bottlenecks"}
+PRICING_TABLES = {"pricing_snapshots", "pricing_records"}
+COST_TABLES = {"cost_analyses", "cost_line_items"}
 ALL_TABLES = (
     AUTH_TABLES
     | PROJECT_TABLES
@@ -40,6 +42,8 @@ ALL_TABLES = (
     | ARCHITECTURE_TABLES
     | VALIDATION_TABLES
     | CAPACITY_TABLES
+    | PRICING_TABLES
+    | COST_TABLES
 )
 GUARDS = {"audit_logs_reject_change", "requirement_versions_reject_change", "requirement_sets_reject_change"}
 
@@ -220,7 +224,13 @@ def test_downgrading_analyses_leaves_requirement_sets_intact(empty_database_url:
     command.downgrade(config, "0006")
     assert (
         _tables(empty_database_url)
-        == ALL_TABLES - ANALYSIS_TABLES - ARCHITECTURE_TABLES - VALIDATION_TABLES - CAPACITY_TABLES
+        == ALL_TABLES
+        - ANALYSIS_TABLES
+        - ARCHITECTURE_TABLES
+        - VALIDATION_TABLES
+        - CAPACITY_TABLES
+        - PRICING_TABLES
+        - COST_TABLES
     )
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -230,7 +240,10 @@ def test_downgrading_validation_leaves_architectures_intact(empty_database_url: 
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0010")
-    assert _tables(empty_database_url) == ALL_TABLES - VALIDATION_TABLES - CAPACITY_TABLES
+    assert (
+        _tables(empty_database_url)
+        == ALL_TABLES - VALIDATION_TABLES - CAPACITY_TABLES - PRICING_TABLES - COST_TABLES
+    )
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
 
@@ -239,7 +252,25 @@ def test_downgrading_capacity_leaves_validation_intact(empty_database_url: str) 
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0011")
-    assert _tables(empty_database_url) == ALL_TABLES - CAPACITY_TABLES
+    assert _tables(empty_database_url) == ALL_TABLES - CAPACITY_TABLES - PRICING_TABLES - COST_TABLES
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES
+
+
+def test_downgrading_pricing_leaves_capacity_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0012")
+    assert _tables(empty_database_url) == ALL_TABLES - PRICING_TABLES - COST_TABLES
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES
+
+
+def test_downgrading_cost_leaves_pricing_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0013")
+    assert _tables(empty_database_url) == ALL_TABLES - COST_TABLES
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
 
@@ -249,7 +280,13 @@ def test_downgrading_architectures_leaves_requirements_intact(empty_database_url
     command.upgrade(config, "head")
     command.downgrade(config, "0007")
     assert (
-        _tables(empty_database_url) == ALL_TABLES - ARCHITECTURE_TABLES - VALIDATION_TABLES - CAPACITY_TABLES
+        _tables(empty_database_url)
+        == ALL_TABLES
+        - ARCHITECTURE_TABLES
+        - VALIDATION_TABLES
+        - CAPACITY_TABLES
+        - PRICING_TABLES
+        - COST_TABLES
     )
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES

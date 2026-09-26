@@ -1,3 +1,4 @@
+from core.domain.engine_results import InvalidEngineResult
 from core.domain.errors import DomainError
 
 
@@ -16,7 +17,7 @@ class InvalidWorkload(DomainError):
     message = "The workload profile is invalid."
 
 
-class InvalidCapacityResult(DomainError):
+class InvalidCapacityResult(InvalidEngineResult):
     """A capacity result or estimate with malformed fields (a model bug, or a corrupted record).
     ``details`` = {"fields": [...]}."""
 

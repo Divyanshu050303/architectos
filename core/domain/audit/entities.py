@@ -25,6 +25,7 @@ class AuditAction(StrEnum):
     MEMBER_INVITATION_ACCEPTED = "member.invitation_accepted"
     MEMBER_ROLE_CHANGED = "member.role_changed"
     MEMBER_REMOVED = "member.removed"
+    PRICING_SNAPSHOT_CREATED = "pricing_snapshot.created"
     PROJECT_CREATED = "project.created"
     PROJECT_UPDATED = "project.updated"
     PROJECT_ARCHIVED = "project.archived"
@@ -48,6 +49,7 @@ class AuditAction(StrEnum):
     ARCHITECTURE_DELETED = "architecture.deleted"
     ARCHITECTURE_VALIDATED = "architecture.validated"  # a validation run was stored
     ARCHITECTURE_CAPACITY_ANALYZED = "architecture.capacity_analyzed"  # a capacity analysis was stored
+    ARCHITECTURE_COST_ANALYZED = "architecture.cost_analyzed"  # a cost analysis was stored
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

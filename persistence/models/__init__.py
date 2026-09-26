@@ -4,11 +4,13 @@ from .architecture import ArchitectureLayoutRecord, ArchitectureRecord, Architec
 from .audit_log import AuditLogRecord
 from .base import Base
 from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, CapacityComponentRecord
+from .cost import CostAnalysisRecord, CostLineItemRecord
 from .email_verification_token import EmailVerificationTokenRecord
 from .invitation import InvitationRecord
 from .organization import OrganizationRecord
 from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
+from .pricing import PricingRecordRow, PricingSnapshotRecord
 from .project import ProjectRecord
 from .requirement import RequirementRecord, RequirementVersionRecord
 from .requirement_analysis import RequirementAnalysisRecord
@@ -26,11 +28,15 @@ __all__ = [
     "CapacityAnalysisRecord",
     "CapacityBottleneckRecord",
     "CapacityComponentRecord",
+    "CostAnalysisRecord",
+    "CostLineItemRecord",
     "EmailVerificationTokenRecord",
     "InvitationRecord",
     "OrganizationMemberRecord",
     "OrganizationRecord",
     "PasswordResetTokenRecord",
+    "PricingRecordRow",
+    "PricingSnapshotRecord",
     "ProjectRecord",
     "RequirementAnalysisRecord",
     "RequirementRecord",

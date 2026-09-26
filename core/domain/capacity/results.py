@@ -32,6 +32,14 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Self
 
+from core.domain.engine_results import (
+    Evidence,
+    Limitation,
+    ModelSet,
+    Unsupported,
+)
+from core.domain.engine_results import evidence_problem as _evidence
+from core.domain.engine_results import read_evidence as _read_evidence
 from core.domain.requirements.value_objects import decimal_to_str
 
 from .errors import InvalidCapacityResult, InvalidQuantity
@@ -136,28 +144,6 @@ def _read_quantity(data: Any) -> Quantity | None:
 
 def _read_decimal(data: Any) -> Decimal | None:
     return Decimal(data) if data is not None else None
-
-
-@dataclass(frozen=True, slots=True)
-class Evidence:
-    label: str
-    value: str
-
-    def to_dict(self) -> dict[str, str]:
-        return {"label": self.label, "value": self.value}
-
-
-def _evidence(values: object) -> str | None:
-    if not isinstance(values, tuple) or len(values) > MAX_ITEMS:
-        return "evidence"
-    ok = all(
-        isinstance(e, Evidence) and isinstance(e.label, str) and isinstance(e.value, str) for e in values
-    )
-    return None if ok else "evidence"
-
-
-def _read_evidence(data: Any) -> tuple[Evidence, ...]:
-    return tuple(Evidence(e["label"], e["value"]) for e in data or ())
 
 
 @dataclass(frozen=True, slots=True)
@@ -553,87 +539,6 @@ class Bottleneck:
 
 
 @dataclass(frozen=True, slots=True)
-class Unsupported:
-    """A calculation the analysis could not make, and why: no model for a component, missing
-    inputs, or a topology whose traffic semantics are not defined (e.g. a synchronous cycle)."""
-
-    element_id: str
-    code: str
-    message: str
-    missing: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        if isinstance(self.missing, tuple):
-            object.__setattr__(self, "missing", tuple(sorted(set(self.missing))))
-        _check(
-            [
-                None
-                if isinstance(self.element_id, str) and 0 < len(self.element_id) <= MAX_ID
-                else "element_id",
-                _pattern(self.code, CODE, "code"),
-                _text(self.message, "message"),
-                _ids(self.missing, "missing"),
-            ]
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "element_id": self.element_id,
-            "code": self.code,
-            "message": self.message,
-            "missing": list(self.missing),
-        }
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> Self:
-        try:
-            return cls(data["element_id"], data["code"], data["message"], tuple(data.get("missing") or ()))
-        except (KeyError, TypeError) as error:
-            raise InvalidCapacityResult(details={"fields": [type(error).__name__]}) from None
-
-
-@dataclass(frozen=True, slots=True)
-class Limitation:
-    """Something no model of the analysis could establish (e.g. no catalog, no measurements)."""
-
-    code: str
-    message: str
-
-    def __post_init__(self) -> None:
-        _check([_pattern(self.code, CODE, "code"), _text(self.message, "message")])
-
-    def to_dict(self) -> dict[str, str]:
-        return {"code": self.code, "message": self.message}
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> Self:
-        try:
-            return cls(data["code"], data["message"])
-        except (KeyError, TypeError) as error:
-            raise InvalidCapacityResult(details={"fields": [type(error).__name__]}) from None
-
-
-@dataclass(frozen=True, slots=True)
-class ModelSet:
-    """Which models ran: a version derived from their ids and versions."""
-
-    version: str
-    models: tuple[tuple[str, int], ...] = ()
-
-    @classmethod
-    def of(cls, models: Iterable[tuple[str, int]]) -> ModelSet:
-        ordered = tuple(sorted(set(models)))
-        return cls(hashlib.sha256(json.dumps(ordered).encode()).hexdigest()[:16], ordered)
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"version": self.version, "models": [list(m) for m in self.models]}
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> ModelSet:
-        return cls(data["version"], tuple((m[0], m[1]) for m in data["models"]))
-
-
-@dataclass(frozen=True, slots=True)
 class Summary:
     """Counts only, derived from the result."""
 
@@ -781,3 +686,6 @@ class CapacityResult:
         return hashlib.sha256(
             json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()
+
+
+__all__ = ["Evidence", "Limitation", "ModelSet", "Unsupported"]  # shared with the cost engine

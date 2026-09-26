@@ -64,6 +64,7 @@ class Target:
     analysis_id: str
     candidate_key: str
     architecture_id: str = ""  # set by with_architecture
+    snapshot_id: str = ""  # set by with_prices
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -85,6 +86,29 @@ async def with_architecture(client: AsyncClient, auth: dict[str, str], target: T
     )
     assert response.status_code == 201, response.text
     target.architecture_id = response.json()["id"]
+
+
+PRICE = {
+    "id": "ec2", "provider": "aws", "service": "ec2", "sku": "m7g.large", "region": "eu-west-1",
+    "currency": "USD", "unit": "instance_hour", "model": "per_unit", "unitPrice": "0.08",
+    "effectiveFrom": "2026-09-01", "source": "user_input",
+}  # fmt: skip
+
+
+async def create_snapshot(client: AsyncClient, auth: dict[str, str], org_id: str) -> str:
+    response = await client.post(
+        f"/api/v1/organizations/{org_id}/pricing-snapshots",
+        json={"name": "Prices", "records": [PRICE]},
+        headers=auth,
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["id"])
+
+
+async def with_prices(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An architecture and a pricing snapshot of the organization (its audit entry is not the plan's)."""
+    await with_architecture(client, auth, target)
+    target.snapshot_id = await create_snapshot(client, auth, target.org_id)
 
 
 async def with_archived_architecture(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
@@ -201,6 +225,12 @@ PLANS: dict[str, Plan] = {
         "architecture",
         {"workload": CAPACITY_WORKLOAD, "label": "Audited"},
         with_architecture,
+    ),
+    f"run_cost_analysis{_ARCH}cost_analyses_post": Plan(
+        {"architecture.cost_analyzed"},
+        "architecture",
+        lambda target: {"snapshotId": target.snapshot_id, "pricingDate": "2026-09-26", "label": "Audited"},
+        with_prices,
     ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
@@ -336,6 +366,12 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     assert analysis.status_code == 201, analysis.text
+    cost = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/cost-analyses",
+        json={"snapshotId": await create_snapshot(client, auth, org_id)},
+        headers=auth,
+    )
+    assert cost.status_code == 201, cost.text
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -354,6 +390,7 @@ async def test_read_only_endpoints_write_nothing(
         "architecture_id": target.architecture_id,
         "run_id": run.json()["id"],
         "capacity_analysis_id": analysis.json()["id"],
+        "cost_analysis_id": cost.json()["id"],
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

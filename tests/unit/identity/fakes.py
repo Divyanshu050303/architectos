@@ -25,6 +25,16 @@ from core.domain.capacity.analyses import AnalysisReport, CapacityAnalysis
 from core.domain.capacity.queries import AnalysisQuery, BottleneckQuery, ComponentQuery
 from core.domain.capacity.results import Bottleneck, ComponentResult, Unsupported
 from core.domain.capacity.scenarios import ScalingOption, ScenarioOutcome
+from core.domain.cost.pricing import PricingRecord, PricingSnapshot
+from core.domain.cost.queries import (
+    CostAnalysisQuery,
+    LineItemQuery,
+    RecordQuery,
+    SnapshotQuery,
+    SnapshotSummary,
+)
+from core.domain.cost.reports import CostReport
+from core.domain.cost.results import LineItem
 from core.domain.identity.entities import (
     DeletedUserValues,
     NewSession,
@@ -913,6 +923,106 @@ class FakeCapacityAnalysisRepository:
         ]
 
 
+class FakePricingSnapshotRepository:
+    """Keeps each snapshot whole, like the append-only tables."""
+
+    def __init__(self) -> None:
+        self.snapshots: dict[uuid.UUID, PricingSnapshot] = {}
+
+    async def add(self, snapshot: PricingSnapshot) -> None:
+        self.snapshots[snapshot.id] = snapshot
+
+    async def get(self, organization_id: uuid.UUID, snapshot_id: uuid.UUID) -> PricingSnapshot | None:
+        snapshot = self.snapshots.get(snapshot_id)
+        return snapshot if snapshot is not None and snapshot.organization_id == organization_id else None
+
+    async def get_summary(self, organization_id: uuid.UUID, snapshot_id: uuid.UUID) -> SnapshotSummary | None:
+        snapshot = await self.get(organization_id, snapshot_id)
+        return SnapshotSummary.of(snapshot) if snapshot else None
+
+    async def list_for_organization(
+        self, organization_id: uuid.UUID, query: SnapshotQuery
+    ) -> list[SnapshotSummary]:
+        found = [
+            SnapshotSummary.of(s)
+            for s in self.snapshots.values()
+            if s.organization_id == organization_id
+            and (query.after is None or (s.created_at, s.id) < query.after)
+        ]
+        return sorted(found, key=lambda s: (s.created_at, s.id), reverse=True)[: query.limit]
+
+    async def list_records(
+        self, organization_id: uuid.UUID, snapshot_id: uuid.UUID, query: RecordQuery
+    ) -> list[PricingRecord]:
+        snapshot = await self.get(organization_id, snapshot_id)
+        if snapshot is None:
+            return []
+        return sorted(
+            (
+                r
+                for r in snapshot.records
+                if (query.provider is None or r.provider == query.provider)
+                and (query.service is None or r.service == query.service)
+                and (query.region is None or r.region == query.region)
+                and (query.after is None or r.id > query.after)
+            ),
+            key=lambda r: r.id,
+        )[: query.limit]
+
+
+class FakeCostAnalysisRepository:
+    """Keeps each analysis's report and line items, like the append-only tables."""
+
+    def __init__(self) -> None:
+        self.reports: dict[uuid.UUID, CostReport] = {}
+        self.line_items: dict[uuid.UUID, tuple[LineItem, ...]] = {}
+
+    async def add(self, report: CostReport, line_items: tuple[LineItem, ...]) -> CostReport:
+        self.reports[report.analysis.id] = report
+        self.line_items[report.analysis.id] = line_items
+        return report
+
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, analysis_id: uuid.UUID
+    ) -> CostReport | None:
+        report = self.reports.get(analysis_id)
+        if report is None or (report.analysis.project_id, report.analysis.architecture_id) != (
+            project_id,
+            architecture_id,
+        ):
+            return None
+        return report
+
+    async def list_for_architecture(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: CostAnalysisQuery
+    ) -> list[CostReport]:
+        found = [
+            r
+            for r in self.reports.values()
+            if (r.analysis.project_id, r.analysis.architecture_id) == (project_id, architecture_id)
+            and (query.revision is None or r.analysis.revision_number == query.revision)
+            and (query.after is None or (r.analysis.requested_at, r.analysis.id) < query.after)
+        ]
+        return sorted(found, key=lambda r: (r.analysis.requested_at, r.analysis.id), reverse=True)[
+            : query.limit
+        ]
+
+    async def list_line_items(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: LineItemQuery
+    ) -> list[LineItem]:
+        report = self.reports.get(analysis_id)
+        if report is None or report.analysis.project_id != project_id:
+            return []
+        return [
+            line
+            for line in sorted(self.line_items[analysis_id], key=lambda x: (x.element_id, x.resource))
+            if (query.element_id is None or line.element_id == query.element_id)
+            and (query.status is None or line.status is query.status)
+            and (query.category is None or line.category is query.category)
+            and (query.after is None or (line.element_id, line.resource) > query.after)
+        ][: query.limit]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -930,6 +1040,8 @@ class FakeUnitOfWork:
         self._architectures = FakeArchitectureRepository(clock)
         self._validations = FakeValidationRunRepository()
         self._capacity = FakeCapacityAnalysisRepository()
+        self._pricing = FakePricingSnapshotRepository()
+        self._cost = FakeCostAnalysisRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -992,6 +1104,14 @@ class FakeUnitOfWork:
     @property
     def capacity(self) -> FakeCapacityAnalysisRepository:
         return self._capacity
+
+    @property
+    def pricing(self) -> FakePricingSnapshotRepository:
+        return self._pricing
+
+    @property
+    def cost(self) -> FakeCostAnalysisRepository:
+        return self._cost
 
     async def __aenter__(self) -> Self:
         return self

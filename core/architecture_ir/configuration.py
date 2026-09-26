@@ -40,6 +40,10 @@ MAX_PROPERTIES = 100
 MAX_TEXT_VALUE = 200
 MAX_LIST_VALUES = 50
 REGION = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")  # e.g. eu-west-1, eu-west-1a
+# As a pricing snapshot writes them (core/domain/cost/pricing.py): services and conditions are
+# lower-case identifiers ("rds", "on_demand"); SKUs are the provider's ("db.r6g.large").
+PRICING_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+PRICING_SKU = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$")
 CONNECTION = "connection"
 
 
@@ -276,6 +280,36 @@ NODE_PROPERTIES: dict[str, PropertySpec] = {
             _DEPLOYED,
             "Network throughput available to the component, in bytes per second.",
             minimum="0",
+        ),
+        # pricing (read by the cost engine: how a component maps to its organization's price list;
+        # nothing is inferred when they are absent)
+        _spec(
+            "pricing_service",
+            _T,
+            _DEPLOYED,
+            "Service that bills the component in the pricing snapshot, e.g. rds.",
+            pattern=PRICING_IDENTIFIER,
+        ),
+        _spec(
+            "pricing_sku",
+            _T,
+            _DEPLOYED,
+            "SKU of the component's main billed resource, e.g. db.r6g.large (else instance_class is used).",
+            pattern=PRICING_SKU,
+        ),
+        _spec(
+            "pricing_storage_sku",
+            _T,
+            {K.DATABASE, K.QUEUE, K.OBSERVABILITY},
+            "SKU of the component's provisioned storage, priced per GB-month.",
+            pattern=PRICING_SKU,
+        ),
+        _spec(
+            "pricing_conditions",
+            _L,
+            _DEPLOYED,
+            "Conditions the price must carry, e.g. on_demand.",
+            pattern=PRICING_IDENTIFIER,
         ),
         # boundaries
         _spec(

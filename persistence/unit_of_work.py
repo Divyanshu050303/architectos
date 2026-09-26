@@ -8,11 +8,13 @@ from persistence.models import EmailVerificationTokenRecord, PasswordResetTokenR
 from persistence.repositories.architectures import SqlAlchemyArchitectureRepository
 from persistence.repositories.audit_logs import SqlAlchemyAuditRepository
 from persistence.repositories.capacity import SqlAlchemyCapacityAnalysisRepository
+from persistence.repositories.cost import SqlAlchemyCostAnalysisRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
     SqlAlchemyOrganizationRepository,
 )
+from persistence.repositories.pricing import SqlAlchemyPricingSnapshotRepository
 from persistence.repositories.projects import SqlAlchemyProjectRepository
 from persistence.repositories.requirement_analyses import SqlAlchemyRequirementAnalysisRepository
 from persistence.repositories.requirement_sets import SqlAlchemyRequirementSetRepository
@@ -49,6 +51,8 @@ class SqlAlchemyUnitOfWork:
         self.architectures = SqlAlchemyArchitectureRepository(session)
         self.validations = SqlAlchemyValidationRunRepository(session)
         self.capacity = SqlAlchemyCapacityAnalysisRepository(session)
+        self.pricing = SqlAlchemyPricingSnapshotRepository(session)
+        self.cost = SqlAlchemyCostAnalysisRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()
