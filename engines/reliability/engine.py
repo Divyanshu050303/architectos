@@ -34,7 +34,7 @@ from core.architecture_ir.component import NodeKind
 from core.architecture_ir.node import Node
 from core.domain.capacity.results import ComponentStatus, Estimate, Source
 from core.domain.engine_results import Limitation, ModelSet, Unsupported
-from core.domain.reliability.errors import InvalidReliabilityResult
+from core.domain.reliability.errors import InvalidReliabilityRequest, InvalidReliabilityResult
 from core.domain.reliability.inputs import ComponentReliability
 from core.domain.reliability.results import (
     ComponentResult,
@@ -329,9 +329,29 @@ def _step_output(meta: StepMeta, output: object) -> StepOutput:
     return output
 
 
+def check_request(context: ReliabilityContext) -> None:
+    """The request's entries and objective scopes name nodes of this revision: entries anything but a
+    boundary, objectives components in scope. InvalidReliabilityRequest otherwise (nothing runs)."""
+    topology = context.topology
+    for entry in context.request.entries or ():
+        node = topology.node(entry)
+        if node is None or node.kind is NodeKind.BOUNDARY:
+            raise InvalidReliabilityRequest(
+                details={"field": "entries", "reason": "unknown_node", "node_id": entry}
+            )
+    for objective in context.request.objectives:
+        for node_id in objective.node_ids:
+            node = topology.node(node_id)
+            if node is None or node.kind in OUT_OF_SCOPE:
+                raise InvalidReliabilityRequest(
+                    details={"field": "objectives.node_ids", "reason": "unknown_node", "node_id": node_id}
+                )
+
+
 def analyze(context: ReliabilityContext, registry: Registry) -> ReliabilityResult:
     """Every applicable model against every node in scope, then every step; deterministic for
-    equal inputs."""
+    equal inputs. InvalidReliabilityRequest when the request names nodes the revision lacks."""
+    check_request(context)
     models = registry.models()
     components: list[ComponentResult] = []
     findings: list[ReliabilityFinding] = []

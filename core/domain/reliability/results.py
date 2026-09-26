@@ -82,6 +82,7 @@ class FindingType(StrEnum):
     AVAILABILITY_BELOW_OBJECTIVE = "availability_below_objective"
     OBJECTIVE_NOT_EVALUABLE = "objective_not_evaluable"
     UNMODELED_DEPENDENCY = "unmodeled_dependency"
+    CIRCULAR_DEPENDENCY = "circular_dependency"
 
 
 @dataclass(frozen=True, slots=True)
