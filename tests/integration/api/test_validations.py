@@ -7,7 +7,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from apps.api.email.transport import InMemoryTransport
 from core.architecture_ir.serialization import to_dict
@@ -227,3 +227,32 @@ async def test_runs_and_findings_are_append_only(client: AsyncClient, db: AsyncS
         with pytest.raises(DBAPIError, match="append-only"):
             async with db.begin_nested():
                 await db.execute(text(statement), {"id": created["id"]})
+
+
+async def test_reads_cost_the_same_whatever_the_number_of_runs_and_findings(
+    client: AsyncClient, connection: AsyncConnection, world: World
+) -> None:
+    """No N+1: a run, its findings page and the run list cost a fixed number of statements."""
+    from .test_query_budget import counting  # noqa: PLC0415 - shared helper of the budget tests
+
+    aid = await architecture(client, world)
+    small = await run(client, world, aid)
+    await strict_policy(client, world)
+    for _ in range(5):
+        large = await run(client, world, aid)
+    assert large["summary"]["total"] > small["summary"]["total"]
+
+    async def cost(run_id: str) -> list[int]:
+        counts = []
+        for url in (
+            f"{runs(world, aid)}/{run_id}",
+            f"{runs(world, aid)}/{run_id}/findings",
+            runs(world, aid),
+        ):
+            with counting(connection) as statements:
+                assert (await client.get(url, headers=world.ada)).status_code == 200
+            counts.append(len(statements))
+        return counts
+
+    assert await cost(small["id"]) == await cost(large["id"])
+    assert all(n <= 10 for n in await cost(large["id"])), "authentication, access checks and the read itself"

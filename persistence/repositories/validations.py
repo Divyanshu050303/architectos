@@ -162,9 +162,11 @@ class SqlAlchemyValidationRunRepository:
         records = await self._session.scalars(ordered.limit(query.limit))
         return [to_report(r) for r in records]
 
-    async def list_findings(self, run_id: uuid.UUID, query: FindingQuery) -> list[tuple[int, Finding]]:
+    async def list_findings(
+        self, project_id: uuid.UUID, run_id: uuid.UUID, query: FindingQuery
+    ) -> list[tuple[int, Finding]]:
         statement = select(ValidationFindingRecord.position, ValidationFindingRecord.data).where(
-            ValidationFindingRecord.run_id == run_id
+            ValidationFindingRecord.run_id == run_id, ValidationFindingRecord.project_id == project_id
         )
         if query.severity is not None:
             statement = statement.where(ValidationFindingRecord.severity == query.severity.value)
