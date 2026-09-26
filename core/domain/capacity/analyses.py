@@ -23,6 +23,7 @@ from .workload import MAX_ASSUMPTIONS, WorkloadAssumption, WorkloadProfile
 
 MAX_SELECTED_MODELS = 50
 MAX_LABEL_LENGTH = 100
+MAX_ENTRY_ID = 128
 PENDING, RUNNING = "pending", "running"
 
 
@@ -35,6 +36,7 @@ class AnalysisRequest:
     parameters: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)  # by model id
     assumptions: tuple[WorkloadAssumption, ...] = ()
     label: str | None = None
+    entries: tuple[str, ...] | None = None  # nodes where the workload arrives; None: the clients
 
     def __post_init__(self) -> None:
         if not isinstance(self.architecture_id, uuid.UUID):
@@ -59,6 +61,12 @@ class AnalysisRequest:
         if len(keys) != len(set(keys)):
             raise InvalidWorkload(details={"field": "assumptions", "reason": "duplicate_key"})
         object.__setattr__(self, "assumptions", tuple(sorted(self.assumptions, key=lambda a: a.key)))
+        if self.entries is not None:
+            if not 0 < len(self.entries) <= MAX_SELECTED_MODELS or not all(
+                isinstance(e, str) and 0 < len(e) <= MAX_ENTRY_ID for e in self.entries
+            ):
+                raise InvalidWorkload(details={"field": "entries", "reason": "invalid_entries"})
+            object.__setattr__(self, "entries", tuple(sorted(set(self.entries))))
         if self.label is not None and (
             not isinstance(self.label, str) or not self.label.strip() or len(self.label) > MAX_LABEL_LENGTH
         ):
@@ -74,6 +82,7 @@ class AnalysisRequest:
             "models": list(self.models) if self.models is not None else None,
             "parameters": {m: dict(sorted(p.items())) for m, p in sorted(self.parameters.items())},
             "assumptions": [a.to_dict() for a in self.assumptions],
+            "entries": list(self.entries) if self.entries is not None else None,
         }
 
 

@@ -256,6 +256,9 @@ def test_there_is_one_validation_framework() -> None:
         # well-formed IR (Milestone 4), and what the Requirements Engine says about requirement text.
         "core/architecture_ir/validation.py: ValidationResult",
         "engines/requirements/findings.py: Finding",
+        # The capacity engine's registry of capacity models (Milestone 7): a different contract
+        # (models estimate capacity; rules report findings), not a second validation framework.
+        "engines/capacity/engine.py: Registry",
     }
     assert set(found) - allowed == set()
 

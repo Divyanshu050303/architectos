@@ -176,11 +176,15 @@
         "unknown": {
           "items": {
             "enum": [
+              "access",
+              "cache_hit_ratio",
+              "calls_per_request",
               "dead_letter",
               "port",
               "retries",
               "timeout_seconds",
-              "tls"
+              "tls",
+              "traffic_ratio"
             ]
           },
           "type": "array",
@@ -189,6 +193,24 @@
         "values": {
           "additionalProperties": false,
           "properties": {
+            "access": {
+              "description": "Which side of the workload's read/write mix this data access carries.",
+              "enum": [
+                "read",
+                "read_write",
+                "write"
+              ]
+            },
+            "cache_hit_ratio": {
+              "description": "Share of this traffic a cache in front of the target answers; only misses arrive.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "calls_per_request": {
+              "description": "Calls made over this connection per unit of work that uses it (fan-out).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
             "dead_letter": {
               "description": "Messages that keep failing go to a dead-letter queue.",
               "type": "boolean"
@@ -212,6 +234,11 @@
             "tls": {
               "description": "Traffic is encrypted in transit.",
               "type": "boolean"
+            },
+            "traffic_ratio": {
+              "description": "Share of the source's work that uses this connection (0.3 = 30 %).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
             }
           },
           "type": "object"

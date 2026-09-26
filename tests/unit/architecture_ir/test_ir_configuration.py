@@ -1,6 +1,7 @@
 """Structured configuration: typed known properties, unknown values, preserved extras."""
 
 from decimal import Decimal
+from functools import partial
 from types import MappingProxyType
 from typing import Any
 
@@ -122,4 +123,36 @@ def test_connection_configuration() -> None:
     assert link.configuration.get("timeout_seconds") == Decimal("2.5")
     assert rules(lambda: connection(configuration=Configuration({"port": 70_000}))) == {"out_of_range"}
     assert rules(lambda: connection(configuration=Configuration({"replicas": 2}))) == {"unknown_property"}
-    assert set(CONNECTION_PROPERTIES) == {"timeout_seconds", "retries", "tls", "dead_letter", "port"}
+    assert set(CONNECTION_PROPERTIES) == {
+        "timeout_seconds",
+        "retries",
+        "tls",
+        "dead_letter",
+        "port",
+        "traffic_ratio",
+        "calls_per_request",
+        "cache_hit_ratio",
+        "access",
+    }
+
+
+def test_traffic_properties_are_bounded() -> None:
+    link = connection(
+        configuration=Configuration(
+            {
+                "traffic_ratio": Decimal("0.3"),
+                "calls_per_request": 2,
+                "cache_hit_ratio": Decimal("0.8"),
+                "access": "read",
+            }
+        )
+    )
+    assert link.configuration.get("traffic_ratio") == Decimal("0.3")
+    bad_values: list[dict[str, Any]] = [
+        {"traffic_ratio": Decimal("1.5")},
+        {"cache_hit_ratio": Decimal("-0.1")},
+        {"calls_per_request": 1001},
+    ]
+    for bad in bad_values:
+        assert rules(partial(connection, configuration=Configuration(bad))) == {"out_of_range"}
+    assert rules(lambda: connection(configuration=Configuration({"access": "append"}))) == {"invalid_value"}

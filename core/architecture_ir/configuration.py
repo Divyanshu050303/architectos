@@ -267,6 +267,38 @@ CONNECTION_PROPERTIES: dict[str, PropertySpec] = {
         _spec("tls", _B, {CONNECTION}, "Traffic is encrypted in transit."),
         _spec("dead_letter", _B, {CONNECTION}, "Messages that keep failing go to a dead-letter queue."),
         _spec("port", _I, {CONNECTION}, "Target port.", minimum="1", maximum="65535"),
+        # traffic (read by the capacity engine; nothing is assumed when they are absent)
+        _spec(
+            "traffic_ratio",
+            _D,
+            {CONNECTION},
+            "Share of the source's work that uses this connection (0.3 = 30 %).",
+            minimum="0",
+            maximum="1",
+        ),
+        _spec(
+            "calls_per_request",
+            _D,
+            {CONNECTION},
+            "Calls made over this connection per unit of work that uses it (fan-out).",
+            minimum="0",
+            maximum="1000",
+        ),
+        _spec(
+            "cache_hit_ratio",
+            _D,
+            {CONNECTION},
+            "Share of this traffic a cache in front of the target answers; only misses arrive.",
+            minimum="0",
+            maximum="1",
+        ),
+        _spec(
+            "access",
+            _C,
+            {CONNECTION},
+            "Which side of the workload's read/write mix this data access carries.",
+            choices={"read", "write", "read_write"},
+        ),
     ]
 }
 

@@ -128,6 +128,9 @@ class Propagation:
     nodes: Mapping[str, tuple[Demand, ...]] = field(default_factory=dict)
     connections: tuple[Demand, ...] = ()
     unsupported: tuple[Unsupported, ...] = ()
+    # Nodes whose demand is only partly known (a connection on the way lacks routing, or a source
+    # outside the workload feeds them): their demand is a lower bound, never a total.
+    incomplete: frozenset[str] = frozenset()
 
 
 type Propagator = Callable[[CapacityContext], Propagation]

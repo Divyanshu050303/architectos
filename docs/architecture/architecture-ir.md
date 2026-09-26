@@ -91,7 +91,9 @@ reached:
   `memory_*_bytes`, `instance_class`, `deployment_model`, `region`, `availability_zones`,
   `multi_az`, `storage_bytes`, `max_connections`, `replication_mode`, `backup_*`,
   `eviction_policy`, `persistence`, `partitions`, `replication_factor`, `retention_seconds`,
-  `boundary_type`; on connections `timeout_seconds`, `retries`, `tls`, `dead_letter`, `port`.
+  `boundary_type`; on connections `timeout_seconds`, `retries`, `tls`, `dead_letter`, `port`,
+  and for traffic `traffic_ratio`, `calls_per_request`, `cache_hit_ratio`, `access` (see
+  [the capacity engine](capacity-engine.md#demand-propagation)).
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.
 - `extra`: settings the IR does not recognize, **preserved as found** (bounded; fractional numbers
