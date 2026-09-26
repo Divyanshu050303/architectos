@@ -13,7 +13,7 @@ from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.validation.errors import InvalidValidationConfig
 from core.domain.validation.results import Category, Finding, Severity, ValidationResult
 from engines.validation.context import RevisionInfo, ValidationConfig, ValidationContext
-from engines.validation.engine import CATALOG_UNAVAILABLE, NO_POLICY, validate
+from engines.validation.engine import CATALOG_UNAVAILABLE, NO_POLICY, NO_REQUIREMENTS, validate
 from engines.validation.registry import default_registry
 from tests.unit.architecture_ir.builders import api_and_postgres, connection, node, service_cache_queue
 
@@ -127,11 +127,11 @@ def test_dead_letter_belongs_to_consumers() -> None:
 
 
 def test_every_result_states_its_limitations() -> None:
-    assert result(api_and_postgres()).limitations == (CATALOG_UNAVAILABLE, NO_POLICY)
-    assert result(api_and_postgres(), ArchitecturePolicy()).limitations == (CATALOG_UNAVAILABLE, NO_POLICY)
-    assert result(api_and_postgres(), ArchitecturePolicy(require_tls=True)).limitations == (
-        CATALOG_UNAVAILABLE,
-    )
+    everything = (CATALOG_UNAVAILABLE, NO_POLICY, NO_REQUIREMENTS)
+    assert result(api_and_postgres()).limitations == everything
+    assert result(api_and_postgres(), ArchitecturePolicy()).limitations == everything
+    strict = ArchitecturePolicy(require_tls=True)
+    assert result(api_and_postgres(), strict).limitations == (CATALOG_UNAVAILABLE, NO_REQUIREMENTS)
 
 
 def test_the_policy_is_part_of_the_context_fingerprint() -> None:

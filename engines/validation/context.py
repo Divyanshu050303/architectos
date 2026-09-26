@@ -55,7 +55,9 @@ class ValidationConfig:
 class ValidationContext:
     ir: ArchitectureIR
     revision: RevisionInfo
-    requirements: tuple[Requirement, ...] = ()  # the project's requirements in play (live)
+    # The project's live (not deleted) requirements, every status; None: not provided, so no
+    # requirement rule can say anything (stated as a limitation). () : the project has none.
+    requirements: tuple[Requirement, ...] | None = None
     config: ValidationConfig = field(default_factory=ValidationConfig)
     policy: ArchitecturePolicy | None = None  # the project's policy at the time of the run
 
@@ -77,7 +79,11 @@ class ValidationContext:
                 self.revision.content_hash,
                 self.revision.schema_version,
             ],
-            "requirements": sorted([str(r.id), r.version] for r in self.requirements),
+            "requirements": (
+                None
+                if self.requirements is None
+                else sorted([str(r.id), r.version, r.content.status.value] for r in self.requirements)
+            ),
             "config": self.config.to_dict(),
             "policy": self.policy.to_dict() if self.has_policy and self.policy else None,
         }

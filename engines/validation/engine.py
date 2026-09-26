@@ -46,10 +46,20 @@ NO_POLICY = Limitation(
     "The project has no architecture policy, so no policy rule constrained this architecture.",
 )
 
+NO_REQUIREMENTS = Limitation(
+    "requirements_not_provided",
+    "The project's requirements were not provided, so no requirement was traced or given a verdict.",
+)
+
 
 def limitations(context: ValidationContext) -> tuple[Limitation, ...]:
     """What no rule of this run could check, whichever rules were selected."""
-    return (CATALOG_UNAVAILABLE,) if context.has_policy else (CATALOG_UNAVAILABLE, NO_POLICY)
+    found = [CATALOG_UNAVAILABLE]
+    if not context.has_policy:
+        found.append(NO_POLICY)
+    if context.requirements is None:
+        found.append(NO_REQUIREMENTS)
+    return tuple(found)
 
 
 class Input(StrEnum):
