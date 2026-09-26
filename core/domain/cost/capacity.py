@@ -12,11 +12,17 @@ produced a result: anything else is refused (``IncompatibleCapacityAnalysis``), 
 
 import uuid
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from core.domain.capacity.analyses import AnalysisReport
-from core.domain.capacity.results import AnalysisStatus, ComponentResult, ModelSet
+from core.domain.capacity.results import (
+    AnalysisStatus,
+    CapacityResult,
+    ComponentResult,
+    ModelSet,
+    Unsupported,
+)
 from core.domain.capacity.scenarios import ScalingKind, ScalingOption
 from core.domain.capacity.workload import WorkloadProfile, WorkloadType
 
@@ -36,6 +42,14 @@ INCOMPLETE_DEMAND = frozenset(
     {"demand_incomplete", "cyclic_traffic", "mixed_work_units", "demand_overflow", "routing_unspecified"}
 )
 NO_ENTRY = "no_entry"  # the workload reached nothing: no demand is established anywhere
+
+
+def _gaps(unsupported: Iterable[Unsupported]) -> tuple[frozenset[str], bool]:
+    """The components whose demand is a lower bound, and whether the workload reached nothing."""
+    found = tuple(unsupported)
+    return frozenset(u.element_id for u in found if u.code in INCOMPLETE_DEMAND), any(
+        u.code == NO_ENTRY for u in found
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,9 +83,25 @@ class CapacityBasis:
             report.model_set,
             report.result_fingerprint,
             tuple(sorted(components, key=lambda c: c.node_id)),
-            frozenset(u.element_id for u in report.unsupported if u.code in INCOMPLETE_DEMAND),
-            any(u.code == NO_ENTRY for u in report.unsupported),
+            *_gaps(report.unsupported),
             report.scaling,
+        )
+
+    def for_scenario(
+        self, workload: WorkloadProfile, result: CapacityResult, scaling: tuple[ScalingOption, ...]
+    ) -> CapacityBasis:
+        """The same analysis under a scenario: the capacity engine's run of it (its workload, result
+        and scaling options), for the same revision."""
+        return replace(
+            self,
+            status=result.status.value,
+            workload=workload,
+            model_set=result.model_set,
+            result_fingerprint=result.fingerprint,
+            components=tuple(sorted(result.components, key=lambda c: c.node_id)),
+            incomplete=_gaps(result.unsupported)[0],
+            no_entry=_gaps(result.unsupported)[1],
+            scaling=scaling,
         )
 
     def check(self, request: CostAnalysisRequest, revision_content_hash: str) -> None:
