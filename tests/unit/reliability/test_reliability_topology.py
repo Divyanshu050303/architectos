@@ -20,8 +20,8 @@ from core.domain.reliability.results import FindingType, ObjectiveKind, Reliabil
 from core.domain.validation.options import RevisionInfo
 from core.domain.validation.results import Severity
 from engines.reliability.context import ReliabilityContext
-from engines.reliability.dependency import RequestPaths
 from engines.reliability.engine import ModelInputs, ModelMeta, ModelOutput, Registry, analyze
+from engines.reliability.failure_propagation import RequestPaths
 from engines.reliability.spof import TopologyFindings
 from tests.unit.architecture_ir.builders import connection, node
 

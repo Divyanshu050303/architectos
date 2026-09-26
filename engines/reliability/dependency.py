@@ -15,30 +15,20 @@ work is bounded by the IR's size):
 ``publish`` and ``consume`` (a broker decouples producer and consumer), and ``critical: false``.
 ``replication`` connections carry copies of data, not requests: they concern data loss, not paths.
 
-A path's availability is the **series** composition: the product of the availabilities of every
-required component, each of which must be available for the request to succeed. It is known only
-when every one of them is; the formula assumes their failures are independent (stated with every
-estimate). Declared alternatives (redundancy groups) are composed by the paths' availability step.
+How a path's availability composes from these semantics is ``failure_propagation.py``'s.
 """
 
 from collections import deque
 from dataclasses import dataclass
-from decimal import Decimal
 from enum import StrEnum
 
 from core.architecture_ir.component import NodeKind
 from core.architecture_ir.dependency import ConnectionKind, Interaction
 from core.architecture_ir.edge import Connection
 from core.architecture_ir.topology import Topology
-from core.domain.capacity.results import Estimate, Source
-from core.domain.capacity.units import rounded_text
-from core.domain.engine_results import Evidence, Unsupported
-from core.domain.numbers import arithmetic
-from core.domain.reliability.results import PathResult
-from core.domain.reliability.values import availability
 
 from .context import ReliabilityContext
-from .engine import ARCHITECTURE, OUT_OF_SCOPE, Progress, StepMeta, StepOutput
+from .engine import OUT_OF_SCOPE
 
 WAITING = frozenset({ConnectionKind.REQUEST, ConnectionKind.DATA_ACCESS})
 SERIES = "product of the availabilities of every required component (series: each must be available)"
@@ -84,7 +74,8 @@ class Closure:
         )
 
 
-def closure(topology: Topology, entry: str) -> Closure:
+def closure(topology: Topology, entry: str, avoid: frozenset[str] = frozenset()) -> Closure:
+    """What ``entry`` requires, never entering the nodes in ``avoid``."""
     seen, order = {entry}, [entry]
     required: list[str] = []
     optional: list[str] = []
@@ -93,6 +84,8 @@ def closure(topology: Topology, entry: str) -> Closure:
         for connection in sorted(topology.outgoing(queue.popleft()), key=lambda c: c.id):
             match role(connection):
                 case Role.REQUIRED:
+                    if connection.target_id in avoid:
+                        continue
                     required.append(connection.id)
                     if connection.target_id not in seen:
                         seen.add(connection.target_id)
@@ -110,67 +103,3 @@ def entries(context: ReliabilityContext) -> tuple[str, ...]:
     if requested is not None:
         return requested
     return tuple(n.id for n in context.ir.nodes if n.kind is NodeKind.CLIENT)
-
-
-def series(entry: str, components: tuple[str, ...], progress: Progress, meta: StepMeta) -> Estimate:
-    """The product of the components' availabilities, or unknown naming who lacks one."""
-    known: list[tuple[str, Decimal]] = []
-    missing: list[str] = []
-    for node_id in components:
-        component = progress.component(node_id)
-        estimate = component.estimate("availability") if component else None
-        if estimate is None or estimate.quantity is None:
-            missing.append(f"{node_id}.availability")
-        else:
-            known.append((node_id, estimate.quantity.value))
-    evidence = (
-        Evidence("assumption", INDEPENDENCE),
-        *(Evidence(f"{n}.availability", rounded_text(v)) for n, v in known),
-    )
-    if missing or not components:
-        return Estimate(entry, "availability", None, Source.UNKNOWN, SERIES, inputs=evidence,
-                        missing=tuple(missing) or ("components",))  # fmt: skip
-    product = Decimal(1)
-    with arithmetic():
-        for _, value in known:
-            product *= value
-    return Estimate(
-        entry,
-        "availability",
-        availability(product),
-        Source.MODEL_ESTIMATE,
-        SERIES,
-        meta.id,
-        meta.version,
-        evidence,
-    )
-
-
-class RequestPaths:
-    meta = StepMeta(
-        id="request-paths",
-        version=1,
-        name="Request paths",
-        description="What each entry's requests need (required connections), and its series availability.",
-        produces=("paths",),
-        assumptions=(
-            INDEPENDENCE,
-            "A request or data access whose interaction is not stated waits for its target.",
-        ),
-        limitations=(
-            "Asynchronous flows (publish, consume) are recorded, not composed: a broker decouples them.",
-            "Declared alternatives are composed only where a redundancy group says so.",
-        ),
-    )
-
-    def run(self, context: ReliabilityContext, progress: Progress) -> StepOutput:
-        starts = entries(context)
-        if not starts:
-            message = "No entry: the architecture has no client, and the request names no entry."
-            return StepOutput(unsupported=(Unsupported(ARCHITECTURE, "no_entry", message),))
-        paths = []
-        for entry in starts:
-            found = closure(context.topology, entry)
-            estimate = series(entry, found.components(context.topology), progress, self.meta)
-            paths.append(PathResult(entry, found.node_ids, found.required, estimate, found.optional))
-        return StepOutput(paths=tuple(paths))
