@@ -395,8 +395,7 @@ class ComponentResult:
 
     node_id: str
     status: ComponentStatus
-    model_id: str | None = None
-    model_version: int | None = None
+    models: tuple[tuple[str, int], ...] = ()  # (id, version) of every model that applied
     demand: tuple[Demand, ...] = ()
     limits: tuple[Estimate, ...] = ()  # capacity limits
     resources: tuple[Estimate, ...] = ()  # resource amounts (CPU, connections, storage, …)
@@ -413,13 +412,25 @@ class ComponentResult:
             object.__setattr__(self, "utilization", tuple(sorted(self.utilization, key=lambda u: u.resource)))
         if isinstance(self.missing, tuple):
             object.__setattr__(self, "missing", tuple(sorted(set(self.missing))))
+        if isinstance(self.models, tuple):
+            object.__setattr__(self, "models", tuple(sorted(set(self.models))))
         _check(
             [
                 None if isinstance(self.node_id, str) and 0 < len(self.node_id) <= MAX_ID else "node_id",
                 None if isinstance(self.status, ComponentStatus) else "status",
-                None if self.model_id is None or MODEL_ID.fullmatch(self.model_id) else "model_id",
-                None if (self.model_id is None) == (self.model_version is None) else "model_version",
-                None if self.status is ComponentStatus.UNSUPPORTED or self.model_id else "model_id",
+                None
+                if isinstance(self.models, tuple)
+                and all(
+                    isinstance(m, tuple)
+                    and len(m) == 2
+                    and isinstance(m[0], str)
+                    and MODEL_ID.fullmatch(m[0])
+                    and isinstance(m[1], int)
+                    and m[1] >= 1
+                    for m in self.models
+                )
+                else "models",
+                None if (self.status is ComponentStatus.UNSUPPORTED) == (not self.models) else "models",
                 None if self.status is not ComponentStatus.INSUFFICIENT_INPUT or self.missing else "missing",
                 _ids(self.missing, "missing"),
                 None
@@ -432,8 +443,7 @@ class ComponentResult:
         return {
             "node_id": self.node_id,
             "status": self.status.value,
-            "model_id": self.model_id,
-            "model_version": self.model_version,
+            "models": [list(m) for m in self.models],
             "demand": [d.to_dict() for d in self.demand],
             "limits": [e.to_dict() for e in self.limits],
             "resources": [e.to_dict() for e in self.resources],
@@ -448,8 +458,7 @@ class ComponentResult:
             return cls(
                 node_id=data["node_id"],
                 status=ComponentStatus(data["status"]),
-                model_id=data.get("model_id"),
-                model_version=data.get("model_version"),
+                models=tuple((m[0], m[1]) for m in data.get("models") or ()),
                 demand=tuple(Demand.from_dict(d) for d in data.get("demand") or ()),
                 limits=tuple(Estimate.from_dict(e) for e in data.get("limits") or ()),
                 resources=tuple(Estimate.from_dict(e) for e in data.get("resources") or ()),

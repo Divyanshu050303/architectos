@@ -54,9 +54,7 @@ def component(
     node: str = "api", status: ComponentStatus = ComponentStatus.ESTIMATED, **kwargs: Any
 ) -> ComponentResult:
     model: dict[str, Any] = (
-        {}
-        if status is ComponentStatus.UNSUPPORTED
-        else {"model_id": "declared-throughput", "model_version": 1}
+        {} if status is ComponentStatus.UNSUPPORTED else {"models": (("declared-throughput", 1),)}
     )
     missing: dict[str, Any] = (
         {"missing": ("configuration.max_requests_per_second",)}
@@ -124,9 +122,15 @@ def test_an_unknown_value_has_no_number_and_names_what_is_missing() -> None:
 
 def test_components_state_why_they_have_no_estimate() -> None:
     with pytest.raises(InvalidCapacityResult):
-        ComponentResult("api", ComponentStatus.INSUFFICIENT_INPUT, "declared-throughput", 1)  # missing what?
+        ComponentResult(
+            "api", ComponentStatus.INSUFFICIENT_INPUT, (("declared-throughput", 1),)
+        )  # missing what?
     with pytest.raises(InvalidCapacityResult):
         ComponentResult("api", ComponentStatus.ESTIMATED)  # estimated by which model?
+    with pytest.raises(InvalidCapacityResult):
+        ComponentResult(
+            "web", ComponentStatus.UNSUPPORTED, (("declared-throughput", 1),)
+        )  # yet a model applied
 
 
 # --- status ----------------------------------------------------------------------------------------

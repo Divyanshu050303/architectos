@@ -29,3 +29,12 @@ class InvalidAnalysisTransition(DomainError):
 
     code = "invalid_capacity_analysis_transition"
     message = "The capacity analysis cannot move to that status from its current status."
+
+
+class InvalidCapacityConfig(DomainError):
+    """An analysis asks for what the engine does not offer: an unknown model, parameters of a
+    model not selected, an undeclared parameter or an invalid value.
+    ``details`` = {"reason", "model_id", "parameter"}."""
+
+    code = "invalid_capacity_config"
+    message = "The capacity analysis configuration is invalid."
