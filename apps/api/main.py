@@ -19,10 +19,12 @@ from apps.api.routes import (
     invitations,
     organizations,
     projects,
+    requirement_analyses,
     requirement_sets,
     requirements,
     users,
 )
+from engines.requirements.factory import build_engine
 
 API_PREFIX = "/api/v1"
 
@@ -45,6 +47,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.rate_limiter = _rate_limiter(settings)
+    app.state.requirements_engine = build_engine(
+        provider=settings.requirements_llm_provider,
+        api_key=settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None,
+        model=settings.requirements_llm_model,
+        timeout_seconds=settings.requirements_llm_timeout_seconds,
+        max_output_tokens=settings.requirements_llm_max_output_tokens,
+    )
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -78,4 +87,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(projects.router, prefix=API_PREFIX)
     app.include_router(requirements.router, prefix=API_PREFIX)
     app.include_router(requirement_sets.router, prefix=API_PREFIX)
+    app.include_router(requirement_analyses.router, prefix=API_PREFIX)
     return app

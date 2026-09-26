@@ -18,7 +18,13 @@ from core.domain.unit_of_work import UnitOfWork
 from .access import project_access
 from .analysis import ANALYZED_STATUSES, ProjectAnalysis, ValidationReport, analyze, validate_requirement
 from .entities import NewRequirement, Requirement, RequirementChanges, RequirementVersion, Revision
-from .enums import RequirementPriority, RequirementSource, RequirementStatus, RequirementType
+from .enums import (
+    RequirementPriority,
+    RequirementScope,
+    RequirementSource,
+    RequirementStatus,
+    RequirementType,
+)
 from .errors import RequirementNotFound, RequirementVersionNotFound
 from .queries import RequirementCursor, RequirementQuery, encode_version_cursor
 
@@ -133,6 +139,7 @@ class RequirementService:
         source: RequirementSource = RequirementSource.USER,
         confidence: object = None,
         structured_data: object = None,
+        scope: RequirementScope = RequirementScope.SYSTEM,
     ) -> Requirement:
         new = NewRequirement.create(
             project_id=project_id,
@@ -146,6 +153,7 @@ class RequirementService:
             source=source,
             confidence=confidence,
             structured_data=structured_data,
+            scope=scope,
         )
         async with self._uow as uow:
             access = await project_access(
@@ -237,7 +245,7 @@ def _revision_events(
     old, new = before.content, saved.content
     fields = [
         name
-        for name in ("category", "title", "statement", "priority", "structured_data")
+        for name in ("category", "scope", "title", "statement", "priority", "structured_data")
         if getattr(old, name) != getattr(new, name)
     ]
     events = [

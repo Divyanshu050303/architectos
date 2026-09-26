@@ -1,0 +1,19 @@
+{
+  "extraction_precision": 0.9681,
+  "extraction_recall": 0.9579,
+  "extraction_f1": 0.963,
+  "classification_accuracy": 0.989,
+  "scope_accuracy": 0.989,
+  "normalization_accuracy": 1.0,
+  "conflict_accuracy": 1.0,
+  "ambiguities_precision": 0.875,
+  "ambiguities_recall": 1.0,
+  "assumptions_precision": 1.0,
+  "assumptions_recall": 1.0,
+  "issues_precision": 1.0,
+  "issues_recall": 1.0,
+  "completeness_accuracy": 1.0,
+  "readiness_accuracy": 1.0,
+  "false_positives": 3.0,
+  "false_negatives": 4.0
+}

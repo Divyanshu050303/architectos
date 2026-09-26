@@ -122,7 +122,7 @@ async def test_delete_is_soft(client: AsyncClient, world: World) -> None:
         ({"structuredData": {}}, "structuredData", "required_when_in_force"),
         ({"category": "vibes"}, "category", "unknown_for_type"),
         ({"title": "   "}, "title", "length"),
-        ({"confidence": "0.9"}, "confidence", "only_for_ai"),
+        ({"confidence": "0.9"}, "confidence", "not_for_user"),
         (
             {
                 "type": "availability",
@@ -458,3 +458,68 @@ async def test_analysis_and_validation_are_tenant_scoped(
         f"/api/v1/projects/{world.other_id}/requirements/{created['id']}/validate", headers=world.ada
     )
     assert wrong.json()["error"]["code"] == "requirement_not_found"
+
+
+# --- scope, targets, ranges and sources (Requirements Engine phase 1) -----------------------------
+
+
+async def test_scope_targets_and_ranges_round_trip(client: AsyncClient, world: World) -> None:
+    created = await create(
+        client,
+        world,
+        type="performance",
+        category="latency",
+        scope="api",
+        structuredData={
+            "metric": "latency",
+            "operator": "=",
+            "value": "300",
+            "unit": "ms",
+            "percentile": "p95",
+        },
+    )
+    assert (created["scope"], created["structuredData"]["operator"]) == ("api", "==")
+    storage = await create(
+        client,
+        world,
+        type="data",
+        category="data_volume",
+        structuredData={"metric": "storage", "operator": "range", "min": "10", "max": "20", "unit": "GB"},
+    )
+    assert storage["scope"] == "system"
+    assert storage["normalizedData"] == {
+        "metric": "storage",
+        "operator": "between",
+        "min": "10000000000",
+        "max": "20000000000",
+        "unit": "B",
+    }
+    changed = await client.patch(
+        f"{world.base}/{created['id']}",
+        json={"expectedVersion": 1, "scope": "database", "changeReason": "It is the database"},
+        headers=world.ada,
+    )
+    assert (changed.json()["scope"], changed.json()["version"]) == ("database", 2)
+    history = await client.get(f"{world.base}/{created['id']}/versions", headers=world.ada)
+    assert [v["scope"] for v in history.json()["versions"]] == ["api", "database"]
+
+
+async def test_ranges_conflict_through_the_analysis(client: AsyncClient, world: World) -> None:
+    await create(
+        client,
+        world,
+        structuredData={"metric": "rps", "operator": "between", "min": 100, "max": 200, "unit": "rps"},
+    )
+    await create(client, world, structuredData=RPS | {"operator": ">=", "value": 500})
+    analysis = (await client.get(f"{world.base}/analysis", headers=world.ada)).json()
+    [conflict] = analysis["conflicts"]
+    assert "between 100 and 200 requests/second" in conflict["message"]
+
+
+async def test_other_sources_start_as_drafts(client: AsyncClient, world: World) -> None:
+    imported = await create(client, world, source="imported", status="draft")
+    assert (imported["source"], imported["confidence"]) == ("imported", None)
+    refused = await client.post(world.base, json=THROUGHPUT | {"source": "discovery"}, headers=world.ada)
+    assert refused.json()["error"]["details"] == {"field": "status", "reason": "not_allowed_at_creation"}
+    unknown_scope = await client.post(world.base, json=THROUGHPUT | {"scope": "planet"}, headers=world.ada)
+    assert unknown_scope.json()["error"]["code"] == "validation_error"

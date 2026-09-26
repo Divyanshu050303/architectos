@@ -38,8 +38,26 @@ class RequirementPriority(StrEnum):
 
 
 class RequirementSource(StrEnum):
-    """Where the requirement came from. AI-sourced requirements are never authoritative by default:
-    they start as drafts and carry a confidence."""
+    """Who stated or interpreted the requirement. Only a person is authoritative: everything else
+    starts as a draft that a person promotes, and machine interpretations (ai, discovery) carry a
+    confidence in that interpretation."""
 
+    USER = "user"  # typed by a person, as a structured requirement
+    AI = "ai"  # interpreted by a language model
+    IMPORTED = "imported"  # brought in from another tool or document
+    DISCOVERY = "discovery"  # inferred from an existing system (e.g. observed traffic)
+    SYSTEM = "system"  # extracted from a person's text by ArchitectOS's deterministic rules
+
+
+class RequirementScope(StrEnum):
+    """What the requirement applies to. ``system`` also means "not specified": a scope is never
+    invented from text that does not state one."""
+
+    SYSTEM = "system"
+    SERVICE = "service"
+    API = "api"
+    DATABASE = "database"
+    QUEUE = "queue"
     USER = "user"
-    AI = "ai"
+    REGION = "region"
+    DATA = "data"

@@ -27,7 +27,7 @@ create, change and delete requirements and create requirement sets.
 ```json
 {
   "id": "0199...", "projectId": "0199...", "reference": "REQ-12", "number": 12, "version": 2,
-  "type": "capacity", "category": "throughput", "title": "API throughput",
+  "type": "capacity", "category": "throughput", "scope": "api", "title": "API throughput",
   "statement": "The API must support 5,000 requests per second.",
   "priority": "critical", "status": "active", "source": "user", "confidence": null,
   "structuredData": {"metric": "requests_per_second", "operator": ">=", "value": "5000", "unit": "requests/second"},
@@ -40,12 +40,15 @@ create, change and delete requirements and create requirement sets.
 - `version` is the current version: send it back as `expectedVersion` when changing the requirement.
 - `structuredData` is what was stored (explicit unit); `normalizedData` is derived, in the canonical
   unit, and is what the engines consume. Numbers are exact decimal **strings**.
-- `confidence` is only set for `source: "ai"`: confidence in the interpretation, not in the
-  requirement being true, and unrelated to priority.
+- `scope`: `system` (also "unspecified"), `service`, `api`, `database`, `queue`, `user`, `region`,
+  `data`; defaults to `system`.
+- `confidence` is confidence in the interpretation, not in the requirement being true, and unrelated
+  to priority: required for `source` `ai` and `discovery`, optional for `system` and `imported`,
+  refused for `user`.
 - Enumerations are lower-case: `type` (`functional`, `non_functional`, `capacity`, `performance`,
   `availability`, `reliability`, `security`, `data`, `compliance`, `operational`, `cost`), `priority`
   (`critical`, `high`, `medium`, `low`), `status` (`draft`, `active`, `satisfied`, `invalid`,
-  `deprecated`), `source` (`user`, `ai`).
+  `deprecated`), `source` (`user`, `ai`, `system`, `imported`, `discovery`).
 
 ### Create
 
@@ -55,8 +58,9 @@ create, change and delete requirements and create requirement sets.
  "structuredData": {"metric": "rps", "operator": ">=", "quantity": "2k requests/sec"}}
 ```
 
-`status` is `draft` (default) or `active`. `source` defaults to `user`; `source: "ai"` requires
-`confidence` (0–1, at most 3 decimals) and `status: "draft"`. Convenient input is normalized
+`status` is `draft` (default) or `active`; only `source: "user"` (the default) may start `active`.
+Constraints use `>=`, `>`, `<=`, `<`, `==` (a target) with `value`, or `"between"` with `min` and
+`max` (inclusive). Convenient input is normalized
 deterministically (see [normalization](../domain/requirements.md#normalization)); ambiguous spellings
 such as `5m` or `gb` are refused.
 
@@ -67,8 +71,8 @@ such as `5m` or `gb` are refused.
  "value": "5000", "unit": "requests/second"}, "changeReason": "Traffic forecast increased from 2K to 5K RPS"}
 ```
 
-Any of `category`, `title`, `statement`, `priority`, `status`, `structuredData` (`{}` removes the
-constraint). Type, source, confidence and project never change. Every change creates a new immutable
+Any of `category`, `scope`, `title`, `statement`, `priority`, `status`, `structuredData` (`{}` removes
+the constraint). Type, source, confidence and project never change. Every change creates a new immutable
 version. `changeReason` is required when the requirement is active or satisfied. A change that leaves
 everything as it is returns the requirement unchanged (no version).
 
@@ -96,6 +100,7 @@ newest first; `limit` 1–100 (default 50).
 
 `validate` checks the current version against **today's** rules and whether it could become active,
 plus warnings (`missing_constraint`, `missing_percentile`, `low_confidence`, `not_ready_for_active`).
+Severities are `blocking`, `warning` and `info`.
 
 `analysis` covers draft, active and satisfied requirements; every finding names the exact
 `{id, reference, version}` it was computed from:
@@ -151,6 +156,69 @@ Sets never change. `planningInput` is the [Architecture Planning Input](../domai
 exactly as stored at creation (snake_case keys: it is a versioned engine contract).
 `contentHash` = SHA-256 of `json.dumps(planningInput, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
 in UTF-8: anyone can verify it, and equal content gives an equal hash.
+
+## Requirement analyses (Requirements Engine)
+
+How the engine works, and why: [docs/requirements-engine.md](../requirements-engine.md).
+
+| Method and path | Permission | Success | Errors |
+|---|---|---|---|
+| `POST /projects/{id}/requirement-analyses` `{input}` | `requirement.create` | `201 Analysis` | `409 project_archived`, `413 payload_too_large`, `422 invalid_requirement_input`, `429 rate_limited` |
+| `GET /projects/{id}/requirement-analyses/{analysisId}` | `requirement.read` | `200 Analysis` | `404 requirement_analysis_not_found` |
+| `POST /projects/{id}/requirement-analyses/{analysisId}/promote` `{candidateKeys}` | `requirement.create` | `200 {promotions: [{candidateKey, created, requirement}]}` | `409 project_archived`, `422 invalid_promotion` |
+
+**Analyze** runs the Requirements Engine over a plain-language description (at most 20,000
+characters; rate-limited to 60 per user per hour) and stores the analysis: the text exactly as
+written, the engine version and the result. **Nothing becomes a requirement.** The analysis lists:
+
+- `candidates`: proposed requirements, each with a deterministic `key`, the exact `span` of the
+  input it came from, `method` (`pattern` or `llm`), `source` (`system` or `ai`), `confidence`
+  (in the interpretation), its classification, `structuredData` and `normalizedData`;
+- findings, each `{key, kind, code, severity, message, suggestion, span, candidateKeys,
+  requirementReferences, options, ...}`, grouped as `issues` (invalid, rejected, duplicate,
+  unresolved, extraction), `ambiguities`, `assumptions`, `conflicts` (contradictions and
+  consistency notes, also against the project's existing requirements) and `completeness.findings`;
+- `completeness`: `status` (complete, incomplete, unknown), the detected `profiles` with their
+  evidence, each area's `importance`, and the `covered` and `missing` areas;
+- `readyForArchitecture`: true when no finding is `blocking` (`blocking` lists their keys);
+- `semantic`: whether a language model was consulted, why, with which prompt version, its status
+  and token usage (the model is only asked when the rules leave text unread, and its proposals are
+  validated like everything else).
+
+**Promote** turns chosen candidates into **draft** requirements (at most 100 per call), validated
+like any creation. Idempotent: a candidate promoted before returns its requirement with
+`created: false`.
+
+Requirements promoted from an analysis keep their provenance. A
+promoted requirement is always a draft and keeps its origin: the analysis, which stores the raw
+input exactly as written, and the candidate, which points at the exact span of that text. The
+planning input carries it as `origin: {analysis_id, candidate_key}`.
+
+- `422 invalid_requirement_input`: the text to analyze is empty, longer than 20,000 characters, or
+  contains control characters (`details.reason`).
+- `404 requirement_analysis_not_found`: no such analysis in this project.
+- `409 candidate_already_promoted`: that candidate is already a live requirement
+  (`details.requirementId`); promoting twice never creates a duplicate.
+- `422 invalid_promotion`: no candidates chosen, more than 100, one chosen twice, or one that is
+  not in the analysis (`details.reason`, `details.candidateKey`).
+
+Promotion is recorded as `requirement.promoted` (the reference, the analysis and the candidate);
+an analysis as `requirement_analysis.created` (engine version and counts, never the text).
+
+**Limits.** An analysis considers at most 100 candidates and reports at most 300 findings; beyond
+that an `extraction` warning (`too_many_candidates`, `findings_truncated`) says what was left out.
+Blocking findings are never the ones cut. A repeated vague phrase ("fast", "fast", ...) is one
+finding at its first occurrence. The worst case of a 20,000-character input takes a fraction of a
+second.
+
+**Metrics** are structured log events on the `architectos.metrics` logger (`metric`,
+`metric_kind` counter or observation, `value`, `labels`): `requirements.analyze`,
+`requirements.analyze.duration_ms`, `requirements.extracted`, `requirements.ambiguous`,
+`requirements.conflicting`, `requirements.incomplete` (`status`), `requirements.ready`,
+`requirements.promoted`, `requirements.llm.calls` / `requirements.llm_failure` (`source`,
+`reason`) and `requirements.llm.input_tokens` / `output_tokens` / `latency_ms`, all labelled with the
+`source` (`provider/model`). Labels must be short lowercase
+identifiers, so requirement text can never become a label.
 
 ## Audit
 

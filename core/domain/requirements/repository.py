@@ -1,6 +1,7 @@
 import uuid
 from typing import Any, Protocol
 
+from .analyses import NewRequirementAnalysis, RequirementAnalysis
 from .entities import NewRequirement, Requirement, RequirementVersion, Revision
 from .enums import RequirementStatus
 from .queries import RequirementQuery
@@ -15,7 +16,9 @@ class RequirementRepository(Protocol):
     serializes number allocation and keeps archived projects frozen."""
 
     async def add(self, requirement: NewRequirement) -> Requirement:
-        """Allocates the next number in the project, stores the requirement and its version 1."""
+        """Allocates the next number in the project, stores the requirement and its version 1.
+        Raises CandidateAlreadyPromoted if its origin already has a live requirement (the
+        surrounding transaction stays usable)."""
         ...
 
     async def get(
@@ -84,3 +87,11 @@ class RequirementSetRepository(Protocol):
         """The set (without items) and its stored Architecture Planning Input, exactly as built at
         creation, in one query."""
         ...
+
+
+class RequirementAnalysisRepository(Protocol):
+    """Scoped by project. Append-only: there is no update or delete."""
+
+    async def add(self, analysis: NewRequirementAnalysis) -> RequirementAnalysis: ...
+
+    async def get(self, project_id: uuid.UUID, analysis_id: uuid.UUID) -> RequirementAnalysis | None: ...

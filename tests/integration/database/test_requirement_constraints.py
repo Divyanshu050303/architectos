@@ -79,7 +79,9 @@ async def food(db: AsyncSession) -> ProjectRecord:
 
 
 async def test_a_requirement_with_its_first_version(db: AsyncSession, food: ProjectRecord) -> None:
-    record = await with_first_version(db, requirement(food.id, confidence=Decimal("0.95")))
+    record = await with_first_version(
+        db, requirement(food.id, source="ai", status="draft", confidence=Decimal("0.95"))
+    )
     await check_deferred(db)
     await db.refresh(record)
     assert (record.number, record.current_version, record.deleted_at) == (1, 1, None)
@@ -127,6 +129,11 @@ async def test_numbers_are_unique_within_a_project_only(db: AsyncSession, food: 
         {"confidence": Decimal("1.001")},
         {"confidence": Decimal("-0.1")},
         {"source": "ai"},
+        {"source": "discovery"},
+        {"source": "user", "confidence": Decimal("0.9")},
+        {"source": "llm"},
+        {"scope": "planet"},
+        {"scope": "API"},
         {"structured_data": []},
         {"structured_data": "2000"},
         {"structured_data": {"blob": "x" * 16_400}},
@@ -151,6 +158,11 @@ async def test_numbers_are_unique_within_a_project_only(db: AsyncSession, food: 
         "confidence-above-one",
         "negative-confidence",
         "ai-without-confidence",
+        "discovery-without-confidence",
+        "user-with-confidence",
+        "unknown-source",
+        "unknown-scope",
+        "uppercase-scope",
         "structured-data-array",
         "structured-data-string",
         "structured-data-too-large",
@@ -251,3 +263,22 @@ async def test_history_outlives_the_authors_account(db: AsyncSession, food: Proj
         )
     )
     assert kept == ada.id
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"scope": "api"},
+        {"source": "system", "status": "draft"},
+        {"source": "system", "confidence": Decimal("0.8"), "status": "draft"},
+        {"source": "imported", "status": "draft"},
+        {"source": "discovery", "confidence": Decimal("0.6"), "status": "draft"},
+    ],
+    ids=["api-scope", "system", "system-with-confidence", "imported", "discovery"],
+)
+async def test_new_sources_and_scopes(
+    db: AsyncSession, food: ProjectRecord, overrides: dict[str, object]
+) -> None:
+    record = await with_first_version(db, requirement(food.id, **overrides))
+    await db.refresh(record)
+    assert record.scope == overrides.get("scope", "system")

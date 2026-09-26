@@ -9,6 +9,7 @@ from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
 from .project import ProjectRecord
 from .requirement import RequirementRecord, RequirementVersionRecord
+from .requirement_analysis import RequirementAnalysisRecord
 from .requirement_set import RequirementSetItemRecord, RequirementSetRecord
 from .session import SessionRecord
 from .user import UserRecord
@@ -22,6 +23,7 @@ __all__ = [
     "OrganizationRecord",
     "PasswordResetTokenRecord",
     "ProjectRecord",
+    "RequirementAnalysisRecord",
     "RequirementRecord",
     "RequirementSetItemRecord",
     "RequirementSetRecord",

@@ -27,7 +27,8 @@ AUTH_TABLES = {
 PROJECT_TABLES = {"projects"}
 REQUIREMENT_TABLES = {"requirements", "requirement_versions"}
 SET_TABLES = {"requirement_sets", "requirement_set_items"}
-ALL_TABLES = AUTH_TABLES | PROJECT_TABLES | REQUIREMENT_TABLES | SET_TABLES
+ANALYSIS_TABLES = {"requirement_analyses"}
+ALL_TABLES = AUTH_TABLES | PROJECT_TABLES | REQUIREMENT_TABLES | SET_TABLES | ANALYSIS_TABLES
 GUARDS = {"audit_logs_reject_change", "requirement_versions_reject_change", "requirement_sets_reject_change"}
 
 
@@ -157,5 +158,54 @@ def test_downgrading_requirement_sets_leaves_requirements_intact(empty_database_
     command.downgrade(config, "0003")
     assert _tables(empty_database_url) == AUTH_TABLES | PROJECT_TABLES | REQUIREMENT_TABLES
     assert "requirement_sets_reject_change" not in _functions(empty_database_url)
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES
+
+
+def test_upgrading_existing_requirements_gives_them_the_system_scope(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0005")
+    asyncio.run(
+        _execute(
+            empty_database_url,
+            """
+            WITH o AS (
+                INSERT INTO organizations (id, name)
+                VALUES ('00000000-0000-7000-8000-000000000001', 'Acme') RETURNING id
+            ), p AS (
+                INSERT INTO projects (id, organization_id, name, slug)
+                SELECT '00000000-0000-7000-8000-000000000002', o.id, 'Food', 'food' FROM o RETURNING id
+            ), r AS (
+                INSERT INTO requirements (id, project_id, number, current_version, type, category, title,
+                                          statement, priority, status, source)
+                SELECT '00000000-0000-7000-8000-000000000003', p.id, 1, 1, 'functional', 'order', 't', 's',
+                       'low', 'draft', 'user'
+                FROM p RETURNING id
+            )
+            INSERT INTO requirement_versions (id, requirement_id, version, type, category, title, statement,
+                                              priority, status, source)
+            SELECT gen_random_uuid(), r.id, 1, 'functional', 'order', 't', 's', 'low', 'draft', 'user' FROM r
+            """,
+        )
+    )
+
+    command.upgrade(config, "head")
+
+    rows = asyncio.run(
+        _execute(
+            empty_database_url,
+            "SELECT scope FROM requirements UNION ALL SELECT scope FROM requirement_versions",
+        )
+    )
+    assert rows == [("system",), ("system",)]
+    command.downgrade(config, "0005")  # no row uses a new source or scope: downgrading is possible
+    command.upgrade(config, "head")
+
+
+def test_downgrading_analyses_leaves_requirement_sets_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0006")
+    assert _tables(empty_database_url) == ALL_TABLES - ANALYSIS_TABLES
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES

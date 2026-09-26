@@ -37,6 +37,7 @@ class Operation:
             .replace("{requirement_id}", str(uuid.uuid4()))
             .replace("{version}", "1")
             .replace("{set_id}", str(uuid.uuid4()))
+            .replace("{analysis_id}", str(uuid.uuid4()))
             .replace("{invitation_token}", "A" * 43)
         )
 

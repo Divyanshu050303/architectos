@@ -2,8 +2,10 @@ import uuid
 from decimal import Decimal
 
 from sqlalchemy import func, literal, or_, select, tuple_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.domain.requirements.analyses import Origin
 from core.domain.requirements.entities import (
     NewRequirement,
     Requirement,
@@ -13,16 +15,21 @@ from core.domain.requirements.entities import (
 )
 from core.domain.requirements.enums import (
     RequirementPriority,
+    RequirementScope,
     RequirementSource,
     RequirementStatus,
     RequirementType,
 )
+from core.domain.requirements.errors import CandidateAlreadyPromoted
 from core.domain.requirements.queries import RequirementQuery
 from core.domain.requirements.value_objects import parse_structured_data
 from persistence.models import RequirementRecord, RequirementVersionRecord
 from persistence.models.requirement import RequirementContent as ContentColumns
 
+from ._errors import violated_constraint
 from ._search import escape_like
+
+ORIGIN_UNIQUE_INDEX = "uq_requirements_origin_live"
 
 
 def _content(record: ContentColumns) -> RequirementContent:
@@ -35,6 +42,7 @@ def _content(record: ContentColumns) -> RequirementContent:
         priority=RequirementPriority(record.priority),
         status=RequirementStatus(record.status),
         constraint=parse_structured_data(record.structured_data),
+        scope=RequirementScope(record.scope),
     )
 
 
@@ -52,6 +60,7 @@ def _content_columns(content: RequirementContent) -> dict[str, object]:
         "priority": content.priority.value,
         "status": content.status.value,
         "structured_data": content.structured_data,
+        "scope": content.scope.value,
     }
 
 
@@ -68,6 +77,9 @@ def to_requirement(record: RequirementRecord) -> Requirement:
         created_at=record.created_at,
         updated_at=record.updated_at,
         deleted_at=record.deleted_at,
+        origin=Origin(record.origin_analysis_id, record.origin_candidate_key)
+        if record.origin_analysis_id is not None and record.origin_candidate_key is not None
+        else None,
     )
 
 
@@ -104,10 +116,25 @@ class SqlAlchemyRequirementRepository:
             source=requirement.source.value,
             confidence=requirement.confidence,
             created_by_user_id=requirement.created_by_user_id,
+            origin_analysis_id=requirement.origin.analysis_id if requirement.origin else None,
+            origin_candidate_key=requirement.origin.candidate_key if requirement.origin else None,
             **columns,
         )
-        self._session.add(record)
-        await self._session.flush()
+        try:
+            async with self._session.begin_nested():
+                self._session.add(record)
+                await self._session.flush()
+        except IntegrityError as error:
+            if violated_constraint(error) != ORIGIN_UNIQUE_INDEX or requirement.origin is None:
+                raise
+            existing = await self._session.scalar(
+                select(RequirementRecord.id).where(
+                    RequirementRecord.origin_analysis_id == requirement.origin.analysis_id,
+                    RequirementRecord.origin_candidate_key == requirement.origin.candidate_key,
+                    RequirementRecord.deleted_at.is_(None),
+                )
+            )
+            raise CandidateAlreadyPromoted(details={"requirement_id": str(existing)}) from None
         self._session.add(
             RequirementVersionRecord(
                 requirement_id=record.id,

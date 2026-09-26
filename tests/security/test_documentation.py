@@ -36,9 +36,8 @@ def in_scope(path: str) -> bool:
 def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
-    assert (
-        len(served) == 20
-    )  # 7 project, 9 requirement (incl. analysis, validation, history), 4 set endpoints
+    # 7 project, 9 requirement, 4 requirement set and 3 requirement analysis endpoints
+    assert len(served) == 23
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -69,8 +68,13 @@ def test_the_taxonomy_metrics_and_units_are_documented() -> None:
 
 
 def test_the_decisions_are_recorded() -> None:
-    for adr in ("ADR-007-requirement-versioning-and-sets.md", "ADR-008-project-write-locking.md"):
+    for adr in (
+        "ADR-007-requirement-versioning-and-sets.md",
+        "ADR-008-project-write-locking.md",
+        "ADR-009-requirements-engine.md",
+    ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
         assert "## Consequences" in text
     assert (DOCS / "frontend" / "projects-requirements-contract.md").exists()
+    assert (DOCS / "requirements-engine.md").exists()

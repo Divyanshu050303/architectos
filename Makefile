@@ -7,7 +7,7 @@ UV := uv run
 API_PORT ?= 8000
 
 .PHONY: install db-up db-down migrate migration run lint format typecheck test test-unit \
-        test-integration test-api test-security coverage migrate-check check
+        test-integration test-api test-security test-eval eval coverage migrate-check check
 
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
@@ -49,6 +49,12 @@ test-api:           ## HTTP-level tests of every endpoint (subset of test-integr
 
 test-security:      ## Security suite: endpoint sweeps, tenant isolation, leaks, traceability
 	$(UV) pytest tests/security
+
+test-eval:          ## Requirements Engine regression: quality must not drop below the recorded thresholds
+	$(UV) pytest tests/evaluation
+
+eval:               ## Requirements Engine evaluation report (metrics and every difference from the labels)
+	$(UV) python -m ai.evaluation.evaluator
 
 coverage:           ## Full suite with line coverage of the API, domain and persistence code
 	$(UV) pytest --cov=apps/api --cov=core --cov=persistence --cov-report=term-missing:skip-covered

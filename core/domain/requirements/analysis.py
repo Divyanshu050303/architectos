@@ -22,12 +22,12 @@ from decimal import Decimal
 from enum import StrEnum
 from itertools import combinations
 
-from .entities import Requirement
-from .enums import RequirementSource, RequirementStatus, RequirementType
+from .entities import Requirement, RequirementContent
+from .enums import RequirementScope, RequirementSource, RequirementStatus, RequirementType
 from .errors import InvalidRequirement
 from .normalization import CanonicalQuantity, canonical
 from .requirements import MEASURABLE_TYPES, validate_content
-from .value_objects import Operator, QuantityConstraint, SetConstraint, decimal_to_str
+from .value_objects import QuantityConstraint, RangeConstraint, SetConstraint
 
 ANALYZED_STATUSES = frozenset(
     {RequirementStatus.DRAFT, RequirementStatus.ACTIVE, RequirementStatus.SATISFIED}
@@ -37,8 +37,11 @@ SIZING_METRICS = frozenset({"requests_per_second", "concurrent_users", "daily_ac
 
 
 class Severity(StrEnum):
-    ERROR = "error"
-    WARNING = "warning"
+    """How much a finding matters for architecture work."""
+
+    BLOCKING = "blocking"  # architecture cannot proceed: an invalid requirement, a contradiction
+    WARNING = "warning"  # should be resolved: an ambiguity, a missing common concern
+    INFO = "info"  # worth knowing: one requirement strengthens another
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,7 +59,7 @@ class ValidationReport:
 
     @property
     def valid(self) -> bool:
-        return not any(issue.severity is Severity.ERROR for issue in self.issues)
+        return not any(issue.severity is Severity.BLOCKING for issue in self.issues)
 
 
 def _error_of(requirement: Requirement, status: RequirementStatus) -> InvalidRequirement | None:
@@ -74,7 +77,7 @@ def _ambiguities(requirement: Requirement) -> list[Issue]:
         issues.append(Issue(Severity.WARNING, "structured_data", "missing_constraint"))
     constraint = content.constraint
     if (
-        isinstance(constraint, QuantityConstraint)
+        isinstance(constraint, (QuantityConstraint, RangeConstraint))
         and constraint.metric == "latency"
         and constraint.percentile is None
     ):
@@ -91,7 +94,7 @@ def validate_requirement(requirement: Requirement) -> ValidationReport:
     issues: list[Issue] = []
     current = _error_of(requirement, requirement.content.status)
     if current is not None:
-        issues.append(Issue(Severity.ERROR, current.details["field"], current.details["reason"]))
+        issues.append(Issue(Severity.BLOCKING, current.details["field"], current.details["reason"]))
     as_active = _error_of(requirement, RequirementStatus.ACTIVE)
     issues += _ambiguities(requirement)
     if as_active is not None and current is None:
@@ -133,10 +136,19 @@ def _concerns_of(requirement: Requirement) -> set[Concern]:
 
 @dataclass(frozen=True, slots=True)
 class Conflict:
+    """A contradiction: always blocking. Tensions and stricter duplicates are not conflicts."""
+
     reason: str  # disjoint_bounds | disjoint_sets
     metric: str
     requirements: tuple[Requirement, Requirement]
     message: str
+    severity: Severity = Severity.BLOCKING
+
+    @property
+    def key(self) -> str:
+        """Stable within a project: the same two requirements give the same key."""
+        first, second = self.requirements
+        return f"{self.reason}:{first.reference}:{second.reference}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,47 +181,97 @@ class ProjectAnalysis:
     truncated: bool = False
 
 
-def _bound(quantity: CanonicalQuantity) -> str:
-    return f"{quantity.operator.value} {decimal_to_str(quantity.value)} {quantity.unit}"
+# (metric, scope, percentile, canonical unit): only requirements in one group are compared.
+class Relation(StrEnum):
+    """How two comparable requirements relate."""
+
+    DISJOINT = "disjoint"  # no value satisfies both: a conflict
+    EQUAL = "equal"  # they allow exactly the same values
+    FIRST_STRICTER = "first_stricter"  # everything the first allows, the second allows too
+    SECOND_STRICTER = "second_stricter"
+    OVERLAP = "overlap"  # compatible, neither contains the other (">= 100" and "<= 500")
 
 
-def _interval_conflict(a: CanonicalQuantity, b: CanonicalQuantity) -> bool:
-    """A lower bound above an upper bound (or equal, when either is strict) leaves nothing."""
-    lower, upper = (a, b) if a.operator.is_lower_bound else (b, a)
-    if not (lower.operator.is_lower_bound and upper.operator.is_upper_bound):
-        return False
-    strict = lower.operator is Operator.MORE_THAN or upper.operator is Operator.LESS_THAN
-    return lower.exact > upper.exact or (strict and lower.exact == upper.exact)
+@dataclass(frozen=True, slots=True)
+class Comparison[T]:
+    first: T
+    second: T
+    metric: str
+    relation: Relation
+    first_bound: str  # human-readable, e.g. "<= 300 ms", "in {eu-west-1}"
+    second_bound: str
+    sets: bool = False  # a set membership (regions) rather than a quantity
+
+    @property
+    def reason(self) -> str:
+        """The conflict code, when the relation is DISJOINT."""
+        return "disjoint_sets" if self.sets else "disjoint_bounds"
+
+
+def _relate(first_in_second: bool, second_in_first: bool, intersect: bool) -> Relation:
+    if not intersect:
+        return Relation.DISJOINT
+    if first_in_second and second_in_first:
+        return Relation.EQUAL
+    if first_in_second:
+        return Relation.FIRST_STRICTER
+    if second_in_first:
+        return Relation.SECOND_STRICTER
+    return Relation.OVERLAP
+
+
+# (metric, scope, percentile, canonical unit): only requirements in one group are compared.
+type _Group = tuple[str, RequirementScope, Decimal | None, str]
+
+
+def compare_like_with_like[T](items: list[tuple[T, RequirementContent]]) -> list[Comparison[T]]:
+    """Every pair of comparable requirements with how they relate. Only like is compared with like:
+    the same metric, scope, percentile and canonical unit (latency p95 is not p99, an API is not a
+    database, USD is not EUR), after exact conversion (600,000 requests/minute is 10,000/second)."""
+    quantities: dict[_Group, list[tuple[T, CanonicalQuantity]]] = defaultdict(list)
+    sets: dict[tuple[str, RequirementScope], list[tuple[T, SetConstraint]]] = defaultdict(list)
+    for item, content in items:
+        constraint = content.constraint
+        if isinstance(constraint, QuantityConstraint | RangeConstraint):
+            quantity = canonical(constraint)
+            group = (quantity.metric, content.scope, quantity.percentile, quantity.unit)
+            quantities[group].append((item, quantity))
+        elif isinstance(constraint, SetConstraint):
+            sets[constraint.metric, content.scope].append((item, constraint))
+
+    comparisons: list[Comparison[T]] = []
+    for (metric, _, _, _), members in quantities.items():
+        for (first, a), (second, b) in combinations(members, 2):
+            relation = _relate(
+                b.interval.contains(a.interval),
+                a.interval.contains(b.interval),
+                a.interval.intersects(b.interval),
+            )
+            comparisons.append(Comparison(first, second, metric, relation, a.describe(), b.describe()))
+    for (metric, _), choices in sets.items():
+        for (first, x), (second, y) in combinations(choices, 2):
+            left, right = set(x.values), set(y.values)
+            relation = _relate(left <= right, right <= left, bool(left & right))
+            described = (f"in {{{', '.join(x.values)}}}", f"in {{{', '.join(y.values)}}}")
+            comparisons.append(Comparison(first, second, metric, relation, *described, sets=True))
+    return comparisons
 
 
 def find_conflicts(requirements: list[Requirement]) -> list[Conflict]:
-    # Only like with like: latency p95 is not comparable with p99, and USD is not EUR.
-    quantities: dict[tuple[str, Decimal | None, str], list[tuple[Requirement, CanonicalQuantity]]] = (
-        defaultdict(list)
-    )
-    sets: dict[str, list[tuple[Requirement, SetConstraint]]] = defaultdict(list)
-    for requirement in requirements:
-        constraint = requirement.content.constraint
-        if isinstance(constraint, QuantityConstraint):
-            quantity = canonical(constraint)
-            quantities[quantity.metric, quantity.percentile, quantity.unit].append((requirement, quantity))
-        elif isinstance(constraint, SetConstraint):
-            sets[constraint.metric].append((requirement, constraint))
-
+    """Pairs of requirements no value can satisfy together (see ``compare_like_with_like``)."""
     conflicts: list[Conflict] = []
-    for (metric, _, _), members in quantities.items():
-        for (first, a), (second, b) in combinations(members, 2):
-            if _interval_conflict(a, b):
-                message = (
-                    f"{first.reference} requires {metric} {_bound(a)}, but {second.reference} "
-                    f"requires {metric} {_bound(b)}: no value satisfies both."
-                )
-                conflicts.append(Conflict("disjoint_bounds", metric, (first, second), message))
-    for metric, choices in sets.items():
-        for (first, x), (second, y) in combinations(choices, 2):
-            if not set(x.values) & set(y.values):
-                message = f"{first.reference} and {second.reference} allow no {metric} in common."
-                conflicts.append(Conflict("disjoint_sets", metric, (first, second), message))
+    for comparison in compare_like_with_like([(r, r.content) for r in requirements]):
+        if comparison.relation is not Relation.DISJOINT:
+            continue
+        first, second, metric = comparison.first, comparison.second, comparison.metric
+        if comparison.reason == "disjoint_sets":
+            message = f"{first.reference} and {second.reference} allow no {metric} in common."
+        else:
+            message = (
+                f"{first.reference} requires {metric} {comparison.first_bound}, but {second.reference} "
+                f"requires {metric} {comparison.second_bound}: no value satisfies both."
+            )
+        conflicts.append(Conflict(comparison.reason, metric, (first, second), message))
     return conflicts
 
 
@@ -217,13 +279,16 @@ def find_unbounded(requirements: list[Requirement]) -> list[Unbounded]:
     by_metric: dict[str, list[Requirement]] = defaultdict(list)
     for requirement in requirements:
         constraint = requirement.content.constraint
-        if isinstance(constraint, QuantityConstraint) and constraint.metric in SIZING_METRICS:
+        if (
+            isinstance(constraint, (QuantityConstraint, RangeConstraint))
+            and constraint.metric in SIZING_METRICS
+        ):
             by_metric[constraint.metric].append(requirement)
     return [
         Unbounded(metric, tuple(members))
         for metric, members in sorted(by_metric.items())
         if not any(
-            isinstance(r.content.constraint, QuantityConstraint)
+            isinstance(r.content.constraint, (QuantityConstraint, RangeConstraint))
             and r.content.constraint.operator.is_lower_bound
             for r in members
         )

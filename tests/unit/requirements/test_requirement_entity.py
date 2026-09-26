@@ -128,7 +128,7 @@ def test_ai_requirements_are_drafts_with_a_confidence() -> None:
 def test_people_do_not_state_a_confidence() -> None:
     with pytest.raises(InvalidRequirement) as error:
         new(confidence=1)
-    assert error.value.details == {"field": "confidence", "reason": "only_for_ai"}
+    assert error.value.details == {"field": "confidence", "reason": "not_for_user"}
 
 
 def test_active_measurable_requirements_need_a_constraint_at_creation() -> None:

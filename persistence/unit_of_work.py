@@ -12,6 +12,7 @@ from persistence.repositories.organizations import (
     SqlAlchemyOrganizationRepository,
 )
 from persistence.repositories.projects import SqlAlchemyProjectRepository
+from persistence.repositories.requirement_analyses import SqlAlchemyRequirementAnalysisRepository
 from persistence.repositories.requirement_sets import SqlAlchemyRequirementSetRepository
 from persistence.repositories.requirements import SqlAlchemyRequirementRepository
 from persistence.repositories.sessions import SqlAlchemySessionRepository
@@ -41,6 +42,7 @@ class SqlAlchemyUnitOfWork:
         self.projects = SqlAlchemyProjectRepository(session)
         self.requirements = SqlAlchemyRequirementRepository(session)
         self.requirement_sets = SqlAlchemyRequirementSetRepository(session)
+        self.requirement_analyses = SqlAlchemyRequirementAnalysisRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

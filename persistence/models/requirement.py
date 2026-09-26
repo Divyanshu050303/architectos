@@ -21,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from core.domain.requirements.enums import (
     RequirementPriority,
+    RequirementScope,
     RequirementSource,
     RequirementStatus,
     RequirementType,
@@ -53,6 +54,8 @@ class RequirementContent:
     structured_data: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
+    # What the requirement applies to; "system" when the statement does not say.
+    scope: Mapped[str] = mapped_column(Text, nullable=False, server_default=RequirementScope.SYSTEM.value)
 
 
 def content_checks() -> tuple[CheckConstraint, ...]:
@@ -69,8 +72,12 @@ def content_checks() -> tuple[CheckConstraint, ...]:
         CheckConstraint(in_values("status", RequirementStatus), name="status"),
         CheckConstraint(in_values("source", RequirementSource), name="source"),
         CheckConstraint("confidence IS NULL OR confidence BETWEEN 0 AND 1", name="confidence_range"),
-        # An interpretation by a machine must say how sure it is.
-        CheckConstraint("source <> 'ai' OR confidence IS NOT NULL", name="ai_confidence"),
+        # A machine's interpretation must say how sure it is; a person's requirement has no confidence.
+        CheckConstraint(
+            "source NOT IN ('ai', 'discovery') OR confidence IS NOT NULL", name="machine_confidence"
+        ),
+        CheckConstraint("source <> 'user' OR confidence IS NULL", name="user_without_confidence"),
+        CheckConstraint(in_values("scope", RequirementScope), name="scope"),
         CheckConstraint("jsonb_typeof(structured_data) = 'object'", name="structured_data_object"),
         CheckConstraint(
             f"octet_length(structured_data::text) <= {MAX_STRUCTURED_DATA_BYTES}",
@@ -101,6 +108,9 @@ class RequirementRecord(UuidPrimaryKey, Timestamps, RequirementContent, Base):
         Uuid, ForeignKey("users.id", ondelete="SET NULL")
     )
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Provenance: the analysis and candidate this requirement was promoted from (both or neither).
+    origin_analysis_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    origin_candidate_key: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         # Also serves the RESTRICT check on projects(id).
@@ -125,6 +135,29 @@ class RequirementRecord(UuidPrimaryKey, Timestamps, RequirementContent, Base):
             deferrable=True,
             initially="DEFERRED",
             use_alter=True,
+        ),
+        # The origin analysis belongs to the same project, enforced by the database.
+        ForeignKeyConstraint(
+            ["origin_analysis_id", "project_id"],
+            ["requirement_analyses.id", "requirement_analyses.project_id"],
+            name="fk_requirements_origin_requirement_analyses",
+            ondelete="RESTRICT",
+        ),
+        # A candidate becomes at most one live requirement: a retried promotion cannot duplicate it
+        # (after a deliberate delete it can be promoted again).
+        Index(
+            "uq_requirements_origin_live",
+            "origin_analysis_id",
+            "origin_candidate_key",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND origin_analysis_id IS NOT NULL"),
+        ),
+        CheckConstraint(
+            "(origin_analysis_id IS NULL) = (origin_candidate_key IS NULL)", name="origin_complete"
+        ),
+        CheckConstraint(
+            "origin_candidate_key IS NULL OR origin_candidate_key ~ '^cand_[0-9a-f]{16}$'",
+            name="origin_candidate_key_format",
         ),
         CheckConstraint("number >= 1", name="number_positive"),
         CheckConstraint("current_version >= 1", name="current_version_positive"),

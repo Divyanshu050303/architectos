@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_timeout_seconds: float = Field(default=10, gt=0)
 
+    # Requirements Engine: semantic extraction with a language model, off unless configured. The
+    # deterministic engine never needs it; the model is only asked when the rules leave text unread.
+    requirements_llm_provider: Literal["none", "anthropic"] = "none"
+    anthropic_api_key: SecretStr | None = None
+    requirements_llm_model: str = "claude-sonnet-5"
+    requirements_llm_timeout_seconds: float = Field(default=20, gt=0, le=120)
+    requirements_llm_max_output_tokens: int = Field(default=4000, ge=256, le=16_000)
+
     @field_validator("cors_allowed_origins", "avatar_url_allowed_hosts", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -99,6 +107,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _production_guards(self) -> Self:
+        if self.requirements_llm_provider == "anthropic" and self.anthropic_api_key is None:
+            raise ValueError("REQUIREMENTS_LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY")
         if self.cookie_samesite == "none" and not self.cookie_secure:
             raise ValueError("COOKIE_SAMESITE=none requires COOKIE_SECURE=true")
         if self.environment != "production":

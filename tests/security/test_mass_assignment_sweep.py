@@ -49,6 +49,12 @@ VALID_BODIES: dict[str, dict[str, object]] = {
         "status": "draft",  # declared: status changes go through the lifecycle rules
     },
     "create_requirement_set_api_v1_projects__project_id__requirement_sets_post": {"name": "Baseline"},
+    "analyze_requirements_api_v1_projects__project_id__requirement_analyses_post": {
+        "input": "Support 2000 rps."
+    },
+    "promote_candidates_api_v1_projects__project_id__requirement_analyses__analysis_id__promote_post": {
+        "candidateKeys": ["cand_0000000000000000"]
+    },
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",

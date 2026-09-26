@@ -111,6 +111,7 @@ async def create_requirement(
         source=body.source,
         confidence=body.confidence,
         structured_data=body.structured_data,
+        scope=body.scope,
     )
     return RequirementResponse.from_requirement(requirement)
 
