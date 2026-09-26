@@ -36,9 +36,8 @@ def in_scope(path: str) -> bool:
 def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
-    assert (
-        len(served) == 20
-    )  # 7 project, 9 requirement (incl. analysis, validation, history), 4 set endpoints
+    # 7 project, 9 requirement, 4 requirement set and 3 requirement analysis endpoints
+    assert len(served) == 23
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"

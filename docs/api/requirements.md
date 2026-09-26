@@ -157,10 +157,37 @@ exactly as stored at creation (snake_case keys: it is a versioned engine contrac
 `contentHash` = SHA-256 of `json.dumps(planningInput, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`
 in UTF-8: anyone can verify it, and equal content gives an equal hash.
 
-## Provenance (Requirements Engine)
+## Requirement analyses (Requirements Engine)
 
-Requirements can also be *promoted* from a requirement analysis: the Requirements Engine's
-reading of a person's text (the analysis endpoints are described below once available). A
+| Method and path | Permission | Success | Errors |
+|---|---|---|---|
+| `POST /projects/{id}/requirement-analyses` `{input}` | `requirement.create` | `201 Analysis` | `409 project_archived`, `413 payload_too_large`, `422 invalid_requirement_input`, `429 rate_limited` |
+| `GET /projects/{id}/requirement-analyses/{analysisId}` | `requirement.read` | `200 Analysis` | `404 requirement_analysis_not_found` |
+| `POST /projects/{id}/requirement-analyses/{analysisId}/promote` `{candidateKeys}` | `requirement.create` | `200 {promotions: [{candidateKey, created, requirement}]}` | `409 project_archived`, `422 invalid_promotion` |
+
+**Analyze** runs the Requirements Engine over a plain-language description (at most 20,000
+characters; rate-limited to 60 per user per hour) and stores the analysis: the text exactly as
+written, the engine version and the result. **Nothing becomes a requirement.** The analysis lists:
+
+- `candidates`: proposed requirements, each with a deterministic `key`, the exact `span` of the
+  input it came from, `method` (`pattern` or `llm`), `source` (`system` or `ai`), `confidence`
+  (in the interpretation), its classification, `structuredData` and `normalizedData`;
+- findings, each `{key, kind, code, severity, message, suggestion, span, candidateKeys,
+  requirementReferences, options, ...}`, grouped as `issues` (invalid, rejected, duplicate,
+  unresolved, extraction), `ambiguities`, `assumptions`, `conflicts` (contradictions and
+  consistency notes, also against the project's existing requirements) and `completeness.findings`;
+- `completeness`: `status` (complete, incomplete, unknown), the detected `profiles` with their
+  evidence, each area's `importance`, and the `covered` and `missing` areas;
+- `readyForArchitecture`: true when no finding is `blocking` (`blocking` lists their keys);
+- `semantic`: whether a language model was consulted, why, with which prompt version, its status
+  and token usage (the model is only asked when the rules leave text unread, and its proposals are
+  validated like everything else).
+
+**Promote** turns chosen candidates into **draft** requirements (at most 100 per call), validated
+like any creation. Idempotent: a candidate promoted before returns its requirement with
+`created: false`.
+
+Requirements promoted from an analysis keep their provenance. A
 promoted requirement is always a draft and keeps its origin: the analysis, which stores the raw
 input exactly as written, and the candidate, which points at the exact span of that text. The
 planning input carries it as `origin: {analysis_id, candidate_key}`.

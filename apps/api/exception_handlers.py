@@ -70,6 +70,7 @@ from core.domain.projects.errors import (
 from core.domain.requirements.errors import (
     CandidateAlreadyPromoted,
     ChangeReasonRequired,
+    InvalidPromotion,
     InvalidRequirement,
     InvalidRequirementInput,
     InvalidRequirementSet,
@@ -149,6 +150,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidRequirementInput: 422,
     RequirementAnalysisNotFound: 404,
     CandidateAlreadyPromoted: 409,
+    InvalidPromotion: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

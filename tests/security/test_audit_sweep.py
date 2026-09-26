@@ -47,6 +47,8 @@ class Target:
     org_id: str
     project_id: str
     requirement_id: str
+    analysis_id: str
+    candidate_key: str
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -63,8 +65,9 @@ async def archive(client: AsyncClient, auth: dict[str, str], target: Target) -> 
 @dataclass(frozen=True)
 class Plan:
     actions: set[str]  # must all be recorded
-    resource: str  # "project", "requirement", or "created" (the resource the call creates)
-    body: dict[str, Any] | None = None
+    # "project", "requirement", "created" (the resource the call creates), or "promoted"
+    resource: str
+    body: dict[str, Any] | Callable[[Target], dict[str, Any]] | None = None
     prepare: Prepare = nothing
 
 
@@ -99,6 +102,12 @@ PLANS: dict[str, Plan] = {
     "create_requirement_set_api_v1_projects__project_id__requirement_sets_post": Plan(
         {"requirement_set.created"}, "created", {"name": "Audited set"}
     ),
+    "analyze_requirements_api_v1_projects__project_id__requirement_analyses_post": Plan(
+        {"requirement_analysis.created"}, "created", {"input": CANARY_STATEMENT + " Support 2000 rps."}
+    ),
+    "promote_candidates_api_v1_projects__project_id__requirement_analyses__analysis_id__promote_post": Plan(
+        {"requirement.promoted"}, "promoted", lambda target: {"candidateKeys": [target.candidate_key]}
+    ),
 }
 
 
@@ -111,21 +120,23 @@ def test_every_mutating_project_endpoint_is_classified(app: FastAPI) -> None:
     assert mutating == set(PLANS) | READ_ONLY
 
 
-# Actions written by use cases whose endpoint does not exist yet, with the phase that adds it.
-# Remove an entry as soon as its endpoint is in PLANS: the test fails on a stale entry.
-NOT_YET_EXPOSED = {
-    "requirement.promoted": "Requirements Engine phase 12: POST .../requirement-analyses/{id}/promote"
-}
-
-
 def test_every_project_scoped_audit_action_is_exercised() -> None:
     """No action is declared and then never written."""
-    declared = {
-        a.value for a in AuditAction if a.value.split(".")[0] in {"project", "requirement", "requirement_set"}
-    }
-    exercised = set().union(*(plan.actions for plan in PLANS.values()))
-    assert declared == exercised | set(NOT_YET_EXPOSED)
-    assert not exercised & set(NOT_YET_EXPOSED), "an exposed action is still listed as not yet exposed"
+    scoped = {"project", "requirement", "requirement_set", "requirement_analysis"}
+    declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
+    assert declared == set().union(*(plan.actions for plan in PLANS.values()))
+
+
+def _expected_resource(resource: str, target: Target, response: Any) -> str | None:
+    match resource:
+        case "project":
+            return target.project_id
+        case "requirement":
+            return target.requirement_id
+        case "promoted":
+            return str(response.json()["promotions"][0]["requirement"]["id"])
+        case _:  # "created"
+            return str(response.json()["id"]) if response.content else None
 
 
 async def audit_entries(client: AsyncClient, auth: dict[str, str], org_id: str) -> list[dict[str, Any]]:
@@ -152,7 +163,19 @@ async def fresh_target(client: AsyncClient, auth: dict[str, str], org_id: str) -
         f"/api/v1/projects/{project.json()['id']}/requirements", json=REQUIREMENT, headers=auth
     )
     assert requirement.status_code == 201, requirement.text
-    return Target(org_id, project.json()["id"], requirement.json()["id"])
+    analysis = await client.post(
+        f"/api/v1/projects/{project.json()['id']}/requirement-analyses",
+        json={"input": "Support at least 2000 rps."},
+        headers=auth,
+    )
+    assert analysis.status_code == 201, analysis.text
+    return Target(
+        org_id,
+        project.json()["id"],
+        requirement.json()["id"],
+        analysis.json()["id"],
+        analysis.json()["candidates"][0]["key"],
+    )
 
 
 async def test_every_mutation_is_audited_without_requirement_text(
@@ -169,18 +192,18 @@ async def test_every_mutation_is_audited_without_requirement_text(
 
         op = operations[operation_id]
         url = op.url(
-            organization_id=org_id, project_id=target.project_id, requirement_id=target.requirement_id
+            organization_id=org_id,
+            project_id=target.project_id,
+            requirement_id=target.requirement_id,
+            analysis_id=target.analysis_id,
         )
-        response = await client.request(op.method, url, json=plan.body, headers=auth)
+        body = plan.body(target) if callable(plan.body) else plan.body
+        response = await client.request(op.method, url, json=body, headers=auth)
         assert response.is_success, (operation_id, response.text)
 
         new = [e for e in await audit_entries(client, auth, org_id) if e["id"] not in before]
         assert {e["action"] for e in new} == plan.actions, operation_id
-        expected_resource = {
-            "project": target.project_id,
-            "requirement": target.requirement_id,
-            "created": response.json().get("id") if response.content else None,
-        }[plan.resource]
+        expected_resource = _expected_resource(plan.resource, target, response)
         for entry in new:
             assert entry["resourceId"] == expected_resource, (operation_id, entry)
             assert entry["actorUserId"] is not None
@@ -211,6 +234,7 @@ async def test_read_only_endpoints_write_nothing(
         "project_id": target.project_id,
         "requirement_id": target.requirement_id,
         "set_id": sets["requirementSets"][0]["id"],
+        "analysis_id": target.analysis_id,
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

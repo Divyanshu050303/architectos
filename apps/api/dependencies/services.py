@@ -25,6 +25,7 @@ from core.domain.organizations.invitation_service import InvitationService, Invi
 from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
 from core.domain.projects.project_service import ProjectService
+from core.domain.requirements.analysis_service import RequirementAnalysisService
 from core.domain.requirements.requirement_service import RequirementService
 from core.domain.requirements.requirement_set_service import RequirementSetService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
@@ -242,3 +243,17 @@ def get_requirement_set_service(
 
 
 RequirementSetServiceDep = Annotated[RequirementSetService, Depends(get_requirement_set_service)]
+
+
+def get_requirement_analysis_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> RequirementAnalysisService:
+    # One engine per process, built from settings at startup (see apps/api/main.py).
+    return RequirementAnalysisService(
+        SqlAlchemyUnitOfWork(db, client), request.app.state.requirements_engine, clock=clock
+    )
+
+
+RequirementAnalysisServiceDep = Annotated[
+    RequirementAnalysisService, Depends(get_requirement_analysis_service)
+]
