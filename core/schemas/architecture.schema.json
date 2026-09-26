@@ -454,6 +454,10 @@
               "network_bandwidth_bytes_per_second",
               "partitions",
               "persistence",
+              "pricing_conditions",
+              "pricing_service",
+              "pricing_sku",
+              "pricing_storage_sku",
               "region",
               "replicas",
               "replication_factor",
@@ -595,6 +599,32 @@
                 "none",
                 "snapshot"
               ]
+            },
+            "pricing_conditions": {
+              "description": "Conditions the price must carry, e.g. on_demand.",
+              "items": {
+                "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "pricing_service": {
+              "description": "Service that bills the component in the pricing snapshot, e.g. rds.",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            "pricing_sku": {
+              "description": "SKU of the component's main billed resource, e.g. db.r6g.large (else instance_class is used).",
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$",
+              "type": "string"
+            },
+            "pricing_storage_sku": {
+              "description": "SKU of the component's provisioned storage, priced per GB-month.",
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$",
+              "type": "string"
             },
             "region": {
               "description": "Cloud region, e.g. eu-west-1.",

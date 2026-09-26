@@ -50,9 +50,18 @@ from .context import CostContext
 
 log = logging.getLogger("architectos.cost")
 
-PRICE_EVIDENCE = ("price_effective_from", "price_retrieved_at", "price_stale")
+# What the framework adds to a priced line's evidence (after the model's own).
+PRICE_EVIDENCE = (
+    "provider_source",
+    "sku_source",
+    "region_source",
+    "price_effective_from",
+    "price_retrieved_at",
+    "price_stale",
+)
 NOT_BILLED = frozenset({NodeKind.CLIENT, NodeKind.BOUNDARY})
 MISSING = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
+MAX_MESSAGE = 500
 ESTIMATE_NOT_INVOICE = Limitation(
     "estimate_not_invoice",
     "These are estimates from the prices in the snapshot and the architecture's declared "
@@ -100,7 +109,8 @@ class CostModelMeta:
 class Charge:
     """What a model asks to bill for one node. ``quantity`` is per month, in ``unit`` (for a fixed
     monthly charge: 1 month; for instance hours: replicas x operating hours). ``missing`` names what
-    the model could not establish (the line is then unknown)."""
+    the model could not establish (the line is then unknown). ``sku_from`` and ``region_from`` trace
+    where the SKU and region were read, and name what to declare when they are absent."""
 
     resource: str
     category: CostCategory
@@ -113,6 +123,9 @@ class Charge:
     conditions: frozenset[str] = frozenset()
     missing: tuple[str, ...] = ()
     assumptions: tuple[Evidence, ...] = ()
+    # Where the SKU and region were read (or, when absent, where they should be declared).
+    sku_from: str = "configuration.pricing_sku"
+    region_from: str = "configuration.region"
 
     def problems(self) -> list[str]:
         found = []
@@ -144,16 +157,31 @@ class Charge:
             isinstance(m, str) and MISSING.fullmatch(m) for m in self.missing
         ):
             found.append("missing")
+        if not all(isinstance(m, str) and MISSING.fullmatch(m) for m in (self.sku_from, self.region_from)):
+            found.append("sources")
         if evidence_problem(self.assumptions) or len(self.assumptions) > MAX_ITEMS - len(PRICE_EVIDENCE):
             found.append("assumptions")
         return found
+
+
+@dataclass(frozen=True, slots=True)
+class NotPriced:
+    """A model's statement that it cannot price this component at all (e.g. it runs on premises):
+    reported as unsupported, never as a cost of 0."""
+
+    code: str
+    message: str
+
+    def problems(self) -> list[str]:
+        ok = isinstance(self.code, str) and MISSING.fullmatch(self.code) and isinstance(self.message, str)
+        return [] if ok and 0 < len(self.message) <= MAX_MESSAGE else ["not_priced"]
 
 
 class CostModel(Protocol):
     @property
     def meta(self) -> CostModelMeta: ...
 
-    def charges(self, node: Node, context: CostContext) -> tuple[Charge, ...]: ...
+    def charges(self, node: Node, context: CostContext) -> tuple[Charge | NotPriced, ...]: ...
 
 
 class DuplicateCostModel(ValueError):
@@ -204,27 +232,29 @@ def _unknown(
 
 def price(node: Node, meta: CostModelMeta, charge: Charge, context: CostContext) -> tuple[LineItem, bool]:
     """The line for ``charge``, and whether its price is stale."""
-    if charge.missing or charge.quantity is None:
-        missing = charge.missing or ("quantity",)
-        return _unknown(node, meta, charge, missing, "The quantity to bill is not known."), False
-    lacking = [
+    missing = [*charge.missing] or (["quantity"] if charge.quantity is None else [])
+    unmapped = [
         name
         for name, value in (
-            ("pricing_service", charge.service),
-            ("pricing_sku", charge.sku),
-            ("configuration.region", charge.region),
+            ("configuration.pricing_service", charge.service),
+            (charge.sku_from, charge.sku),
+            (charge.region_from, charge.region),
+            ("project.cloud_provider", context.provider),
         )
         if value is None
     ]
-    if lacking:
-        return _unknown(node, meta, charge, lacking, "The component is not mapped to a price."), False
-    if context.provider is None:
-        return _unknown(
-            node, meta, charge, ("project.cloud_provider",), "The project has no cloud provider."
-        ), False
+    quantity = charge.quantity
+    if quantity is None or missing or unmapped:  # a None quantity is always in ``missing``
+        if missing and unmapped:
+            reason = "Neither the quantity to bill nor the price this resource maps to is known."
+        elif missing:
+            reason = "The quantity to bill is not known."
+        else:
+            reason = "The resource is not mapped to a price."
+        return _unknown(node, meta, charge, [*missing, *unmapped], reason), False
     request = context.request
     query = PriceQuery(
-        context.provider,
+        context.provider,  # type: ignore[arg-type]
         charge.service,  # type: ignore[arg-type]
         charge.sku,  # type: ignore[arg-type]
         charge.region,  # type: ignore[arg-type]
@@ -238,11 +268,14 @@ def price(node: Node, meta: CostModelMeta, charge: Charge, context: CostContext)
         return _unknown(node, meta, charge, found.missing or ("price",), found.message), False
     record, freshness = found.record, found.freshness
     try:
-        monthly = Money.calculated(record.charge(charge.quantity), request.currency)
+        monthly = Money.calculated(record.charge(quantity), request.currency)
     except InvalidMoney, decimal.DecimalException:  # beyond 10^15, or beyond 34 digits
         return _unknown(node, meta, charge, ("magnitude",), "The amount is beyond what can be stated."), False
     evidence = (
         *charge.assumptions,
+        Evidence("provider_source", "project.cloud_provider"),
+        Evidence("sku_source", charge.sku_from),
+        Evidence("region_source", charge.region_from),
         Evidence("price_effective_from", freshness.effective_from.isoformat()),
         Evidence(
             "price_retrieved_at", freshness.retrieved_at.isoformat() if freshness.retrieved_at else "unknown"
@@ -268,16 +301,18 @@ def price(node: Node, meta: CostModelMeta, charge: Charge, context: CostContext)
     return line, freshness.stale
 
 
-def _checked(meta: CostModelMeta, charges: object) -> tuple[Charge, ...]:
+def _checked(meta: CostModelMeta, charges: object) -> tuple[Charge | NotPriced, ...]:
     """A model's charges, refused if they are not what the contract says (a model bug)."""
     if not isinstance(charges, tuple) or not charges:
         raise InvalidCostResult(details={"fields": ["charges"]})
     for charge in charges:
-        if not isinstance(charge, Charge) or charge.problems():
-            raise InvalidCostResult(
-                details={"fields": charge.problems() if isinstance(charge, Charge) else ["charge"]}
-            )
-        if charge.resource not in meta.resources or charge.unit not in meta.units:
+        if not isinstance(charge, Charge | NotPriced):
+            raise InvalidCostResult(details={"fields": ["charge"]})
+        if problems := charge.problems():
+            raise InvalidCostResult(details={"fields": problems})
+        if isinstance(charge, Charge) and (
+            charge.resource not in meta.resources or charge.unit not in meta.units
+        ):
             raise InvalidCostResult(details={"fields": ["resource"]})
     return charges
 
@@ -314,6 +349,9 @@ def _node(
             problems.append(Unsupported(node.id, "model_failed", f"The cost model {meta.id} could not run."))
             continue
         for charge in charges:
+            if isinstance(charge, NotPriced):
+                problems.append(Unsupported(node.id, charge.code, charge.message))
+                continue
             line, was_stale = price(node, meta, charge, context)
             lines.append(line)
             stale = stale or was_stale

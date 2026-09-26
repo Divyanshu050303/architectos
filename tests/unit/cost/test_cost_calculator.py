@@ -23,6 +23,7 @@ from engines.cost.calculator import (
     Charge,
     CostModelMeta,
     DuplicateCostModel,
+    NotPriced,
     Registry,
     analyze,
 )
@@ -143,6 +144,9 @@ def test_instance_hours_are_priced_exactly() -> None:
         1,
     )
     assert {e.label: e.value for e in line.assumptions} == {
+        "provider_source": "project.cloud_provider",
+        "sku_source": "configuration.pricing_sku",
+        "region_source": "configuration.region",
         "price_effective_from": "2026-09-01",
         "price_retrieved_at": "2026-09-20T00:00:00+00:00",
         "price_stale": "false",
@@ -221,8 +225,12 @@ def test_the_order_of_lines_and_the_result_are_deterministic() -> None:
     [
         ({"quantity": None}, ("quantity",)),
         ({"quantity": None, "missing": ("capacity.requests_per_second",)}, ("capacity.requests_per_second",)),
-        ({"sku": None}, ("pricing_sku",)),
-        ({"service": None, "region": None}, ("configuration.region", "pricing_service")),
+        ({"sku": None}, ("configuration.pricing_sku",)),
+        ({"service": None, "region": None}, ("configuration.pricing_service", "configuration.region")),
+        (
+            {"quantity": None, "sku": None, "sku_from": "configuration.pricing_storage_sku"},
+            ("configuration.pricing_storage_sku", "quantity"),
+        ),
         ({"sku": "db.r6g.xlarge"}, ("price",)),
         ({"region": "us-east-1"}, ("price.region",)),
         ({"conditions": frozenset({"reserved"})}, ("price.conditions",)),
@@ -292,6 +300,8 @@ def test_clients_are_not_billed_and_unmodelled_kinds_are_reported() -> None:
         (charge(resource="gpu_hours"),),  # not a resource the model declares
         (charge(service="RDS"),),
         (charge(region="EU WEST"),),
+        (charge(sku_from="where: anywhere"),),
+        (NotPriced("on premises", "Runs on premises."),),
         (charge(assumptions=tuple(Evidence(f"a{i}", "x") for i in range(198))),),
         (),
         ("not a charge",),
@@ -314,6 +324,15 @@ def test_a_failing_model_is_reported_and_the_others_still_count(caplog: pytest.L
     assert [(u.element_id, u.code) for u in result.unsupported] == [("boom", "model_failed")]
     assert [line.resource for line in result.line_items] == ["storage"]
     assert "cost model failed" in caplog.text
+    assert result.status is CostStatus.PARTIAL
+
+
+def test_a_component_a_model_cannot_price_is_reported_not_zero() -> None:
+    result = run({"api": (NotPriced("on_premises", "Runs on premises."), charge())})
+    assert [(u.element_id, u.code, u.message) for u in result.unsupported] == [
+        ("api", "on_premises", "Runs on premises.")
+    ]
+    assert [line.resource for line in result.line_items] == ["instance_hours"]
     assert result.status is CostStatus.PARTIAL
 
 
