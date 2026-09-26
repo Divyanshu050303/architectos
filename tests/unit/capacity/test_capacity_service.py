@@ -295,3 +295,27 @@ def test_the_model_catalog(uow: FakeUnitOfWork) -> None:
     assert all(
         {"id", "version", "kinds", "configuration", "workload", "limitations"} <= set(m) for m in models
     )
+
+
+async def test_an_archive_during_the_calculation_refuses_the_store(
+    uow: FakeUnitOfWork, clock: FakeClock, world: World
+) -> None:
+    """The engine runs outside any transaction; the store re-checks, so a project archived in the
+    meantime keeps its analyses frozen."""
+    aid = await architecture(uow, clock, world)
+    real = DeterministicCapacityEngine()
+
+    class ArchivingMeanwhile:
+        def analyze(self, *args: Any) -> Any:
+            project = uow.projects.by_id[world.project.id]
+            uow.projects.by_id[world.project.id] = project.archive(clock.now)
+            return real.analyze(*args)
+
+        def models(self) -> Any:
+            return real.models()
+
+    recorded = len(uow.audit.events)
+    with pytest.raises(ProjectArchived):
+        await analyze(CapacityService(uow, ArchivingMeanwhile(), clock=clock), world, aid)
+    assert uow.capacity.reports == {}
+    assert len(uow.audit.events) == recorded

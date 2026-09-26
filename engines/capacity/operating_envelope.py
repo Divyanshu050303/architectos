@@ -36,7 +36,7 @@ from core.architecture_ir.configuration import Configuration, ValueType
 from core.architecture_ir.errors import InvalidArchitecture
 from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.node import Node
-from core.domain.capacity.errors import InvalidScenario, InvalidWorkload
+from core.domain.capacity.errors import InvalidQuantity, InvalidScenario, InvalidWorkload
 from core.domain.capacity.results import CapacityResult, Evidence, Unsupported, Utilization
 from core.domain.capacity.scenarios import (
     CONNECTION_PROPERTIES,
@@ -165,12 +165,18 @@ def scaling_options(
                 )
                 if binding.model_id == "replica-throughput" and per_replica and replicas is not None:
                     needed = math.ceil(demand / (per_replica * goal))
-                    options.append(
-                        _replicas(component.node_id, u.resource, replicas, needed, per_replica, goal)
-                    )
-                    continue
+                    try:
+                        options.append(
+                            _replicas(component.node_id, u.resource, replicas, needed, per_replica, goal)
+                        )
+                        continue
+                    except InvalidQuantity:
+                        pass  # more replicas than a quantity holds: no option can be stated
             elif u.resource == "cpu":
-                cpu = _cpu(node, demand, goal)
+                try:
+                    cpu = _cpu(node, demand, goal)
+                except InvalidQuantity:
+                    cpu = []
                 if cpu:
                     options += cpu
                     continue

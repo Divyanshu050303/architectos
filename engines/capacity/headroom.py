@@ -40,10 +40,9 @@ from core.domain.capacity.results import (
     Utilization,
     UtilizationState,
 )
-from core.domain.capacity.units import Quantity
 
 from .context import CapacityContext
-from .estimates import number, work, work_unit
+from .estimates import number, quantity, work, work_unit
 
 REMEDIATION = {
     "work_rate": "Raise the component's throughput (more or larger replicas, if its model supports "
@@ -74,7 +73,7 @@ def utilization(
     throughput = [e for e in component.limits if e.resource == "work_rate"]
     if component.demand or throughput:
         unit = work_unit(node, component.demand) if node is not None else "requests/second"
-        demand = Quantity.rounded(work(component.demand), unit) if complete else None
+        demand = quantity(work(component.demand), unit) if complete else None  # None beyond 10^15
         limit = _binding(throughput)
         found.append(Utilization("work_rate", demand, limit.quantity if limit else None, target))
     for resource in sorted({e.resource for e in component.resources} - {"storage_growth", "time_to_full"}):

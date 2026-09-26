@@ -312,3 +312,43 @@ def test_propagation_is_deterministic() -> None:
     assert first == again
     assert all(isinstance(d, Demand) for d in first.connections)
     assert run(ir).nodes["db"][0].quantity == Quantity.of("1500", "operations/second")
+
+
+def test_work_in_different_units_is_never_summed() -> None:
+    """Review finding: a node receiving requests and operations had them added into one figure."""
+    ir = ArchitectureIR(
+        "Mixed",
+        nodes=(
+            node("web", NodeKind.CLIENT),
+            node("gw", NodeKind.GATEWAY),
+            node("svc"),
+            node("db", NodeKind.DATABASE),
+        ),
+        connections=(
+            call("web-gw", "web", "gw", traffic_ratio=1),
+            call("gw-svc", "gw", "svc", traffic_ratio=Decimal("0.5")),
+            data("gw-svc-data", "gw", "svc", traffic_ratio=Decimal("0.5")),  # svc also receives operations
+            data("svc-db", "svc", "db", traffic_ratio=1),
+        ),
+    )
+    result = run(ir)
+    assert ("svc", "mixed_work_units") in {(u.element_id, u.code) for u in result.unsupported}
+    assert {"svc", "db"} <= result.incomplete  # nothing after it is a known total
+    assert "db" not in result.nodes
+
+
+def test_demand_beyond_a_quantity_is_reported_not_raised() -> None:
+    """Review finding: fan-out chains could exceed 10^15 per second and abort the analysis."""
+    ir = ArchitectureIR(
+        "Fan-out",
+        nodes=(node("web", NodeKind.CLIENT), node("a"), node("b"), node("c")),
+        connections=(
+            call("web-a", "web", "a", traffic_ratio=1),
+            call("a-b", "a", "b", calls_per_request=1000),
+            call("b-c", "b", "c", calls_per_request=1000),
+        ),
+    )
+    result = run(ir, workload("1000000000"))  # 10^9 -> 10^12 at b -> 10^15 at c: too large
+    assert ("b-c", "demand_overflow") in {(u.element_id, u.code) for u in result.unsupported}
+    assert "c" in result.incomplete
+    assert "c" not in result.nodes  # no number beyond what a quantity holds

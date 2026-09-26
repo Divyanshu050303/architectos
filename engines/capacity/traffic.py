@@ -15,8 +15,11 @@ Model ``traffic`` (version 1), deterministic and explicit:
   At least one of ``traffic_ratio`` and ``calls_per_request`` must be declared; the other then
   counts as 1. A connection with neither is not guessed at: it carries no computed demand, it is
   reported (``routing_unspecified``), and every node after it has an incomplete (lower-bound) demand.
-- **Units of work.** A node's work is the sum of the rates arriving over all its inbound flows:
-  one unit of work per request, event or operation received. What a connection delivers is in the
+- **Units of work.** A node's work is the sum of the rates arriving over its inbound flows, all
+  in one unit (requests, operations or events). Work arriving in different units is never added
+  up: the node is reported (``mixed_work_units``) and its demand, and everything after it, is
+  incomplete. Demand beyond what a quantity holds (10^15 per second) is reported
+  (``demand_overflow``), never raised. What a connection delivers is in the
   unit of its kind: requests (``request``), operations (``data_access``; reads and writes apart when
   ``access`` says so) or events (``publish``, ``consume``).
 - **Topology.** Nodes are processed in topological order (ties by id). Nodes on or after a traffic
@@ -37,11 +40,10 @@ from decimal import Decimal
 from core.architecture_ir.component import NodeKind
 from core.architecture_ir.dependency import ConnectionKind
 from core.architecture_ir.edge import Connection
-from core.domain.capacity.errors import InvalidCapacityConfig
+from core.domain.capacity.errors import InvalidCapacityConfig, InvalidQuantity
 from core.domain.capacity.results import Demand, Evidence, Unsupported
-from core.domain.capacity.units import Quantity
+from core.domain.capacity.units import Quantity, rounded_text
 from core.domain.capacity.workload import WorkloadProfile, WorkloadType
-from core.domain.requirements.value_objects import decimal_to_str
 
 from .context import CapacityContext
 from .engine import Propagation
@@ -88,7 +90,7 @@ def _resource(connection: Connection) -> tuple[str, str]:
 
 
 def _number(value: Decimal) -> str:
-    return decimal_to_str(Quantity.rounded(value, "ratio").value)
+    return rounded_text(value)
 
 
 def multiplier(
@@ -194,6 +196,19 @@ def propagate(context: CapacityContext) -> Propagation:  # noqa: PLR0912, PLR091
             )
         else:
             base = work[node_id]
+        if len({d.quantity.dimension for d in node_demand.get(node_id, ())}) > 1:
+            # Requests, operations and events arriving together are not one quantity: they are
+            # never summed, so what this node sends on is unknown.
+            base = None
+            incomplete.add(node_id)
+            unsupported.append(
+                Unsupported(
+                    node_id,
+                    "mixed_work_units",
+                    f"{node_id} receives work in different units (requests, operations or events); "
+                    "they are not added up, so its demand and what it sends on are unknown.",
+                )
+            )
         for flow in outgoing[node_id]:
             downstream = flow.downstream
             if base is None:
@@ -216,10 +231,22 @@ def propagate(context: CapacityContext) -> Propagation:  # noqa: PLR0912, PLR091
                     name, symbol = _resource(flow.connection)
                     path = (node_id, flow.connection.id, downstream)
                     factors = (Evidence("upstream_work_per_second", _number(base)), *evidence)
-                    quantity = Quantity.rounded(amount, symbol)
-                    connection_demand.append(Demand(flow.connection.id, name, quantity, path, factors))
-                    node_demand[downstream].append(Demand(downstream, name, quantity, path, factors))
-                    work[downstream] += amount
+                    try:
+                        quantity = Quantity.rounded(amount, symbol)
+                    except InvalidQuantity:  # beyond 10^15 per second: not a number worth stating
+                        incomplete.add(downstream)
+                        unsupported.append(
+                            Unsupported(
+                                flow.connection.id,
+                                "demand_overflow",
+                                f"The demand {flow.connection.id} would carry is beyond what a quantity "
+                                "holds (10^15 per second); check its multipliers.",
+                            )
+                        )
+                    else:
+                        connection_demand.append(Demand(flow.connection.id, name, quantity, path, factors))
+                        node_demand[downstream].append(Demand(downstream, name, quantity, path, factors))
+                        work[downstream] += amount
                 if node_id in incomplete:
                     incomplete.add(downstream)
             indegree[downstream] -= 1

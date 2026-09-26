@@ -1,11 +1,11 @@
 """Capacity analysis use cases: analyze an architecture revision under a workload (with optional
 scenarios), read analyses, page through components and bottlenecks, and describe the models.
 
-An analysis is synchronous: the engine runs inside the request, and the analysis is stored once,
-finished, in the transaction that also records the audit entry. The engine is deterministic and
-pure; what it reads (the revision) is loaded in the same transaction, and the analysis stores the
-request's inputs (the workload snapshot, models, parameters, assumptions, entries) and the model
-set, so it stays explainable.
+An analysis is synchronous, in three steps: read and authorize (a short transaction), calculate
+(no transaction, no lock: the revision's content is immutable), then store, finished, in a
+transaction that re-checks access and modifiability under the project lock and records the audit
+entry. The engine is deterministic and pure; the analysis stores the request's inputs (the workload
+snapshot, models, parameters, assumptions, entries) and the model set, so it stays explainable.
 
 Access: analyzing needs ``architecture.analyze`` and a modifiable project and architecture (an
 analysis is a write under them); reading needs ``architecture.read``. Every lookup goes
@@ -86,10 +86,10 @@ class CapacityService:
         """Analyzes ``revision_number`` (default: the current revision) and stores the analysis.
         Invalid workloads, configurations and scenarios are refused (422) and nothing is stored."""
         check_scenarios(scenarios)
+        # 1. Read and authorize (a short transaction): the revision's content is immutable, so the
+        #    engine may work on it after the transaction ends.
         async with self._uow as uow:
-            access = await project_access(
-                uow, project_id, user_id, Permission.ARCHITECTURE_ANALYZE, lock=ProjectLock.SHARE
-            )
+            await project_access(uow, project_id, user_id, Permission.ARCHITECTURE_ANALYZE)
             architecture = await _architecture(uow, project_id, architecture_id)
             architecture.ensure_modifiable()
             number = revision_number if revision_number is not None else architecture.current_revision
@@ -97,32 +97,40 @@ class CapacityService:
             if revision is None:
                 raise ArchitectureRevisionNotFound
             await _check_requirements(uow, project_id, workload)
-            request = AnalysisRequest(
-                architecture.id,
-                revision.number,
-                workload,
-                models,
-                dict(parameters or {}),
-                assumptions,
-                label,
-                entries,
+        request = AnalysisRequest(
+            architecture.id,
+            revision.number,
+            workload,
+            models,
+            dict(parameters or {}),
+            assumptions,
+            label,
+            entries,
+        )
+        info = RevisionInfo(
+            str(architecture.id), revision.number, revision.content_hash, revision.ir_schema_version
+        )
+        now = self._clock()
+        analysis = CapacityAnalysis(
+            id=uuid.uuid7(),
+            project_id=project_id,
+            architecture_id=architecture.id,
+            revision_number=revision.number,
+            revision_content_hash=revision.content_hash,
+            status=PENDING,
+            requested_by_user_id=user_id,
+            requested_at=now,
+            label=label,
+        ).start(now)
+        # 2. Calculate, holding no transaction and no lock (seconds on the largest architectures).
+        output = self._run(analysis.id, revision.ir, info, request, scenarios)
+        # 3. Store, re-authorized under the project lock: an archive or a lost permission in the
+        #    meantime refuses the write, as if it had happened before the request.
+        async with self._uow as uow:
+            access = await project_access(
+                uow, project_id, user_id, Permission.ARCHITECTURE_ANALYZE, lock=ProjectLock.SHARE
             )
-            info = RevisionInfo(
-                str(architecture.id), revision.number, revision.content_hash, revision.ir_schema_version
-            )
-            now = self._clock()
-            analysis = CapacityAnalysis(
-                id=uuid.uuid7(),
-                project_id=project_id,
-                architecture_id=architecture.id,
-                revision_number=revision.number,
-                revision_content_hash=revision.content_hash,
-                status=PENDING,
-                requested_by_user_id=user_id,
-                requested_at=now,
-                label=label,
-            ).start(now)
-            output = self._run(analysis.id, revision.ir, info, request, scenarios)
+            (await _architecture(uow, project_id, architecture_id)).ensure_modifiable()
             if output is None:
                 finished = analysis.fail(ENGINE_ERROR, self._clock())
                 report = await uow.capacity.add(finished, request.inputs(), (), (), ())

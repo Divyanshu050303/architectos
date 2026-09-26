@@ -9,8 +9,7 @@ from core.architecture_ir.component import NodeKind
 from core.architecture_ir.node import Node
 from core.domain.capacity.errors import InvalidQuantity
 from core.domain.capacity.results import Demand, Estimate, Evidence, Source
-from core.domain.capacity.units import Dimension, Quantity
-from core.domain.requirements.value_objects import decimal_to_str
+from core.domain.capacity.units import Dimension, Quantity, rounded_text
 
 if TYPE_CHECKING:  # the engine imports the headroom step, which uses these helpers
     from .engine import ModelMeta
@@ -32,13 +31,16 @@ DEMAND_INCOMPLETE = "demand"
 
 
 def work(demand: Iterable[Demand]) -> Decimal:
-    """Units of work per second arriving at a node: one per request, event or operation."""
+    """Units of work per second arriving at a node. Only meaningful when all its demand is in one
+    unit: a node receiving mixed units is reported incomplete by the propagation, and nothing
+    sums its demand as a known total."""
     return sum((d.quantity.canonical for d in demand), Decimal(0))
 
 
 def work_unit(node: Node, demand: Iterable[Demand]) -> str:
-    """The unit a node's work is counted in: the one its demand arrives in when there is only one,
-    else the unit natural to its kind (requests/second for services, gateways, balancers, …)."""
+    """The unit a node's work is counted in: the one its demand arrives in, else (no demand, or
+    mixed units, whose demand is then unknown) the unit natural to its kind (requests/second for
+    services, gateways, balancers, …): the unit a declared throughput limit is shown in."""
     dimensions = {d.quantity.dimension for d in demand}
     if len(dimensions) == 1:
         return _UNIT_BY_DIMENSION[dimensions.pop()]
@@ -46,7 +48,7 @@ def work_unit(node: Node, demand: Iterable[Demand]) -> str:
 
 
 def number(value: Decimal) -> str:
-    return decimal_to_str(Quantity.rounded(value, "ratio").value)
+    return rounded_text(value)
 
 
 def quantity(value: Decimal, unit: str) -> Quantity | None:

@@ -99,6 +99,11 @@ PRECISION = Decimal(1).scaleb(-MAX_DECIMAL_PLACES)  # results keep 9 decimal pla
 RATES = frozenset({Dimension.REQUEST_RATE, Dimension.OPERATION_RATE, Dimension.EVENT_RATE})
 
 
+def rounded_text(value: Decimal) -> str:
+    """``value`` rounded half-even to 9 decimal places, as plain text: what evidence shows."""
+    return decimal_to_str(value.quantize(PRECISION).normalize() + 0)
+
+
 def unit_for(symbol: object, field: str = "unit") -> Unit:
     """Symbols are case-sensitive (MB is not mb) and never guessed."""
     if not isinstance(symbol, str) or symbol.strip() not in UNITS:
