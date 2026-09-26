@@ -118,6 +118,11 @@ SPECIFIED = PUBLIC | {
         "/api/v1/projects/{project_id}/architectures/{architecture_id}/capacity-analyses/{capacity_analysis_id}/scenarios",
     ),
     ("GET", "/api/v1/capacity/models"),
+    # Milestone 8 (deterministic cost engine): an organization's pricing snapshots.
+    ("POST", "/api/v1/organizations/{organization_id}/pricing-snapshots"),
+    ("GET", "/api/v1/organizations/{organization_id}/pricing-snapshots"),
+    ("GET", "/api/v1/organizations/{organization_id}/pricing-snapshots/{snapshot_id}"),
+    ("GET", "/api/v1/organizations/{organization_id}/pricing-snapshots/{snapshot_id}/records"),
 }
 
 

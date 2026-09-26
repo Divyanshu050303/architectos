@@ -21,7 +21,24 @@ PRIVILEGED = {
 
 # A valid body per operation. A new endpoint with a body must be added here (see the guard test).
 WORKLOAD = {"name": "Peak", "type": "request_response", "peakRate": {"value": 100, "unit": "requests/second"}}
+PRICE = {
+    "id": "rds",
+    "provider": "aws",
+    "service": "rds",
+    "sku": "db.r6g.large",
+    "region": "eu-west-1",
+    "currency": "USD",
+    "unit": "instance_hour",
+    "model": "per_unit",
+    "unitPrice": "0.26",
+    "effectiveFrom": "2026-09-01",
+    "source": "user_input",
+}
 VALID_BODIES: dict[str, dict[str, object]] = {
+    "create_pricing_snapshot_api_v1_organizations__organization_id__pricing_snapshots_post": {
+        "name": "Prices",
+        "records": [PRICE],
+    },
     "register_api_v1_auth_register_post": {"email": "x@example.com", "password": PASSWORD, "name": "X"},
     "verify_email_api_v1_auth_verify_email_post": {"token": "A" * 43},
     "resend_verification_api_v1_auth_resend_verification_post": {"email": "x@example.com"},

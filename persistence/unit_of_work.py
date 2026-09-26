@@ -13,6 +13,7 @@ from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
     SqlAlchemyOrganizationRepository,
 )
+from persistence.repositories.pricing import SqlAlchemyPricingSnapshotRepository
 from persistence.repositories.projects import SqlAlchemyProjectRepository
 from persistence.repositories.requirement_analyses import SqlAlchemyRequirementAnalysisRepository
 from persistence.repositories.requirement_sets import SqlAlchemyRequirementSetRepository
@@ -49,6 +50,7 @@ class SqlAlchemyUnitOfWork:
         self.architectures = SqlAlchemyArchitectureRepository(session)
         self.validations = SqlAlchemyValidationRunRepository(session)
         self.capacity = SqlAlchemyCapacityAnalysisRepository(session)
+        self.pricing = SqlAlchemyPricingSnapshotRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

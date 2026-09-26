@@ -23,6 +23,13 @@ class InvalidPricingRecord(DomainError):
     message = "A pricing record is invalid."
 
 
+class PricingSnapshotNotFound(DomainError):
+    """No such snapshot in this organization (also when it belongs to another: indistinguishable)."""
+
+    code = "pricing_snapshot_not_found"
+    message = "Pricing snapshot not found."
+
+
 class InvalidPricingSnapshot(DomainError):
     """``details`` = {"field", "reason"}."""
 

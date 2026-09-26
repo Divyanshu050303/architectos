@@ -18,6 +18,7 @@ from core.domain.audit.audit_service import AuditService
 from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
+from core.domain.cost.snapshots import PricingService
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
@@ -278,6 +279,15 @@ def get_capacity_service(
 
 
 CapacityServiceDep = Annotated[CapacityService, Depends(get_capacity_service)]
+
+
+def get_pricing_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> PricingService:
+    return PricingService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+PricingServiceDep = Annotated[PricingService, Depends(get_pricing_service)]
 
 
 def get_requirement_analysis_service(

@@ -9,6 +9,7 @@ from .invitation import InvitationRecord
 from .organization import OrganizationRecord
 from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
+from .pricing import PricingRecordRow, PricingSnapshotRecord
 from .project import ProjectRecord
 from .requirement import RequirementRecord, RequirementVersionRecord
 from .requirement_analysis import RequirementAnalysisRecord
@@ -31,6 +32,8 @@ __all__ = [
     "OrganizationMemberRecord",
     "OrganizationRecord",
     "PasswordResetTokenRecord",
+    "PricingRecordRow",
+    "PricingSnapshotRecord",
     "ProjectRecord",
     "RequirementAnalysisRecord",
     "RequirementRecord",

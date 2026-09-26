@@ -114,6 +114,7 @@ POLICIES: dict[str, dict[str, Rule]] = {
     # Each run is stored with its findings: generous for iterating on a design, bounded for storage.
     "run_validation": {"user": Rule(120, timedelta(hours=1))},
     "run_capacity_analysis": {"user": Rule(120, timedelta(hours=1))},
+    "create_pricing_snapshot": {"user": Rule(30, timedelta(hours=1))},
     "create_invitation": {"user": Rule(50, timedelta(hours=1))},
     "accept_invitation": {"ip": Rule(30, timedelta(hours=1))},
 }

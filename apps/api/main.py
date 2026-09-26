@@ -22,6 +22,7 @@ from apps.api.routes import (
     capacity,
     invitations,
     organizations,
+    pricing,
     projects,
     requirement_analyses,
     requirement_sets,
@@ -38,6 +39,8 @@ _UUID = "[0-9a-fA-F-]{36}"
 # Routes that take a whole architecture document (creating, saving new content).
 ARCHITECTURE_CREATE_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architectures")
 ARCHITECTURE_CONTENT_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architectures/{_UUID}/content")
+# Creating a price list: up to thousands of records.
+PRICING_SNAPSHOT_PATH = re.compile(rf"{API_PREFIX}/organizations/{_UUID}/pricing-snapshots")
 
 
 def _rate_limiter(settings: Settings) -> RateLimiter:
@@ -94,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         larger=[
             ("POST", ARCHITECTURE_CREATE_PATH, settings.max_architecture_body_bytes),
             ("PUT", ARCHITECTURE_CONTENT_PATH, settings.max_architecture_body_bytes),
+            ("POST", PRICING_SNAPSHOT_PATH, settings.max_architecture_body_bytes),
         ],
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.environment == "production")
@@ -111,4 +115,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(architectures.router, prefix=API_PREFIX)
     app.include_router(validations.router, prefix=API_PREFIX)
     app.include_router(capacity.router, prefix=API_PREFIX)
+    app.include_router(pricing.router, prefix=API_PREFIX)
     return app

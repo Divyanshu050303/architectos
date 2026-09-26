@@ -16,6 +16,7 @@ EXPECTED: dict[Permission, set[Role]] = {
     Permission.MEMBER_REMOVE: {OWNER, ADMIN},
     Permission.MEMBER_UPDATE_ROLE: {OWNER, ADMIN},
     Permission.AUDIT_READ: {OWNER, ADMIN},
+    Permission.PRICING_MANAGE: {OWNER, ADMIN},
     Permission.PROJECT_READ: {OWNER, ADMIN, MEMBER, VIEWER},
     Permission.PROJECT_CREATE: {OWNER, ADMIN, MEMBER},
     Permission.PROJECT_UPDATE: {OWNER, ADMIN, MEMBER},
