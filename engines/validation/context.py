@@ -15,6 +15,7 @@ from typing import Any
 
 from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.topology import Topology
+from core.architecture_ir.versioning import IR_SCHEMA_VERSION
 from core.domain.requirements.entities import Requirement
 from core.domain.validation.results import Severity
 
@@ -26,6 +27,7 @@ class RevisionInfo:
     architecture_id: str
     number: int
     content_hash: str
+    schema_version: int = IR_SCHEMA_VERSION  # the IR schema the revision was stored in (upgraded on read)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,7 +65,12 @@ class ValidationContext:
     @property
     def fingerprint(self) -> str:
         document = {
-            "revision": [self.revision.architecture_id, self.revision.number, self.revision.content_hash],
+            "revision": [
+                self.revision.architecture_id,
+                self.revision.number,
+                self.revision.content_hash,
+                self.revision.schema_version,
+            ],
             "requirements": sorted([str(r.id), r.version] for r in self.requirements),
             "config": self.config.to_dict(),
         }
