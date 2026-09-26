@@ -30,6 +30,10 @@ from .semantic import SemanticExtractor, SemanticOutcome, merge, needs_semantic
 from .validation import Validated, validate
 
 ENGINE_VERSION = "rules-1.0.0"
+# Bounds that keep the worst case of a valid input cheap and its stored result small: real
+# descriptions have far fewer; beyond them the analysis says what it left out.
+MAX_CANDIDATES = 100
+MAX_FINDINGS = 300
 RESULT_SCHEMA = 1
 
 # Where each kind of finding is listed in the result.
@@ -133,6 +137,41 @@ def engine_version(outcome: SemanticOutcome | None) -> str:
     return f"{ENGINE_VERSION}+{outcome.source}#{outcome.prompt_version}"
 
 
+def _cap_candidates(validated: Validated) -> tuple[Validated, list[Finding]]:
+    if len(validated.candidates) <= MAX_CANDIDATES:
+        return validated, []
+    dropped = len(validated.candidates) - MAX_CANDIDATES
+    finding = Finding(
+        FindingKind.EXTRACTION,
+        "too_many_candidates",
+        Severity.WARNING,
+        f"Only the first {MAX_CANDIDATES} requirements were analyzed; {dropped} more were left out.",
+        suggestion="Split the description into smaller analyses.",
+    )
+    capped = Validated(
+        validated.raw_input, validated.candidates[:MAX_CANDIDATES], validated.unresolved, validated.findings
+    )
+    return capped, [finding]
+
+
+def _cap_findings(findings: tuple[Finding, ...], notices: list[Finding]) -> tuple[Finding, ...]:
+    """At most ``MAX_FINDINGS``, ``notices`` (what else was left out) always among them. Blocking
+    findings come first in ``ordered``, so a cut never drops one."""
+    room = MAX_FINDINGS - len(notices)
+    if len(findings) <= room:
+        return ordered([*findings, *notices])
+    dropped = len(findings) - room + 1
+    kept = findings[: room - 1]
+    notice = Finding(
+        FindingKind.EXTRACTION,
+        "findings_truncated",
+        Severity.WARNING,
+        f"{dropped} further findings were left out.",
+        suggestion="Split the description into smaller analyses.",
+    )
+    return ordered([*kept, *notices, notice])
+
+
 def analyze(
     raw_input: str,
     existing: Sequence[Existing] = (),
@@ -147,6 +186,7 @@ def analyze(
     if semantic is not None and semantic.failure is None:
         extraction = merge(extraction, semantic)
     validated = validate(extraction)
+    validated, capped = _cap_candidates(validated)
     candidates = validated.candidates
     completeness = assess(raw_input, [c.content for c in candidates] + [e.content for e in existing])
     findings = ordered(
@@ -159,6 +199,7 @@ def analyze(
             *_semantic_findings(semantic),
         ]
     )
+    findings = _cap_findings(findings, capped)
     blocking = [f for f in findings if f.severity is Severity.BLOCKING]
     result: dict[str, Any] = {
         "result_schema": RESULT_SCHEMA,
@@ -206,10 +247,19 @@ class RequirementsEngine:
             outcome,
             semantic_configured=self._semantic is not None,
         )
+        semantic = result["semantic"]
+        usage = semantic.get("usage") or {}
         return AnalyzerOutput(
             engine_version=result["engine_version"],
             result=result,
             ready_for_architecture=result["ready_for_architecture"],
             candidate_count=result["counts"]["candidates"],
             blocking_count=result["counts"]["blocking"],
+            ambiguity_count=len(result["ambiguities"]),
+            conflict_count=sum(f["kind"] == "conflict" for f in result["conflicts"]),
+            completeness_status=result["completeness"]["status"],
+            semantic_status=semantic.get("status") if semantic["used"] else None,
+            semantic_source=semantic.get("source"),
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
         )

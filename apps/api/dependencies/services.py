@@ -10,6 +10,7 @@ from apps.api.config import Settings
 from apps.api.email.mailer import BackgroundMailer
 from apps.api.email.messages import Links
 from apps.api.email.transport import EmailTransport
+from apps.api.metrics import LogMetrics
 from apps.api.middleware.rate_limit import RateLimiter, RateLimits
 from apps.api.middleware.request_id import current_request_id
 from core.domain.audit.audit_service import AuditService
@@ -250,7 +251,10 @@ def get_requirement_analysis_service(
 ) -> RequirementAnalysisService:
     # One engine per process, built from settings at startup (see apps/api/main.py).
     return RequirementAnalysisService(
-        SqlAlchemyUnitOfWork(db, client), request.app.state.requirements_engine, clock=clock
+        SqlAlchemyUnitOfWork(db, client),
+        request.app.state.requirements_engine,
+        clock=clock,
+        metrics=LogMetrics(),
     )
 
 

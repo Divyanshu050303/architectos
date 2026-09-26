@@ -179,16 +179,22 @@ def _vague_findings(validated: Validated) -> list[Finding]:
     for vague in VAGUE:
         if vague.resolved_by & quantified:
             continue
-        findings.extend(
+        matches = list(vague.pattern.finditer(validated.raw_input))
+        if not matches:
+            continue
+        # One finding per kind of vagueness, at its first occurrence: repeating "fast" a thousand
+        # times says nothing new, and must not produce a thousand findings.
+        first, more = matches[0], len(matches) - 1
+        also = f" (and {more} more time{'s' if more > 1 else ''})" if more else ""
+        findings.append(
             Finding(
                 FindingKind.AMBIGUITY,
                 vague.code,
                 Severity.WARNING,
-                f"“{match.group(0)}”: {vague.message}",
-                span=SourceSpan(match.start(), match.end(), match.group(0)),
+                f"“{first.group(0)}”{also}: {vague.message}",
+                span=SourceSpan(first.start(), first.end(), first.group(0)),
                 suggestion=vague.suggestion,
             )
-            for match in vague.pattern.finditer(validated.raw_input)
         )
     return findings
 

@@ -11,17 +11,25 @@ transaction: it may be slow (a language model, later) and must never hold a proj
 checked before it runs and again, with the project locked, when the result is stored.
 """
 
+import time
 import uuid
 from dataclasses import dataclass
 
 from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
+from core.domain.metrics import Metrics, NullMetrics
 from core.domain.organizations.permissions import Permission
 from core.domain.projects.repository import ProjectLock
 from core.domain.unit_of_work import UnitOfWork
 
 from .access import project_access
-from .analyses import NewRequirementAnalysis, RequirementAnalysis, RequirementsAnalyzer, validate_raw_input
+from .analyses import (
+    AnalyzerOutput,
+    NewRequirementAnalysis,
+    RequirementAnalysis,
+    RequirementsAnalyzer,
+    validate_raw_input,
+)
 from .analysis import ANALYZED_STATUSES
 from .candidates import RequirementCandidate
 from .entities import Requirement
@@ -39,10 +47,18 @@ class Promotion:
 
 
 class RequirementAnalysisService:
-    def __init__(self, uow: UnitOfWork, analyzer: RequirementsAnalyzer, *, clock: Clock = utc_now) -> None:
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        analyzer: RequirementsAnalyzer,
+        *,
+        clock: Clock = utc_now,
+        metrics: Metrics | None = None,
+    ) -> None:
         self._uow = uow
         self._analyzer = analyzer
         self._clock = clock
+        self._metrics: Metrics = metrics or NullMetrics()
 
     async def analyze(
         self, *, project_id: uuid.UUID, user_id: uuid.UUID, raw_input: str
@@ -54,7 +70,9 @@ class RequirementAnalysisService:
             existing = await uow.requirements.list_by_status(
                 project_id, ANALYZED_STATUSES, limit=MAX_ANALYZED_REQUIREMENTS
             )
+        started = time.monotonic()
         output = await self._analyzer.analyze(raw, existing)  # no transaction, no lock held
+        self._record(output, time.monotonic() - started)
         async with self._uow as uow:
             access = await project_access(
                 uow, project_id, user_id, Permission.REQUIREMENT_CREATE, lock=ProjectLock.SHARE
@@ -80,6 +98,29 @@ class RequirementAnalysisService:
                 )
             )
         return stored
+
+    def _record(self, output: AnalyzerOutput, seconds: float) -> None:
+        """Counts and identifiers only: the requirement text never reaches a metric."""
+        m = self._metrics
+        m.increment("requirements.analyze")
+        m.observe("requirements.analyze.duration_ms", round(seconds * 1000, 1))
+        m.increment("requirements.extracted", output.candidate_count)
+        if output.ambiguity_count:
+            m.increment("requirements.ambiguous")
+        if output.conflict_count:
+            m.increment("requirements.conflicting")
+        if output.completeness_status != "complete":
+            m.increment("requirements.incomplete", status=output.completeness_status)
+        if output.ready_for_architecture:
+            m.increment("requirements.ready")
+        if output.semantic_status is not None and output.semantic_source is not None:
+            source = output.semantic_source
+            if output.semantic_status == "ok":
+                m.increment("requirements.llm.calls", source=source)
+            else:
+                m.increment("requirements.llm_failure", source=source, reason=output.semantic_status)
+            m.observe("requirements.llm.input_tokens", output.input_tokens, source=source)
+            m.observe("requirements.llm.output_tokens", output.output_tokens, source=source)
 
     async def get(
         self, *, project_id: uuid.UUID, analysis_id: uuid.UUID, user_id: uuid.UUID
@@ -122,6 +163,7 @@ class RequirementAnalysisService:
                     promotions.append(Promotion(key, existing, created=False))
                     continue
                 promotions.append(Promotion(key, requirement, created=True))
+                self._metrics.increment("requirements.promoted")
                 await uow.audit.record(
                     AuditEvent(
                         AuditAction.REQUIREMENT_PROMOTED,

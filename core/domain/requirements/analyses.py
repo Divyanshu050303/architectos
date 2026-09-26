@@ -79,6 +79,14 @@ class AnalyzerOutput:
     ready_for_architecture: bool
     candidate_count: int
     blocking_count: int
+    # For operational metrics (counts and identifiers only, never text):
+    ambiguity_count: int = 0
+    conflict_count: int = 0
+    completeness_status: str = "unknown"
+    semantic_status: str | None = None  # None: not consulted; "ok" or a failure code otherwise
+    semantic_source: str | None = None
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class RequirementsAnalyzer(Protocol):

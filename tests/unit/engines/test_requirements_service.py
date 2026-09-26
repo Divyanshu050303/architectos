@@ -1,15 +1,26 @@
 """The Requirements Engine end to end: result shape, readiness, determinism (phase 10)."""
 
 import json
+import time
 import uuid
+from collections.abc import Callable
 
 import pytest
 
+from core.domain.requirements.analyses import MAX_INPUT_CHARACTERS
 from core.domain.requirements.candidates import RequirementCandidate
 from core.domain.requirements.entities import NewRequirement
 from core.domain.requirements.enums import RequirementPriority, RequirementStatus, RequirementType
 from engines.requirements.conflicts import Existing
-from engines.requirements.service import ENGINE_VERSION, RESULT_SCHEMA, RequirementsEngine, analyze
+from engines.requirements.service import (
+    _GROUPS,
+    ENGINE_VERSION,
+    MAX_CANDIDATES,
+    MAX_FINDINGS,
+    RESULT_SCHEMA,
+    RequirementsEngine,
+    analyze,
+)
 
 from . import scenarios
 
@@ -130,3 +141,55 @@ async def test_the_engine_implements_the_domain_port() -> None:
     assert output.ready_for_architecture is True
     assert output.candidate_count == len(output.result["candidates"])
     assert output.blocking_count == 0
+
+
+# --- worst cases -----------------------------------------------------------------------------------
+
+
+def _fill(sentence: Callable[[int], str]) -> str:
+    """As many generated sentences as fit in the largest accepted input."""
+    parts, size, i = [], 0, 0
+    while size + len(sentence(i)) <= MAX_INPUT_CHARACTERS:
+        parts.append(sentence(i))
+        size += len(parts[-1])
+        i += 1
+    return "".join(parts)
+
+
+WORST_CASES = {
+    # Every pair of distinct throughput targets is a consistency finding: quadratic without caps.
+    "distinct_targets": _fill(lambda i: f"Support at least {i + 1} rps. "),
+    "contradictions": _fill(lambda i: f"At least {2 * i + 2} rps. At most {i + 1} rps. "),
+    "backwards_ranges": _fill(lambda i: f"Latency between {i + 9} and {i + 1} ms. "),
+    "repeated_vague_words": _fill(lambda i: "fast "),
+}
+
+
+@pytest.mark.parametrize("name", WORST_CASES)
+def test_the_worst_case_is_bounded_in_time_and_size(name: str) -> None:
+    text = WORST_CASES[name]
+    started = time.perf_counter()
+    result = analyze(text)
+    elapsed = time.perf_counter() - started
+    size = len(json.dumps(result))
+    findings = [f for group in _GROUPS for f in result[group]]
+    assert elapsed < 3, f"{name}: {elapsed:.2f} s"  # about 0.2 s on a laptop
+    assert size < 1024 * 1024, f"{name}: {size} bytes"  # stored results are capped at 4 MiB
+    assert len(result["candidates"]) <= MAX_CANDIDATES
+    assert len(findings) <= MAX_FINDINGS
+    json.dumps(result)  # still JSON-ready
+
+
+def test_what_is_left_out_is_said_and_blocking_findings_are_kept() -> None:
+    result = analyze(WORST_CASES["contradictions"])
+    codes = {f["code"] for f in result["issues"]}
+    assert {"too_many_candidates", "findings_truncated"} <= codes
+    assert result["ready_for_architecture"] is False
+    assert result["counts"]["blocking"] == len(result["blocking"]) > 0
+
+
+def test_a_repeated_vague_word_is_one_finding() -> None:
+    result = analyze(WORST_CASES["repeated_vague_words"])
+    [finding] = [f for f in result["ambiguities"] if f["code"] == "vague_latency"]
+    assert finding["span"] == {"start": 0, "end": 4, "text": "fast"}
+    assert "more times" in finding["message"]

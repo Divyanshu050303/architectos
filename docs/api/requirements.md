@@ -203,6 +203,20 @@ planning input carries it as `origin: {analysis_id, candidate_key}`.
 Promotion is recorded as `requirement.promoted` (the reference, the analysis and the candidate);
 an analysis as `requirement_analysis.created` (engine version and counts, never the text).
 
+**Limits.** An analysis considers at most 100 candidates and reports at most 300 findings; beyond
+that an `extraction` warning (`too_many_candidates`, `findings_truncated`) says what was left out.
+Blocking findings are never the ones cut. A repeated vague phrase ("fast", "fast", ...) is one
+finding at its first occurrence. The worst case of a 20,000-character input takes a fraction of a
+second.
+
+**Metrics** are structured log events on the `architectos.metrics` logger (`metric`,
+`metric_kind` counter or observation, `value`, `labels`): `requirements.analyze`,
+`requirements.analyze.duration_ms`, `requirements.extracted`, `requirements.ambiguous`,
+`requirements.conflicting`, `requirements.incomplete` (`status`), `requirements.ready`,
+`requirements.promoted`, `requirements.llm.calls` / `requirements.llm_failure` (`source`,
+`reason`) and `requirements.llm.input_tokens` / `output_tokens`. Labels must be short lowercase
+identifiers, so requirement text can never become a label.
+
 ## Audit
 
 `requirement.created`, `requirement.version_created` (every change), `requirement.updated` (field

@@ -4,7 +4,10 @@ from collections.abc import Sequence
 
 import pytest
 
+from ai.agents.requirement_agent import RequirementExtractionAgent
+from ai.llm.client import LlmTimeout
 from core.domain.identity.entities import NewUser, User
+from core.domain.metrics import check_labels
 from core.domain.organizations.enums import Role
 from core.domain.organizations.errors import PermissionDenied
 from core.domain.organizations.organization_service import OrganizationService
@@ -21,6 +24,7 @@ from core.domain.requirements.errors import (
     RequirementAnalysisNotFound,
 )
 from engines.requirements.service import ENGINE_VERSION, RequirementsEngine
+from tests.unit.ai.fakes import ScriptedLlm
 from tests.unit.identity.fakes import FakeClock, FakeUnitOfWork
 
 TEXT = (
@@ -239,3 +243,82 @@ async def test_who_may_promote_and_where(
         await service.promote(
             project_id=world.project.id, analysis_id=analysis.id, user_id=world.ada.id, candidate_keys=[key]
         )
+
+
+# --- metrics ---------------------------------------------------------------------------------------
+
+
+class RecordingMetrics:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, float, dict[str, str]]] = []
+
+    def increment(self, name: str, value: int = 1, **labels: str) -> None:
+        check_labels(labels)
+        self.events.append((name, value, labels))
+
+    def observe(self, name: str, value: float, **labels: str) -> None:
+        check_labels(labels)
+        self.events.append((name, value, labels))
+
+    def names(self) -> list[str]:
+        return [name for name, _, _ in self.events]
+
+    def value(self, name: str) -> float:
+        return sum(v for n, v, _ in self.events if n == name)
+
+
+async def test_analysis_emits_counts_never_text(uow: FakeUnitOfWork, clock: FakeClock, world: World) -> None:
+    metrics = RecordingMetrics()
+    service = RequirementAnalysisService(uow, RequirementsEngine(), clock=clock, metrics=metrics)
+    await service.analyze(project_id=world.project.id, user_id=world.ada.id, raw_input=TEXT)
+    names = metrics.names()
+    assert names[:2] == ["requirements.analyze", "requirements.analyze.duration_ms"]
+    assert metrics.value("requirements.extracted") == 3
+    assert "requirements.llm_failure" not in names  # the model was never consulted
+    assert all(isinstance(v, int | float) for _, v, _ in metrics.events)
+    assert not any("2,000" in str(labels) or "latency" in str(labels) for *_, labels in metrics.events)
+
+
+async def test_vague_input_counts_as_ambiguous_and_not_ready(
+    uow: FakeUnitOfWork, clock: FakeClock, world: World
+) -> None:
+    metrics = RecordingMetrics()
+    service = RequirementAnalysisService(uow, RequirementsEngine(), clock=clock, metrics=metrics)
+    await service.analyze(
+        project_id=world.project.id, user_id=world.ada.id, raw_input="A fast payments API for many users."
+    )
+    assert "requirements.ambiguous" in metrics.names()
+    assert "requirements.ready" not in metrics.names()
+    [(_, _, labels)] = [e for e in metrics.events if e[0] == "requirements.incomplete"]
+    assert labels["status"] in {"incomplete", "unknown"}
+
+
+async def test_model_failures_and_token_usage_are_counted(
+    uow: FakeUnitOfWork, clock: FakeClock, world: World
+) -> None:
+    metrics = RecordingMetrics()
+    engine = RequirementsEngine(RequirementExtractionAgent(ScriptedLlm(error=LlmTimeout())))
+    service = RequirementAnalysisService(uow, engine, clock=clock, metrics=metrics)
+    await service.analyze(project_id=world.project.id, user_id=world.ada.id, raw_input="We have 10M users.")
+    [(_, value, labels)] = [e for e in metrics.events if e[0] == "requirements.llm_failure"]
+    assert (value, labels) == (1, {"source": "scripted/test-model", "reason": "llm_timeout"})
+
+    metrics.events.clear()
+    engine = RequirementsEngine(RequirementExtractionAgent(ScriptedLlm({"requirements": []})))
+    service = RequirementAnalysisService(uow, engine, clock=clock, metrics=metrics)
+    await service.analyze(project_id=world.project.id, user_id=world.ada.id, raw_input="We have 10M users.")
+    assert metrics.value("requirements.llm.calls") == 1
+    assert metrics.value("requirements.llm.input_tokens") == 120
+    assert metrics.value("requirements.llm.output_tokens") == 40
+
+
+async def test_promotions_are_counted_once(uow: FakeUnitOfWork, clock: FakeClock, world: World) -> None:
+    metrics = RecordingMetrics()
+    service = RequirementAnalysisService(uow, RequirementsEngine(), clock=clock, metrics=metrics)
+    analysis = await service.analyze(project_id=world.project.id, user_id=world.ada.id, raw_input=TEXT)
+    keys = [c["key"] for c in analysis.result["candidates"]]
+    for _ in range(2):  # the retry creates nothing, so counts nothing
+        await service.promote(
+            project_id=world.project.id, analysis_id=analysis.id, user_id=world.ada.id, candidate_keys=keys
+        )
+    assert metrics.value("requirements.promoted") == 3
