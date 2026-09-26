@@ -99,7 +99,7 @@ class Node:
     def problems(self) -> list[Violation]:
         problems = id_problems(self.id, "id")
         if not isinstance(self.kind, NodeKind):
-            problems.append(Violation("invalid_kind", "kind is not a known node kind.", "kind"))
+            problems.append(Violation("invalid_kind", f"kind must be one of: {', '.join(NodeKind)}.", "kind"))
         problems += text_problems(self.name, "name", MAX_NAME_LENGTH, required=True)
         problems += text_problems(
             self.description, "description", MAX_DESCRIPTION_LENGTH, required=False, block=True
@@ -112,7 +112,9 @@ class Node:
             if self.parent_id == self.id:
                 problems.append(Violation("containment_cycle", "A node cannot contain itself.", "parent_id"))
         if self.lifecycle is not None and not isinstance(self.lifecycle, Lifecycle):
-            problems.append(Violation("invalid_value", "lifecycle is not a known lifecycle.", "lifecycle"))
+            problems.append(
+                Violation("invalid_value", f"lifecycle must be one of: {', '.join(Lifecycle)}.", "lifecycle")
+            )
         if not isinstance(self.configuration, Configuration):
             problems.append(
                 Violation("invalid_value", "configuration must be a configuration.", "configuration")

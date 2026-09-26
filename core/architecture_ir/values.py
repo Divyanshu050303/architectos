@@ -145,12 +145,18 @@ MAX_JSON_ITEMS = 100
 MAX_JSON_INTEGER = 10**18
 
 
-def freeze_json(value: Any) -> Json:
-    """A deeply immutable copy of a JSON value (lists become tuples, objects read-only mappings)."""
+def freeze_json(value: Any, depth: int = 0) -> Json:
+    """A deeply immutable copy of a JSON value (lists become tuples, objects read-only mappings).
+    Past the allowed depth the value is left as is, for ``json_problems`` to refuse (never an
+    unbounded recursion)."""
+    if depth > MAX_JSON_DEPTH + 1:
+        return value  # type: ignore[no-any-return]
     if isinstance(value, list | tuple):
-        return tuple(freeze_json(v) for v in value)
+        return tuple(freeze_json(v, depth + 1) for v in value)
     if isinstance(value, Mapping):
-        return MappingProxyType({k: freeze_json(v) for k, v in sorted(value.items())})
+        return MappingProxyType(
+            {k: freeze_json(v, depth + 1) for k, v in sorted(value.items(), key=lambda i: str(i[0]))}
+        )
     return value  # type: ignore[no-any-return]
 
 

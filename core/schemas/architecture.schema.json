@@ -1,0 +1,814 @@
+{
+  "$defs": {
+    "assumption": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "requirement_refs": {
+          "items": {
+            "$ref": "#/$defs/requirement_ref"
+          },
+          "type": "array"
+        },
+        "statement": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "subject_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "provenance",
+        "requirement_refs",
+        "statement",
+        "subject_ids"
+      ],
+      "type": "object"
+    },
+    "connection": {
+      "additionalProperties": false,
+      "properties": {
+        "bidirectional": {
+          "type": "boolean"
+        },
+        "configuration": {
+          "$ref": "#/$defs/connection_configuration"
+        },
+        "critical": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "field_provenance": {
+          "additionalProperties": {
+            "$ref": "#/$defs/provenance"
+          },
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "interaction": {
+          "anyOf": [
+            {
+              "enum": [
+                "synchronous",
+                "asynchronous"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "enum": [
+            "request",
+            "publish",
+            "consume",
+            "data_access",
+            "replication",
+            "dependency"
+          ]
+        },
+        "metadata": {
+          "$ref": "#/$defs/metadata"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protocol": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9+._-]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirement_refs": {
+          "items": {
+            "$ref": "#/$defs/requirement_ref"
+          },
+          "type": "array"
+        },
+        "source_id": {
+          "$ref": "#/$defs/id"
+        },
+        "target_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "bidirectional",
+        "configuration",
+        "critical",
+        "description",
+        "field_provenance",
+        "id",
+        "interaction",
+        "kind",
+        "metadata",
+        "name",
+        "protocol",
+        "provenance",
+        "requirement_refs",
+        "source_id",
+        "target_id"
+      ],
+      "type": "object"
+    },
+    "connection_configuration": {
+      "additionalProperties": false,
+      "properties": {
+        "extra": {
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+          },
+          "type": "object"
+        },
+        "unknown": {
+          "items": {
+            "enum": [
+              "dead_letter",
+              "port",
+              "retries",
+              "timeout_seconds",
+              "tls"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "values": {
+          "additionalProperties": false,
+          "properties": {
+            "dead_letter": {
+              "description": "Messages that keep failing go to a dead-letter queue.",
+              "type": "boolean"
+            },
+            "port": {
+              "description": "Target port.",
+              "maximum": 65535,
+              "minimum": 1,
+              "type": "integer"
+            },
+            "retries": {
+              "description": "Retries after a failure.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "timeout_seconds": {
+              "description": "How long the source waits, in seconds.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "tls": {
+              "description": "Traffic is encrypted in transit.",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "extra",
+        "unknown",
+        "values"
+      ],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": false,
+      "properties": {
+        "decision_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "subject_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "decision_id",
+        "subject_ids"
+      ],
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_.-]{0,63}$"
+      },
+      "type": "object"
+    },
+    "node": {
+      "additionalProperties": false,
+      "properties": {
+        "component": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9_.-]{0,63}(?:/[a-z0-9][a-z0-9_.-]{0,63}){0,3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "configuration": {
+          "$ref": "#/$defs/node_configuration"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "field_provenance": {
+          "additionalProperties": {
+            "$ref": "#/$defs/provenance"
+          },
+          "type": "object"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "client",
+            "cdn",
+            "load_balancer",
+            "gateway",
+            "service",
+            "worker",
+            "database",
+            "cache",
+            "queue",
+            "storage",
+            "observability",
+            "external",
+            "boundary"
+          ]
+        },
+        "lifecycle": {
+          "anyOf": [
+            {
+              "enum": [
+                "planned",
+                "active",
+                "deprecated"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metadata": {
+          "$ref": "#/$defs/metadata"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "provenance": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/provenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "requirement_refs": {
+          "items": {
+            "$ref": "#/$defs/requirement_ref"
+          },
+          "type": "array"
+        },
+        "technology": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/technology"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "component",
+        "configuration",
+        "description",
+        "field_provenance",
+        "id",
+        "kind",
+        "lifecycle",
+        "metadata",
+        "name",
+        "parent_id",
+        "provenance",
+        "requirement_refs",
+        "technology"
+      ],
+      "type": "object"
+    },
+    "node_configuration": {
+      "additionalProperties": false,
+      "properties": {
+        "extra": {
+          "propertyNames": {
+            "pattern": "^[A-Za-z][A-Za-z0-9_.-]{0,63}$"
+          },
+          "type": "object"
+        },
+        "unknown": {
+          "items": {
+            "enum": [
+              "autoscaling_max_replicas",
+              "autoscaling_min_replicas",
+              "autoscaling_target_cpu_ratio",
+              "availability_zones",
+              "backup_enabled",
+              "backup_retention_seconds",
+              "boundary_type",
+              "cpu_limit_cores",
+              "cpu_request_cores",
+              "deployment_model",
+              "eviction_policy",
+              "instance_class",
+              "max_connections",
+              "memory_limit_bytes",
+              "memory_request_bytes",
+              "multi_az",
+              "partitions",
+              "persistence",
+              "region",
+              "replicas",
+              "replication_factor",
+              "replication_mode",
+              "retention_seconds",
+              "runtime",
+              "storage_bytes"
+            ]
+          },
+          "type": "array",
+          "uniqueItems": true
+        },
+        "values": {
+          "additionalProperties": false,
+          "properties": {
+            "autoscaling_max_replicas": {
+              "description": "Most instances the autoscaler starts.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "autoscaling_min_replicas": {
+              "description": "Fewest instances the autoscaler keeps.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "autoscaling_target_cpu_ratio": {
+              "description": "CPU utilization the autoscaler targets (0.7 = 70 %).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "availability_zones": {
+              "description": "Availability zones used.",
+              "items": {
+                "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "backup_enabled": {
+              "description": "Backups are taken.",
+              "type": "boolean"
+            },
+            "backup_retention_seconds": {
+              "description": "How long backups are kept, in seconds.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "boundary_type": {
+              "description": "What the boundary delimits.",
+              "enum": [
+                "account",
+                "availability_zone",
+                "cluster",
+                "network",
+                "region",
+                "system",
+                "trust_zone"
+              ]
+            },
+            "cpu_limit_cores": {
+              "description": "CPU limit per instance, in cores.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "cpu_request_cores": {
+              "description": "CPU reserved per instance, in cores.",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "deployment_model": {
+              "description": "How it runs.",
+              "enum": [
+                "container_service",
+                "kubernetes",
+                "managed_service",
+                "on_premises",
+                "serverless",
+                "virtual_machine"
+              ]
+            },
+            "eviction_policy": {
+              "description": "What the cache evicts when full.",
+              "enum": [
+                "allkeys_lfu",
+                "allkeys_lru",
+                "allkeys_random",
+                "noeviction",
+                "volatile_lfu",
+                "volatile_lru",
+                "volatile_random",
+                "volatile_ttl"
+              ]
+            },
+            "instance_class": {
+              "description": "Provider instance class, e.g. db.r6g.large.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "max_connections": {
+              "description": "Connection limit.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "memory_limit_bytes": {
+              "description": "Memory limit per instance, in bytes.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "memory_request_bytes": {
+              "description": "Memory reserved per instance, in bytes.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "multi_az": {
+              "description": "Runs across availability zones.",
+              "type": "boolean"
+            },
+            "partitions": {
+              "description": "Partitions (or shards) of the queue or topic.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "persistence": {
+              "description": "Whether the cache survives a restart.",
+              "enum": [
+                "append_only",
+                "none",
+                "snapshot"
+              ]
+            },
+            "region": {
+              "description": "Cloud region, e.g. eu-west-1.",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+              "type": "string"
+            },
+            "replicas": {
+              "description": "Instances running, including any primary.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "replication_factor": {
+              "description": "Copies of each message kept.",
+              "minimum": 1,
+              "type": "integer"
+            },
+            "replication_mode": {
+              "description": "How data is replicated.",
+              "enum": [
+                "asynchronous",
+                "none",
+                "synchronous"
+              ]
+            },
+            "retention_seconds": {
+              "description": "How long data is kept, in seconds.",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "runtime": {
+              "description": "Language runtime, e.g. python3.13.",
+              "minLength": 1,
+              "type": "string"
+            },
+            "storage_bytes": {
+              "description": "Provisioned storage, in bytes.",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "required": [
+        "extra",
+        "unknown",
+        "values"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "inferred": {
+          "type": "boolean"
+        },
+        "recorded_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "enum": [
+            "user_input",
+            "user_edit",
+            "llm_proposal",
+            "terraform",
+            "kubernetes",
+            "cloud_discovery",
+            "file_import",
+            "system_default",
+            "schema_migration"
+          ]
+        },
+        "verified": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "actor",
+        "confidence",
+        "inferred",
+        "recorded_at",
+        "reference",
+        "source",
+        "verified"
+      ],
+      "type": "object"
+    },
+    "requirement_ref": {
+      "additionalProperties": false,
+      "properties": {
+        "requirement_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "requirement_id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "technology": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z0-9][a-z0-9+._-]{0,63}$",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:architectos:architecture-ir:1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Canonical form of an ArchitectOS architecture, schema version 1. Generated from core/architecture_ir; kind applicability and graph rules are enforced by the validator, not by this schema.",
+  "properties": {
+    "assumptions": {
+      "items": {
+        "$ref": "#/$defs/assumption"
+      },
+      "maxItems": 500,
+      "type": "array"
+    },
+    "connections": {
+      "items": {
+        "$ref": "#/$defs/connection"
+      },
+      "maxItems": 5000,
+      "type": "array"
+    },
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/decision"
+      },
+      "maxItems": 500,
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "type": "string"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "maxItems": 1000,
+      "type": "array"
+    },
+    "provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/provenance"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "requirement_refs": {
+      "items": {
+        "$ref": "#/$defs/requirement_ref"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1
+    }
+  },
+  "required": [
+    "assumptions",
+    "connections",
+    "decisions",
+    "description",
+    "metadata",
+    "name",
+    "nodes",
+    "provenance",
+    "requirement_refs",
+    "schema_version"
+  ],
+  "title": "ArchitectOS Architecture IR",
+  "type": "object"
+}

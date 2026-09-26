@@ -75,7 +75,9 @@ class Provenance:
     def problems(self) -> list[Violation]:
         problems: list[Violation] = []
         if not isinstance(self.source, ProvenanceSource):
-            problems.append(Violation("invalid_value", "source is not a known provenance source.", "source"))
+            problems.append(
+                Violation("invalid_value", f"source must be one of: {', '.join(ProvenanceSource)}.", "source")
+            )
         problems += text_problems(self.reference, "reference", MAX_REFERENCE_LENGTH, required=False)
         problems += text_problems(self.actor, "actor", MAX_ACTOR_LENGTH, required=False)
         problems += self._confidence_problems()

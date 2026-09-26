@@ -107,7 +107,7 @@ class Connection:
 
     def _semantics_problems(self) -> list[Violation]:
         if not isinstance(self.kind, ConnectionKind):
-            return [Violation("invalid_kind", "kind is not a known connection kind.", "kind")]
+            return [Violation("invalid_kind", f"kind must be one of: {', '.join(ConnectionKind)}.", "kind")]
         problems: list[Violation] = []
         if self.protocol is not None and (
             not isinstance(self.protocol, str) or not PROTOCOL.fullmatch(self.protocol)
@@ -121,7 +121,7 @@ class Connection:
             )
         if self.interaction is not None and not isinstance(self.interaction, Interaction):
             problems.append(
-                Violation("invalid_value", "interaction is not a known interaction.", "interaction")
+                Violation("invalid_value", "interaction must be synchronous or asynchronous.", "interaction")
             )
         if not isinstance(self.bidirectional, bool):
             problems.append(
