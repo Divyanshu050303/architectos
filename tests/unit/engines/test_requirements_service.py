@@ -20,6 +20,7 @@ def test_the_result_shape() -> None:
         "result_schema",
         "engine_version",
         "input_sha256",
+        "semantic",
         "candidates",
         "issues",
         "ambiguities",

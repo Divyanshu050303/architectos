@@ -33,6 +33,7 @@ class FindingKind(StrEnum):
     CONFLICT = "conflict"  # requirements no value can satisfy together
     CONSISTENCY = "consistency"  # one requirement strengthens or repeats another
     COMPLETENESS = "completeness"  # an area the project needs but nobody specified
+    EXTRACTION = "extraction"  # how the analysis was produced (e.g. semantic extraction unavailable)
 
 
 @dataclass(frozen=True, slots=True)
