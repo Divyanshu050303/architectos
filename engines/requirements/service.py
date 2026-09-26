@@ -262,4 +262,5 @@ class RequirementsEngine:
             semantic_source=semantic.get("source"),
             input_tokens=usage.get("input_tokens", 0),
             output_tokens=usage.get("output_tokens", 0),
+            llm_latency_ms=usage.get("latency_ms", 0),
         )

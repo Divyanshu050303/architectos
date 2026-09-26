@@ -35,6 +35,7 @@ from core.domain.requirements.value_objects import (
     parse_confidence,
     parse_structured_data,
 )
+from engines.requirements.extractor import statement_around
 from engines.requirements.semantic import Rejection, SemanticOutcome
 
 PROMPT_VERSION = "requirements-extraction-v1"
@@ -237,4 +238,4 @@ def _sentence_around(span: SourceSpan, raw_input: str) -> str:
     start = max(raw_input.rfind(b, 0, span.start) for b in ".!?;\n") + 1
     ends = [i for i in (raw_input.find(b, span.end) for b in ".!?;\n") if i != -1]
     end = min(ends) + 1 if ends else len(raw_input)
-    return raw_input[start:end].strip()
+    return statement_around(raw_input[start:end], span.start - start, span.end - start)

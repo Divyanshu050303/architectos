@@ -87,6 +87,7 @@ class AnalyzerOutput:
     semantic_source: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
+    llm_latency_ms: int = 0
 
 
 class RequirementsAnalyzer(Protocol):

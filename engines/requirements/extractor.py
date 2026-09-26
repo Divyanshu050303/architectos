@@ -28,6 +28,10 @@ from .normalizer import Bound, Interpretation, Percentile, normalize
 _BOUNDARY = re.compile(r"(?<=[.!?;])\s+|\n+")
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 _SEPARATOR = re.compile(r"[,;]|\b(?:and|but|while|whereas|with)\b", re.IGNORECASE)
+# A candidate's statement is the user's sentence; a longer one ("at least 10 rps, at least 20 rps,
+# …" with no full stop) is cut to the clause around the requirement, so it stays readable and far
+# below the domain's statement limit.
+MAX_STATEMENT = 400
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +64,23 @@ class Extraction:
     candidates: tuple[RequirementCandidate, ...]
     unresolved: tuple[Unresolved, ...]
     notes: tuple[Note, ...]
+
+
+def statement_around(text: str, lo: int, hi: int) -> str:
+    """The user's own words stating the requirement at ``text[lo:hi]``: the whole sentence ``text``
+    when it is short enough, otherwise the clause around the requirement, cut to ``MAX_STATEMENT``
+    characters. Always a substring of the input (never rewritten or ellipsized)."""
+    if len(text.strip()) <= MAX_STATEMENT:
+        return text.strip()
+    if hi - lo >= MAX_STATEMENT:
+        return text[lo:hi].strip()
+    left = max((m.end() for m in _SEPARATOR.finditer(text, 0, lo)), default=0)
+    after = _SEPARATOR.search(text, hi)
+    right = after.start() if after else len(text)
+    if right - left > MAX_STATEMENT:
+        left = max(left, lo - (MAX_STATEMENT - (hi - lo)) // 2)
+        right = min(right, left + MAX_STATEMENT)
+    return text[left:right].strip()
 
 
 def sentences(raw: str) -> list[Sentence]:
@@ -172,12 +193,13 @@ def _quantitative(
         percentile = nearest.value if nearest else None
     constraint = parse_structured_data(bound.structured_data(result.metric, result.operator, percentile))
     title = f"{result.title} (p{percentile.normalize()})" if percentile is not None else result.title
+    statement = statement_around(sentence.text, span.start - sentence.start, span.end - sentence.start)
     content = RequirementContent(
         type=result.type,
         category=result.category,
         title=title,
-        statement=sentence.text,
-        priority=priority_of(sentence.text),
+        statement=statement,
+        priority=priority_of(statement),
         status=RequirementStatus.DRAFT,
         constraint=constraint,
         scope=result.scope,
@@ -200,16 +222,17 @@ def _qualitative(
             continue
         seen.add(identity)
         constraint = SetConstraint("regions", tuple(sorted(match.values))) if match.values else None
+        local_start, local_end = match.start - sentence.start, match.end - sentence.start
+        statement = statement_around(sentence.text, local_start, local_end)
         content = RequirementContent(
             type=match.type,
             category=match.category,
             title=match.title,
-            statement=sentence.text,
-            priority=priority_of(sentence.text),
+            statement=statement,
+            priority=priority_of(statement),
             status=RequirementStatus.DRAFT,
             constraint=constraint,
         )
-        local_start, local_end = match.start - sentence.start, match.end - sentence.start
         span = SourceSpan(match.start, match.end, sentence.text[local_start:local_end])
         found.append(RequirementCandidate(ExtractionMethod.PATTERN, content, match.confidence, span))
     return found

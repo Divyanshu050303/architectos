@@ -121,6 +121,7 @@ class RequirementAnalysisService:
                 m.increment("requirements.llm_failure", source=source, reason=output.semantic_status)
             m.observe("requirements.llm.input_tokens", output.input_tokens, source=source)
             m.observe("requirements.llm.output_tokens", output.output_tokens, source=source)
+            m.observe("requirements.llm.latency_ms", output.llm_latency_ms, source=source)
 
     async def get(
         self, *, project_id: uuid.UUID, analysis_id: uuid.UUID, user_id: uuid.UUID

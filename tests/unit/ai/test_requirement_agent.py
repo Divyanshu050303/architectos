@@ -156,3 +156,11 @@ async def test_a_poisoned_output_cannot_smuggle_anything_through() -> None:
     outcome = await propose([poisoned])
     assert outcome.candidates == ()
     assert outcome.rejections[0].detail == "unexpected fields: statement"
+
+
+async def test_a_proposal_in_a_very_long_sentence_keeps_a_promotable_statement() -> None:
+    text = "x, " * 2000 + "we keep 2000 simultaneous sessions open, " + "y, " * 2000
+    outcome = await propose([proposal()], text)
+    assert outcome.rejections == ()
+    [candidate] = outcome.candidates
+    assert candidate.content.statement == "we keep 2000 simultaneous sessions open"

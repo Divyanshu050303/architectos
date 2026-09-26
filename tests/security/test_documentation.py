@@ -68,8 +68,13 @@ def test_the_taxonomy_metrics_and_units_are_documented() -> None:
 
 
 def test_the_decisions_are_recorded() -> None:
-    for adr in ("ADR-007-requirement-versioning-and-sets.md", "ADR-008-project-write-locking.md"):
+    for adr in (
+        "ADR-007-requirement-versioning-and-sets.md",
+        "ADR-008-project-write-locking.md",
+        "ADR-009-requirements-engine.md",
+    ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
         assert "## Consequences" in text
     assert (DOCS / "frontend" / "projects-requirements-contract.md").exists()
+    assert (DOCS / "requirements-engine.md").exists()

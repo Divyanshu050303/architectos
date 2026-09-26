@@ -1,5 +1,6 @@
 """Classification and extraction (Requirements Engine phase 3)."""
 
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -7,7 +8,7 @@ import pytest
 from core.domain.requirements.candidates import ExtractionMethod, RequirementCandidate
 from core.domain.requirements.enums import RequirementPriority, RequirementScope, RequirementSource
 from engines.requirements.classifier import USER_COUNT_READINGS, priority_of
-from engines.requirements.extractor import extract, sentences
+from engines.requirements.extractor import MAX_STATEMENT, extract, sentences, statement_around
 
 FOOD_DELIVERY = (
     "I want to build a food delivery platform. It should support 100,000 daily users, around 2,000 "
@@ -338,3 +339,33 @@ def test_decimals_do_not_split_sentences() -> None:
 )
 def test_priority_is_proposed_only_from_explicit_words(sentence: str, priority: RequirementPriority) -> None:
     assert priority_of(sentence) is priority
+
+
+def test_a_long_sentence_gives_each_requirement_its_own_clause() -> None:
+    """A list with no full stop is one sentence; each statement is still the user's words for that
+    requirement, short enough to promote."""
+    text = "".join(f"at least {i + 1} rps, " for i in range(1500))[:20_000]
+    extraction = extract(text)
+    assert extraction.candidates
+    for candidate in extraction.candidates:
+        statement = candidate.content.statement
+        assert statement in text
+        assert len(statement) <= MAX_STATEMENT
+        assert candidate.span is not None
+        assert candidate.span.text in statement
+        candidate.to_new_requirement(project_id=uuid.uuid4(), created_by_user_id=uuid.uuid4())  # valid
+    assert extraction.candidates[5].content.statement == "at least 6 rps"
+
+
+@pytest.mark.parametrize(
+    ("text", "lo", "hi", "expected"),
+    [
+        ("Support at least 2000 rps.", 8, 25, "Support at least 2000 rps."),  # short: the sentence
+        ("x" * 500, 10, 20, "x" * MAX_STATEMENT),  # no clause boundary: a window around the span
+        ("a" * 450 + ", at least 2000 rps, " + "b" * 450, 452, 469, "at least 2000 rps"),
+    ],
+)
+def test_statement_around(text: str, lo: int, hi: int, expected: str) -> None:
+    statement = statement_around(text, lo, hi)
+    assert statement == expected
+    assert text[lo:hi] in statement

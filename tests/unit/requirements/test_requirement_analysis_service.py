@@ -310,6 +310,7 @@ async def test_model_failures_and_token_usage_are_counted(
     assert metrics.value("requirements.llm.calls") == 1
     assert metrics.value("requirements.llm.input_tokens") == 120
     assert metrics.value("requirements.llm.output_tokens") == 40
+    assert metrics.value("requirements.llm.latency_ms") == 5
 
 
 async def test_promotions_are_counted_once(uow: FakeUnitOfWork, clock: FakeClock, world: World) -> None:

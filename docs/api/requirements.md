@@ -159,6 +159,8 @@ in UTF-8: anyone can verify it, and equal content gives an equal hash.
 
 ## Requirement analyses (Requirements Engine)
 
+How the engine works, and why: [docs/requirements-engine.md](../requirements-engine.md).
+
 | Method and path | Permission | Success | Errors |
 |---|---|---|---|
 | `POST /projects/{id}/requirement-analyses` `{input}` | `requirement.create` | `201 Analysis` | `409 project_archived`, `413 payload_too_large`, `422 invalid_requirement_input`, `429 rate_limited` |
@@ -214,7 +216,8 @@ second.
 `requirements.analyze.duration_ms`, `requirements.extracted`, `requirements.ambiguous`,
 `requirements.conflicting`, `requirements.incomplete` (`status`), `requirements.ready`,
 `requirements.promoted`, `requirements.llm.calls` / `requirements.llm_failure` (`source`,
-`reason`) and `requirements.llm.input_tokens` / `output_tokens`. Labels must be short lowercase
+`reason`) and `requirements.llm.input_tokens` / `output_tokens` / `latency_ms`, all labelled with the
+`source` (`provider/model`). Labels must be short lowercase
 identifiers, so requirement text can never become a label.
 
 ## Audit
