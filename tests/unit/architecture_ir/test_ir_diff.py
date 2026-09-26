@@ -3,6 +3,7 @@
 import dataclasses
 import uuid
 from decimal import Decimal
+from typing import Any
 
 from core.architecture_ir.component import NodeKind, Technology
 from core.architecture_ir.configuration import Configuration
@@ -176,3 +177,42 @@ def test_unknown_values_becoming_known_is_a_change() -> None:
         "configuration.replicas": (None, 2),
         "configuration.unknown": (["replicas"], None),
     }
+
+
+def test_secret_looking_values_are_redacted_but_the_change_is_reported() -> None:
+    db = Node(
+        "db",
+        NodeKind.DATABASE,
+        "DB",
+        configuration=Configuration(extra={"db_password": "hunter2", "iops": 1}),
+    )
+    rotated = dataclasses.replace(
+        db,
+        configuration=Configuration(extra={"db_password": "correct-horse", "iops": 2}),
+        metadata={"api_token": "t2"},
+    )
+    [change] = diff(ArchitectureIR("x", nodes=(db,)), ArchitectureIR("x", nodes=(rotated,))).nodes
+    fields = {f.field: (f.before, f.after) for f in change.fields}
+    assert fields == {
+        "configuration.extra.db_password": ("[redacted]", "[redacted]"),
+        "configuration.extra.iops": (1, 2),
+        "metadata.api_token": (None, "[redacted]"),
+    }
+    assert "hunter2" not in str(change.to_dict())
+
+
+def test_secrets_nested_in_lists_and_objects_are_redacted() -> None:
+    """Found in review: a list is compared as one value, so a secret inside it must be scrubbed."""
+    before = Node("db", NodeKind.DATABASE, "DB")
+    extra: dict[str, Any] = {
+        "connections": [{"host": "db.example.com", "password": "supersecret123"}],
+        "nested": {"deep": [{"items": [{"api_key": "k-123", "port": 5432}]}]},
+    }
+    after = dataclasses.replace(before, configuration=Configuration(extra=extra))
+    [change] = diff(ArchitectureIR("x", nodes=(before,)), ArchitectureIR("x", nodes=(after,))).nodes
+    shown = {f.field: f.after for f in change.fields}
+    assert shown["configuration.extra.connections"] == [{"host": "db.example.com", "password": "[redacted]"}]
+    assert shown["configuration.extra.nested.deep"] == [{"items": [{"api_key": "[redacted]", "port": 5432}]}]
+    text = str(change.to_dict())
+    assert "supersecret123" not in text
+    assert "k-123" not in text

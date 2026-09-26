@@ -8,14 +8,17 @@ from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Self
 
+from core.architecture_ir.serialization import to_dict
 from core.domain.architecture.entities import (
     Architecture,
     ArchitectureLayout,
+    ArchitectureQuery,
+    ArchitectureStatus,
     NewArchitecture,
     Position,
     RevisionSummary,
 )
-from core.domain.architecture.errors import ArchitectureAlreadyExists
+from core.domain.architecture.errors import ArchitectureNameTaken
 from core.domain.architecture.versions import ArchitectureRevision, NewRevision
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.identity.entities import (
@@ -641,21 +644,33 @@ class FakeRequirementAnalysisRepository:
 
 
 class FakeArchitectureRepository:
-    """One architecture per project, append-only revisions, a layout per architecture."""
+    """Many architectures per project, append-only revisions, a layout per architecture."""
 
     def __init__(self, clock: FakeClock) -> None:
         self._clock = clock
-        self.architectures: dict[uuid.UUID, Architecture] = {}  # by project
-        self.revisions: dict[tuple[uuid.UUID, int], ArchitectureRevision] = {}  # (project, number)
-        self.layouts: dict[uuid.UUID, ArchitectureLayout] = {}  # by project
+        self.architectures: dict[uuid.UUID, Architecture] = {}  # by id (deleted ones kept)
+        self.revisions: dict[tuple[uuid.UUID, int], ArchitectureRevision] = {}  # (architecture, number)
+        self.layouts: dict[uuid.UUID, ArchitectureLayout] = {}  # by architecture
 
-    def _store(self, project_id: uuid.UUID, revision: NewRevision) -> ArchitectureRevision:
-        key = (project_id, revision.number)
+    def _check_name(self, architecture: Architecture | NewArchitecture) -> None:
+        for other in self.architectures.values():
+            if (
+                other.id != architecture.id
+                and other.project_id == architecture.project_id
+                and other.deleted_at is None
+                and other.name.lower() == architecture.name.lower()
+            ):
+                raise ArchitectureNameTaken
+
+    def _store(self, revision: NewRevision) -> ArchitectureRevision:
+        key = (revision.architecture_id, revision.number)
         assert key not in self.revisions, "revisions are append-only"
         stored = ArchitectureRevision(
             id=uuid.uuid7(),
             created_at=self._clock(),
             **{f.name: getattr(revision, f.name) for f in dataclass_fields(revision)},
+            snapshot=to_dict(revision.ir),
+            stored_schema_version=revision.ir_schema_version,
         )
         self.revisions[key] = stored
         return stored
@@ -663,40 +678,75 @@ class FakeArchitectureRepository:
     async def add(
         self, architecture: NewArchitecture, first: NewRevision
     ) -> tuple[Architecture, ArchitectureRevision]:
-        if architecture.project_id in self.architectures:
-            raise ArchitectureAlreadyExists
+        self._check_name(architecture)
         stored = Architecture(
             id=architecture.id,
             project_id=architecture.project_id,
+            name=architecture.name,
+            description=architecture.description,
+            status=ArchitectureStatus.ACTIVE,
             current_revision=first.number,
             created_by_user_id=architecture.created_by_user_id,
+            updated_by_user_id=architecture.created_by_user_id,
+            archived_at=None,
+            deleted_at=None,
             created_at=self._clock(),
             updated_at=self._clock(),
         )
-        self.architectures[architecture.project_id] = stored
-        return stored, self._store(architecture.project_id, first)
+        self.architectures[stored.id] = stored
+        return stored, self._store(first)
 
-    async def get(self, project_id: uuid.UUID, *, for_update: bool = False) -> Architecture | None:
-        return self.architectures.get(project_id)
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, *, for_update: bool = False
+    ) -> Architecture | None:
+        found = self.architectures.get(architecture_id)
+        return found if found and found.project_id == project_id and found.deleted_at is None else None
+
+    async def list_for_project(self, project_id: uuid.UUID, query: ArchitectureQuery) -> list[Architecture]:
+        found = [
+            a
+            for a in self.architectures.values()
+            if a.project_id == project_id
+            and a.deleted_at is None
+            and (query.status is None or a.status is query.status)
+            and (query.search is None or query.search.lower() in a.name.lower())
+            and (query.after is None or (a.created_at, a.id) < query.after)
+        ]
+        return sorted(found, key=lambda a: (a.created_at, a.id), reverse=True)[: query.limit]
+
+    async def save(self, architecture: Architecture) -> Architecture:
+        self._check_name(architecture)
+        saved = replace(architecture, updated_at=self._clock())
+        self.architectures[architecture.id] = saved
+        return saved
 
     async def add_revision(
         self, architecture: Architecture, revision: NewRevision
     ) -> tuple[Architecture, ArchitectureRevision]:
-        current = self.architectures[architecture.project_id]
+        current = self.architectures[architecture.id]
         assert current.current_revision == revision.parent_number, "the parent must be current"
-        stored = self._store(architecture.project_id, revision)
-        moved = replace(current, current_revision=revision.number, updated_at=self._clock())
-        self.architectures[architecture.project_id] = moved
+        stored = self._store(revision)
+        moved = replace(
+            current,
+            current_revision=revision.number,
+            updated_at=self._clock(),
+            updated_by_user_id=revision.created_by_user_id,
+        )
+        self.architectures[architecture.id] = moved
         return moved, stored
 
-    async def get_revision(self, project_id: uuid.UUID, number: int) -> ArchitectureRevision | None:
-        return self.revisions.get((project_id, number))
+    async def get_revision(self, architecture_id: uuid.UUID, number: int) -> ArchitectureRevision | None:
+        return self.revisions.get((architecture_id, number))
 
     async def list_revisions(
-        self, project_id: uuid.UUID, *, before: int | None, limit: int
+        self, architecture_id: uuid.UUID, *, before: int | None, limit: int
     ) -> list[RevisionSummary]:
         found = sorted(
-            (r for (p, n), r in self.revisions.items() if p == project_id and (before is None or n < before)),
+            (
+                r
+                for (a, n), r in self.revisions.items()
+                if a == architecture_id and (before is None or n < before)
+            ),
             key=lambda r: r.number,
             reverse=True,
         )
@@ -704,6 +754,7 @@ class FakeArchitectureRepository:
             RevisionSummary(
                 number=r.number,
                 parent_number=r.parent_number,
+                restored_from=r.restored_from,
                 source=r.source,
                 summary=r.summary,
                 reason=r.reason,
@@ -716,14 +767,14 @@ class FakeArchitectureRepository:
             for r in found[:limit]
         ]
 
-    async def get_layout(self, project_id: uuid.UUID) -> ArchitectureLayout:
-        return self.layouts.get(project_id, ArchitectureLayout())
+    async def get_layout(self, architecture_id: uuid.UUID) -> ArchitectureLayout:
+        return self.layouts.get(architecture_id, ArchitectureLayout())
 
     async def save_layout(
         self, architecture: Architecture, positions: Mapping[str, Position], user_id: uuid.UUID
     ) -> ArchitectureLayout:
         layout = ArchitectureLayout(dict(positions), user_id, self._clock())
-        self.layouts[architecture.project_id] = layout
+        self.layouts[architecture.id] = layout
         return layout
 
 

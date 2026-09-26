@@ -30,7 +30,10 @@ from apps.api.routes import (
 from engines.requirements.factory import build_engine
 
 API_PREFIX = "/api/v1"
-ARCHITECTURE_CREATE_PATH = re.compile(rf"{API_PREFIX}/projects/[0-9a-fA-F-]{{36}}/architecture")
+_UUID = "[0-9a-fA-F-]{36}"
+# Routes that take a whole architecture document (creating, saving new content).
+ARCHITECTURE_CREATE_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architectures")
+ARCHITECTURE_CONTENT_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architectures/{_UUID}/content")
 
 
 def _rate_limiter(settings: Settings) -> RateLimiter:
@@ -82,7 +85,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         BodyLimitMiddleware,
         max_bytes=settings.max_request_body_bytes,
-        larger=[("POST", ARCHITECTURE_CREATE_PATH, settings.max_architecture_body_bytes)],
+        larger=[
+            ("POST", ARCHITECTURE_CREATE_PATH, settings.max_architecture_body_bytes),
+            ("PUT", ARCHITECTURE_CONTENT_PATH, settings.max_architecture_body_bytes),
+        ],
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.environment == "production")
     app.add_middleware(RequestLoggingMiddleware)

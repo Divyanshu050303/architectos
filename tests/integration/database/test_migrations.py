@@ -221,3 +221,46 @@ def test_downgrading_architectures_leaves_requirements_intact(empty_database_url
     assert _tables(empty_database_url) == ALL_TABLES - ARCHITECTURE_TABLES
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
+
+
+def test_upgrading_existing_architectures_keeps_them_and_names_them(empty_database_url: str) -> None:
+    """0009 (many architectures per project) keeps every existing architecture and revision, and
+    names each architecture after its current revision's IR title."""
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "0008")
+    asyncio.run(
+        _execute(
+            empty_database_url,
+            """
+            WITH o AS (
+                INSERT INTO organizations (id, name)
+                VALUES ('00000000-0000-7000-8000-000000000001', 'Acme') RETURNING id
+            ), p AS (
+                INSERT INTO projects (id, organization_id, name, slug)
+                SELECT '00000000-0000-7000-8000-000000000002', o.id, 'Food', 'food' FROM o RETURNING id
+            ), a AS (
+                INSERT INTO architectures (id, project_id, current_revision)
+                SELECT '00000000-0000-7000-8000-000000000003', p.id, 1 FROM p RETURNING id, project_id
+            )
+            INSERT INTO architecture_revisions (id, architecture_id, project_id, number, ir,
+                                                ir_schema_version, content_hash, source, summary)
+            SELECT gen_random_uuid(), a.id, a.project_id, 1,
+                   '{"schema_version": 1, "name": "Orders"}'::jsonb, 1,
+                   repeat('a', 64), 'user', 'Created with 0 nodes and 0 connections.'
+            FROM a
+            """,
+        )
+    )
+
+    command.upgrade(config, "head")
+
+    rows = asyncio.run(
+        _execute(
+            empty_database_url,
+            "SELECT a.name, a.status, a.current_revision, r.restored_from_number "
+            "FROM architectures a JOIN architecture_revisions r ON r.architecture_id = a.id",
+        )
+    )
+    assert rows == [("Orders", "active", 1, None)]
+    command.downgrade(config, "0008")  # one architecture per project: downgrading is possible
+    command.upgrade(config, "head")

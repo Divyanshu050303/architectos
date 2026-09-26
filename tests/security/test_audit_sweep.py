@@ -43,13 +43,15 @@ ARCHITECTURE = {
     "name": CANARY_TITLE,
     "nodes": [{"id": "api", "kind": "service", "name": CANARY_TITLE, "description": CANARY_STATEMENT}],
 }
+# The shared middle of architecture operation ids.
+_ARCH = "_api_v1_projects__project_id__architectures__architecture_id__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 READ_ONLY = {"validate_requirement_api_v1_projects__project_id__requirements__requirement_id__validate_post"}
 # Mutations deliberately not audited, each with the reason.
 NOT_AUDITED = {
     # Where boxes are drawn: presentation, never an architecture change or a revision.
-    "save_architecture_layout_api_v1_projects__project_id__architecture_layout_put",
+    f"save_architecture_layout{_ARCH}layout_put",
 }
 _names = itertools.count()
 
@@ -61,6 +63,7 @@ class Target:
     requirement_id: str
     analysis_id: str
     candidate_key: str
+    architecture_id: str = ""  # set by with_architecture
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -76,9 +79,30 @@ async def archive(client: AsyncClient, auth: dict[str, str], target: Target) -> 
 
 async def with_architecture(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
     response = await client.post(
-        f"/api/v1/projects/{target.project_id}/architecture", json={"ir": ARCHITECTURE}, headers=auth
+        f"/api/v1/projects/{target.project_id}/architectures",
+        json={"name": CANARY_TITLE, "description": CANARY_STATEMENT, "ir": ARCHITECTURE},
+        headers=auth,
     )
     assert response.status_code == 201, response.text
+    target.architecture_id = response.json()["id"]
+
+
+async def with_archived_architecture(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    await with_architecture(client, auth, target)
+    archived = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/archive", headers=auth
+    )
+    assert archived.status_code == 200, archived.text
+
+
+async def with_two_revisions(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    await with_architecture(client, auth, target)
+    edited = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/commands",
+        json={"baseVersion": 1, "commands": [{"type": "change_replicas", "nodeId": "api", "replicas": 4}]},
+        headers=auth,
+    )
+    assert edited.status_code == 201, edited.text
 
 
 @dataclass(frozen=True)
@@ -127,18 +151,44 @@ PLANS: dict[str, Plan] = {
     "promote_candidates_api_v1_projects__project_id__requirement_analyses__analysis_id__promote_post": Plan(
         {"requirement.promoted"}, "promoted", lambda target: {"candidateKeys": [target.candidate_key]}
     ),
-    "create_architecture_api_v1_projects__project_id__architecture_post": Plan(
-        {"architecture.created"}, "created", {"ir": ARCHITECTURE, "reason": CANARY_REASON}
+    "create_architecture_api_v1_projects__project_id__architectures_post": Plan(
+        {"architecture.created"},
+        "created",
+        {"name": CANARY_TITLE, "description": CANARY_STATEMENT, "ir": ARCHITECTURE, "reason": CANARY_REASON},
     ),
-    "edit_architecture_api_v1_projects__project_id__architecture_commands_post": Plan(
+    f"update_architecture{_ARCH}patch": Plan(
+        {"architecture.updated"}, "architecture", {"name": CANARY_TITLE + " 2"}, with_architecture
+    ),
+    f"replace_architecture_content{_ARCH}content_put": Plan(
         {"architecture.revised"},
-        "created",  # the response's id is the architecture's
+        "architecture",
+        {"baseVersion": 1, "ir": ARCHITECTURE | {"description": CANARY_STATEMENT}, "reason": CANARY_REASON},
+        with_architecture,
+    ),
+    f"edit_architecture{_ARCH}commands_post": Plan(
+        {"architecture.revised"},
+        "architecture",
         {
             "baseVersion": 1,
             "commands": [{"type": "rename_node", "nodeId": "api", "name": CANARY_TITLE + " 2"}],
             "reason": CANARY_REASON,
         },
         with_architecture,
+    ),
+    f"restore_architecture_version{_ARCH}versions__version__restore_post": Plan(
+        {"architecture.revision_restored"},
+        "architecture",
+        {"baseVersion": 2, "reason": CANARY_REASON},
+        with_two_revisions,
+    ),
+    f"archive_architecture{_ARCH}archive_post": Plan(
+        {"architecture.archived"}, "architecture", None, with_architecture
+    ),
+    f"restore_architecture{_ARCH}restore_post": Plan(
+        {"architecture.restored"}, "architecture", None, with_archived_architecture
+    ),
+    f"delete_architecture{_ARCH}delete": Plan(
+        {"architecture.deleted"}, "architecture", None, with_archived_architecture
     ),
 }
 
@@ -167,6 +217,8 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
             return target.requirement_id
         case "promoted":
             return str(response.json()["promotions"][0]["requirement"]["id"])
+        case "architecture":
+            return target.architecture_id
         case _:  # "created"
             return str(response.json()["id"]) if response.content else None
 
@@ -228,6 +280,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             project_id=target.project_id,
             requirement_id=target.requirement_id,
             analysis_id=target.analysis_id,
+            architecture_id=target.architecture_id,
         )
         body = plan.body(target) if callable(plan.body) else plan.body
         response = await client.request(op.method, url, json=body, headers=auth)
@@ -268,6 +321,7 @@ async def test_read_only_endpoints_write_nothing(
         "requirement_id": target.requirement_id,
         "set_id": sets["requirementSets"][0]["id"],
         "analysis_id": target.analysis_id,
+        "architecture_id": target.architecture_id,
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

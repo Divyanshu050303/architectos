@@ -1,9 +1,12 @@
 """Architecture API contract.
 
-The envelope follows the API's conventions (camelCase); the architecture itself travels as the
-canonical Architecture IR document (``ir``), exactly as core/architecture_ir writes and reads it
-and as published in core/schemas/architecture.schema.json. The IR is a versioned format of its
-own (snake_case, ``schema_version``), so it is never reshaped at this boundary.
+The envelope follows the API's conventions (camelCase); the architecture's content travels as the
+canonical Architecture IR document (``ir``), exactly as stored in the revision and as published in
+core/schemas/architecture.schema.json. The IR is a versioned format of its own (snake_case,
+``schema_version``), so it is never reshaped at this boundary.
+
+An architecture's **metadata** (name, description, status) is separate from its **content** (the
+IR in immutable revisions): metadata changes create no revision.
 """
 
 import uuid
@@ -24,18 +27,68 @@ from core.architecture_ir.commands import (
     UpdateConfiguration,
 )
 from core.architecture_ir.diff import ArchitectureDiff, ElementChange, FieldChange
-from core.architecture_ir.serialization import connection_from_dict, node_from_dict, property_values, to_dict
-from core.domain.architecture.entities import Architecture, ArchitectureLayout, Position, RevisionSummary
+from core.architecture_ir.serialization import connection_from_dict, node_from_dict, property_values
+from core.domain.architecture.entities import (
+    MAX_DESCRIPTION_LENGTH,
+    MAX_NAME_LENGTH,
+    Architecture,
+    ArchitectureLayout,
+    Position,
+    RevisionSummary,
+)
 from core.domain.architecture.versions import MAX_REASON_LENGTH, ArchitectureRevision
 
 from .common import ApiModel, RequestModel
 
 IR_DESCRIPTION = (
-    "The architecture as a canonical Architecture IR document (snake_case, with schema_version); "
-    "see core/schemas/architecture.schema.json."
+    "The architecture's content as a canonical Architecture IR document (snake_case, with "
+    "schema_version); see core/schemas/architecture.schema.json."
 )
 Reason = Annotated[str | None, Field(max_length=MAX_REASON_LENGTH, description="Why the change.")]
 ElementId = Annotated[str, Field(min_length=1, max_length=128)]
+ContentSource = Literal["user", "import"]
+
+
+# --- architecture (metadata) -----------------------------------------------------------------------
+
+
+class ArchitectureSummary(ApiModel):
+    id: uuid.UUID = Field(description="Stable across revisions.")
+    project_id: uuid.UUID
+    name: str
+    description: str
+    status: str = Field(description="active, or archived (read-only)")
+    current_version: int = Field(description="The current revision number.")
+    created_by_user_id: uuid.UUID | None
+    updated_by_user_id: uuid.UUID | None
+    archived_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    @staticmethod
+    def fields_of(architecture: Architecture) -> dict[str, Any]:
+        return {
+            "id": architecture.id,
+            "project_id": architecture.project_id,
+            "name": architecture.name,
+            "description": architecture.description,
+            "status": architecture.status.value,
+            "current_version": architecture.current_revision,
+            "created_by_user_id": architecture.created_by_user_id,
+            "updated_by_user_id": architecture.updated_by_user_id,
+            "archived_at": architecture.archived_at,
+            "created_at": architecture.created_at,
+            "updated_at": architecture.updated_at,
+        }
+
+    @classmethod
+    def of(cls, architecture: Architecture) -> ArchitectureSummary:
+        return cls(**cls.fields_of(architecture))
+
+
+class ArchitecturePage(ApiModel):
+    architectures: list[ArchitectureSummary] = Field(description="Newest first.")
+    next_cursor: str | None
 
 
 # --- layout ----------------------------------------------------------------------------------------
@@ -72,14 +125,17 @@ class SaveLayoutRequest(RequestModel):
 # --- revisions -------------------------------------------------------------------------------------
 
 
-class RevisionSummaryModel(ApiModel):
-    version: int = Field(description="The revision number: 1, 2, 3, …")
+class RevisionModel(ApiModel):
+    version: int = Field(description="The revision number: 1, 2, 3, … (never reused).")
     parent_version: int | None
+    restored_from_version: int | None = Field(
+        description="The earlier revision whose content this one restores."
+    )
     source: str = Field(description="user, ai, discovery, import or system")
     summary: str = Field(description="What changed, e.g. '1 node added (Cache); 2 nodes modified.'")
     reason: str | None
-    content_hash: str = Field(description="SHA-256 of the canonical IR: equal architectures, equal hash.")
-    ir_schema_version: int
+    content_hash: str = Field(description="SHA-256 of the canonical IR: equal content, equal hash.")
+    ir_schema_version: int = Field(description="The IR format version the snapshot was stored in.")
     requirement_set_id: uuid.UUID | None = Field(description="The requirement set it was designed against.")
     created_by_user_id: uuid.UUID | None
     created_at: datetime
@@ -89,6 +145,7 @@ class RevisionSummaryModel(ApiModel):
         return {
             "version": revision.number,
             "parent_version": revision.parent_number,
+            "restored_from_version": revision.restored_from,
             "source": revision.source.value,
             "summary": revision.summary,
             "reason": revision.reason,
@@ -100,34 +157,25 @@ class RevisionSummaryModel(ApiModel):
         }
 
     @classmethod
-    def of(cls, revision: ArchitectureRevision | RevisionSummary) -> RevisionSummaryModel:
+    def of(cls, revision: ArchitectureRevision) -> RevisionModel:
         return cls(**cls.fields_of(revision))
 
 
+class HistoryItem(RevisionModel):
+    current: bool = Field(description="Whether this is the architecture's current revision.")
+
+
 class VersionPage(ApiModel):
-    versions: list[RevisionSummaryModel] = Field(description="Newest first.")
+    versions: list[HistoryItem] = Field(description="Newest first, without the content.")
     next_cursor: str | None
 
 
-class ArchitectureResponse(RevisionSummaryModel):
-    id: uuid.UUID = Field(description="The architecture's id (stable across revisions).")
-    project_id: uuid.UUID
-    current_version: int
-    ir: dict[str, Any] = Field(description=IR_DESCRIPTION)
+class ArchitectureResponse(ArchitectureSummary):
+    revision: RevisionModel = Field(
+        description="The revision shown (the current one, unless one was asked for)."
+    )
+    ir: dict[str, Any] = Field(description=IR_DESCRIPTION + " Exactly as stored in the revision.")
     layout: LayoutModel
-
-    @staticmethod
-    def fields_for(
-        architecture: Architecture, revision: ArchitectureRevision, layout: ArchitectureLayout
-    ) -> dict[str, Any]:
-        node_ids = frozenset(n.id for n in revision.ir.nodes)
-        return RevisionSummaryModel.fields_of(revision) | {
-            "id": architecture.id,
-            "project_id": architecture.project_id,
-            "current_version": architecture.current_revision,
-            "ir": to_dict(revision.ir),
-            "layout": LayoutModel.of(layout, node_ids),
-        }
 
     @classmethod
     def build(
@@ -135,10 +183,31 @@ class ArchitectureResponse(RevisionSummaryModel):
     ) -> ArchitectureResponse:
         return cls(**cls.fields_for(architecture, revision, layout))
 
+    @staticmethod
+    def fields_for(
+        architecture: Architecture, revision: ArchitectureRevision, layout: ArchitectureLayout
+    ) -> dict[str, Any]:
+        node_ids = frozenset(n.id for n in revision.ir.nodes)
+        return ArchitectureSummary.fields_of(architecture) | {
+            "revision": RevisionModel.of(revision),
+            "ir": dict(revision.snapshot),
+            "layout": LayoutModel.of(layout, node_ids),
+        }
+
+
+# --- writes ----------------------------------------------------------------------------------------
+
+Name = Annotated[str, Field(max_length=MAX_NAME_LENGTH * 2)]  # trimmed and checked by the domain
+Description = Annotated[str, Field(max_length=MAX_DESCRIPTION_LENGTH * 2)]
+
 
 class CreateArchitectureRequest(RequestModel):
-    ir: dict[str, Any] = Field(description=IR_DESCRIPTION)
-    source: Literal["user", "import"] = Field(
+    name: Name
+    description: Description = ""
+    ir: dict[str, Any] | None = Field(
+        default=None, description=IR_DESCRIPTION + " Omitted: an empty architecture (no nodes)."
+    )
+    source: ContentSource = Field(
         default="user", description="user: designed here; import: brought in from a file or another tool."
     )
     reason: Reason = None
@@ -147,7 +216,24 @@ class CreateArchitectureRequest(RequestModel):
     )
 
 
-# --- edits -----------------------------------------------------------------------------------------
+class UpdateArchitectureRequest(RequestModel):
+    name: Name | None = None
+    description: Description | None = None
+
+
+class ReplaceContentRequest(RequestModel):
+    base_version: int = Field(
+        ge=1, description="The revision this content was edited from; it must be current."
+    )
+    ir: dict[str, Any] = Field(description=IR_DESCRIPTION)
+    source: ContentSource = "user"
+    reason: Reason = None
+    requirement_set_id: uuid.UUID | None = None
+
+
+class RestoreRevisionRequest(RequestModel):
+    base_version: int = Field(ge=1, description="The current revision, as the client last saw it.")
+    reason: Reason = None
 
 
 class AddNodeCommand(RequestModel):
@@ -232,7 +318,7 @@ class EditArchitectureRequest(RequestModel):
 
 class FieldChangeModel(ApiModel):
     field: str = Field(description="An IR field path, e.g. configuration.replicas.")
-    before: Any
+    before: Any = Field(description="Canonical value, null when absent; secrets are '[redacted]'.")
     after: Any
     category: str
 
@@ -287,19 +373,29 @@ class DiffModel(ApiModel):
         return cls(**cls.fields_of(diff))
 
 
-class EditArchitectureResponse(ArchitectureResponse):
-    changes: DiffModel = Field(description="What this revision changed from its parent.")
+class RevisedResponse(ArchitectureResponse):
+    created: bool = Field(
+        description="Whether a new revision was created (false: the content did not change, and "
+        "`revision` is the current one)."
+    )
+    changes: DiffModel = Field(
+        description="What this revision changed from its parent (empty if not created)."
+    )
 
 
 class ComparisonSide(ApiModel):
     version: int
     content_hash: str
+    ir_schema_version: int
     created_at: datetime
 
     @classmethod
     def of(cls, revision: ArchitectureRevision) -> ComparisonSide:
         return cls(
-            version=revision.number, content_hash=revision.content_hash, created_at=revision.created_at
+            version=revision.number,
+            content_hash=revision.content_hash,
+            ir_schema_version=revision.ir_schema_version,
+            created_at=revision.created_at,
         )
 
 

@@ -75,14 +75,21 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/requirement-analyses"),
     ("GET", "/api/v1/projects/{project_id}/requirement-analyses/{analysis_id}"),
     ("POST", "/api/v1/projects/{project_id}/requirement-analyses/{analysis_id}/promote"),
-    # Architecture IR specification.
-    ("POST", "/api/v1/projects/{project_id}/architecture"),
-    ("GET", "/api/v1/projects/{project_id}/architecture"),
-    ("GET", "/api/v1/projects/{project_id}/architecture/versions"),
-    ("GET", "/api/v1/projects/{project_id}/architecture/versions/{version}"),
-    ("POST", "/api/v1/projects/{project_id}/architecture/commands"),
-    ("PUT", "/api/v1/projects/{project_id}/architecture/layout"),
-    ("GET", "/api/v1/projects/{project_id}/architecture/compare"),
+    # Architecture IR specification and Milestone 5 (architecture CRUD and versioning).
+    ("POST", "/api/v1/projects/{project_id}/architectures"),
+    ("GET", "/api/v1/projects/{project_id}/architectures"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}"),
+    ("PATCH", "/api/v1/projects/{project_id}/architectures/{architecture_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}/architectures/{architecture_id}"),
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/archive"),
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/restore"),
+    ("PUT", "/api/v1/projects/{project_id}/architectures/{architecture_id}/content"),
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/commands"),
+    ("PUT", "/api/v1/projects/{project_id}/architectures/{architecture_id}/layout"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/versions"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/versions/{version}"),
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/versions/{version}/restore"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/compare"),
 }
 
 

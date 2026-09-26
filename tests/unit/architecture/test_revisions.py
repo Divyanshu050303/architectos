@@ -16,6 +16,7 @@ from core.domain.architecture.versions import (
     compare,
     first_revision,
     next_revision,
+    restored_revision,
 )
 from tests.unit.architecture_ir.builders import api_and_postgres
 
@@ -107,3 +108,27 @@ def test_reasons_and_comparisons_are_checked() -> None:
     )
     with pytest.raises(InvalidRevision):
         compare(one, other)
+
+
+def test_restoring_is_a_new_revision_with_the_old_content() -> None:
+    first = stored(
+        first_revision(ARCHITECTURE, api_and_postgres(), source=RevisionSource.USER, created_by_user_id=ADA)
+    )
+    second_new, _ = next_revision(
+        first,
+        apply_commands(first.ir, [ChangeReplicas("api", 7)]),
+        source=RevisionSource.USER,
+        created_by_user_id=ADA,
+    )
+    second = stored(second_new)
+    restored, changes = restored_revision(second, first, created_by_user_id=ADA, reason="Undo")
+    assert (restored.number, restored.parent_number, restored.restored_from) == (3, 2, 1)
+    assert (restored.ir, restored.content_hash) == (first.ir, first.content_hash)
+    assert restored.summary == f"Restored v1: {changes.summary()}"
+    with pytest.raises(ArchitectureUnchanged):  # restoring the current content creates nothing
+        restored_revision(second, second, created_by_user_id=ADA)
+    elsewhere = stored(
+        first_revision(uuid.uuid4(), api_and_postgres(), source=RevisionSource.USER, created_by_user_id=ADA)
+    )
+    with pytest.raises(InvalidRevision):
+        restored_revision(second, elsewhere, created_by_user_id=ADA)

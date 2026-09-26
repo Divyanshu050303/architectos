@@ -12,21 +12,27 @@ pytestmark = pytest.mark.integration
 
 
 QUERIES = {
-    "architecture of a project": (
-        "SELECT * FROM architectures WHERE project_id = :p",
-        "uq_architectures_project_id",
+    "architecture list": (
+        "SELECT * FROM architectures WHERE project_id = :p AND deleted_at IS NULL "
+        "ORDER BY created_at DESC, id DESC LIMIT 51",
+        "ix_architectures_project_id_created_at_id_live",
+        "project",
+    ),
+    "architecture name check": (
+        "SELECT id FROM architectures WHERE project_id = :p AND lower(name) = 'x' AND deleted_at IS NULL",
+        "uq_architectures_project_id_name_live",
         "project",
     ),
     "architecture revision": (
-        "SELECT * FROM architecture_revisions WHERE project_id = :p AND number = 7",
-        "uq_architecture_revisions_project_id_number",
-        "project",
+        "SELECT * FROM architecture_revisions WHERE architecture_id = :p AND number = 7",
+        "uq_architecture_revisions_architecture_id_number",
+        "architecture",
     ),
     "architecture history": (
-        "SELECT number, summary FROM architecture_revisions WHERE project_id = :p AND number < 20 "
+        "SELECT number, summary FROM architecture_revisions WHERE architecture_id = :p AND number < 20 "
         "ORDER BY number DESC LIMIT 51",
-        "uq_architecture_revisions_project_id_number",
-        "project",
+        "uq_architecture_revisions_architecture_id_number",
+        "architecture",
     ),
     "project list": (
         "SELECT * FROM projects WHERE organization_id = :p AND deleted_at IS NULL "
@@ -132,8 +138,9 @@ SEED = [
     ) r ON true
     """,
     """
-    INSERT INTO architectures (id, project_id, current_revision)
-    SELECT gen_random_uuid(), id, 30 FROM (SELECT id FROM projects ORDER BY id LIMIT 100) p
+    INSERT INTO architectures (id, project_id, name, current_revision)
+    SELECT gen_random_uuid(), p.id, 'Architecture ' || g, 30
+    FROM (SELECT id FROM projects ORDER BY id LIMIT 100) p CROSS JOIN generate_series(1, 5) g
     WHERE NOT EXISTS (SELECT 1 FROM architectures a WHERE a.project_id = p.id)
     """,
     """
@@ -167,7 +174,11 @@ async def test_every_hot_query_uses_its_index(db: AsyncSession) -> None:
     busy_set = await db.scalar(
         text("SELECT id FROM requirement_sets WHERE project_id = :p LIMIT 1"), {"p": busy_project}
     )
+    busy_architecture = await db.scalar(
+        text("SELECT id FROM architectures WHERE project_id = :p LIMIT 1"), {"p": busy_project}
+    )
     ids = {
+        "architecture": busy_architecture,
         "project": busy_project,
         "organization": busy_org,
         "requirement": busy_requirement,

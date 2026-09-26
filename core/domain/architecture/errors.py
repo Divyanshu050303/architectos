@@ -16,10 +16,11 @@ class InvalidRevision(DomainError):
 
 
 class ArchitectureNotFound(DomainError):
-    """The project has no architecture (or the project is not visible to the caller)."""
+    """No such architecture in this project (also when it was deleted, or belongs to another
+    project: indistinguishable on purpose)."""
 
     code = "architecture_not_found"
-    message = "This project has no architecture yet."
+    message = "Architecture not found."
 
 
 class ArchitectureRevisionNotFound(DomainError):
@@ -27,9 +28,26 @@ class ArchitectureRevisionNotFound(DomainError):
     message = "Architecture revision not found."
 
 
-class ArchitectureAlreadyExists(DomainError):
-    code = "architecture_already_exists"
-    message = "This project already has an architecture; change it with a new revision."
+class ArchitectureNameTaken(DomainError):
+    code = "architecture_name_taken"
+    message = "Another architecture of this project already has this name."
+
+
+class InvalidArchitectureMetadata(DomainError):
+    """``details`` = {"field": "name" | "description", "reason": ...}."""
+
+    code = "invalid_architecture_metadata"
+    message = "The architecture's name or description is invalid."
+
+
+class ArchitectureArchived(DomainError):
+    code = "architecture_archived"
+    message = "This architecture is archived and read-only. Restore it to make changes."
+
+
+class ArchitectureNotArchived(DomainError):
+    code = "architecture_not_archived"
+    message = "Archive the architecture before deleting it."
 
 
 class ArchitectureVersionConflict(DomainError):

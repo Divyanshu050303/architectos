@@ -24,11 +24,14 @@ from apps.api.middleware.security_headers import security_headers
 from core.architecture_ir.commands import InvalidArchitectureCommand
 from core.architecture_ir.errors import InvalidArchitecture
 from core.domain.architecture.errors import (
-    ArchitectureAlreadyExists,
+    ArchitectureArchived,
+    ArchitectureNameTaken,
+    ArchitectureNotArchived,
     ArchitectureNotFound,
     ArchitectureRevisionNotFound,
     ArchitectureUnchanged,
     ArchitectureVersionConflict,
+    InvalidArchitectureMetadata,
     InvalidLayout,
     InvalidRevision,
 )
@@ -166,7 +169,10 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidArchitectureCommand: 422,
     ArchitectureNotFound: 404,
     ArchitectureRevisionNotFound: 404,
-    ArchitectureAlreadyExists: 409,
+    ArchitectureNameTaken: 409,
+    ArchitectureArchived: 409,
+    ArchitectureNotArchived: 409,
+    InvalidArchitectureMetadata: 422,
     ArchitectureVersionConflict: 409,
     ArchitectureUnchanged: 422,
     InvalidRevision: 422,

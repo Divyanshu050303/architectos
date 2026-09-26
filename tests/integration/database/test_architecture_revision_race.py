@@ -58,8 +58,8 @@ async def test_concurrent_edits_of_one_revision_create_one_revision(own_engine: 
     project_id, user_id = project.id, user.id
 
     async with sessions() as db:
-        await ArchitectureService(SqlAlchemyUnitOfWork(db)).create(
-            project_id=project_id, user_id=user_id, ir=api_and_postgres()
+        architecture, _ = await ArchitectureService(SqlAlchemyUnitOfWork(db)).create(
+            project_id=project_id, user_id=user_id, name="Race", ir=api_and_postgres()
         )
 
     async def edit(replicas: int) -> object:
@@ -67,6 +67,7 @@ async def test_concurrent_edits_of_one_revision_create_one_revision(own_engine: 
             try:
                 return await ArchitectureService(SqlAlchemyUnitOfWork(db)).edit(
                     project_id=project_id,
+                    architecture_id=architecture.id,
                     user_id=user_id,
                     base_version=1,
                     commands=[ChangeReplicas("api", replicas)],

@@ -10,9 +10,11 @@ the snapshot (the format) and the revision *number* (the content).
 """
 
 import uuid
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from core.architecture_ir.diff import ArchitectureDiff, diff
 from core.architecture_ir.model import ArchitectureIR
@@ -47,6 +49,7 @@ class NewRevision:
     reason: str | None
     created_by_user_id: uuid.UUID | None
     requirement_set_id: uuid.UUID | None = None  # the requirement set it was designed against, if any
+    restored_from: int | None = None  # the earlier revision whose content this one restores
 
     @property
     def ir_schema_version(self) -> int:
@@ -67,10 +70,15 @@ class ArchitectureRevision:
     created_by_user_id: uuid.UUID | None
     created_at: datetime
     requirement_set_id: uuid.UUID | None = None
+    restored_from: int | None = None
+    # The document exactly as stored, in the schema version it was written in (``ir`` is the same
+    # content read through the current schema, for the engines). History is shown as it was.
+    snapshot: Mapping[str, Any] = field(default_factory=dict)
+    stored_schema_version: int | None = None
 
     @property
     def ir_schema_version(self) -> int:
-        return self.ir.schema_version
+        return self.stored_schema_version or self.ir.schema_version
 
     @property
     def label(self) -> str:
@@ -151,6 +159,35 @@ def next_revision(
         ),
         changes,
     )
+
+
+def restored_revision(
+    current: ArchitectureRevision,
+    source: ArchitectureRevision,
+    *,
+    created_by_user_id: uuid.UUID | None,
+    reason: str | None = None,
+) -> tuple[NewRevision, ArchitectureDiff]:
+    """A new revision after ``current`` whose content is ``source``'s: restoring never moves the
+    current pointer backwards and never erases the revisions in between. Restoring content equal
+    to the current one creates nothing (``ArchitectureUnchanged``)."""
+    if source.architecture_id != current.architecture_id:
+        raise InvalidRevision(
+            "Only a revision of the same architecture can be restored.",
+            details={"reason": "different_architectures"},
+        )
+    new, changes = next_revision(
+        current,
+        source.ir,
+        source=RevisionSource.USER,
+        created_by_user_id=created_by_user_id,
+        reason=reason,
+        requirement_set_id=source.requirement_set_id,
+    )
+    summary = f"Restored {source.label}: {changes.summary()}"
+    if len(summary) > MAX_SUMMARY_LENGTH:
+        summary = summary[: MAX_SUMMARY_LENGTH - 1] + "…"
+    return replace(new, summary=summary, restored_from=source.number), changes
 
 
 def compare(before: ArchitectureRevision, after: ArchitectureRevision) -> ArchitectureDiff:
