@@ -7,7 +7,7 @@ and forth loses nothing that the 9-decimal-place limit keeps. Presentation round
 business; results keep full precision.
 
 Canonical units (what calculations use): requests/second, operations/second, events/second,
-bytes/second, bytes, milliseconds, connections, users, cores, ratio. The rate, size and duration
+bytes/second, bytes, milliseconds, connections, users, cores, replicas, ratio. The rate, size and duration
 units follow the requirements' unit table (``core/domain/requirements/value_objects.py``: the same
 symbols and factors), extended with data rates, operations, events, connections and CPU.
 """
@@ -37,6 +37,7 @@ class Dimension(StrEnum):
     CONNECTIONS = "connections"
     USERS = "users"
     CPU = "cpu"
+    INSTANCES = "instances"
     RATIO = "ratio"
 
 
@@ -76,6 +77,7 @@ _UNITS = [
     Unit("users", Dimension.USERS),
     Unit("cores", Dimension.CPU),
     Unit("millicores", Dimension.CPU, divisor=1_000),
+    Unit("replicas", Dimension.INSTANCES),
     Unit("ratio", Dimension.RATIO),
     Unit("%", Dimension.RATIO, divisor=100),
 ]
@@ -90,6 +92,7 @@ CANONICAL: dict[Dimension, str] = {
     Dimension.CONNECTIONS: "connections",
     Dimension.USERS: "users",
     Dimension.CPU: "cores",
+    Dimension.INSTANCES: "replicas",
     Dimension.RATIO: "ratio",
 }
 PRECISION = Decimal(1).scaleb(-MAX_DECIMAL_PLACES)  # results keep 9 decimal places

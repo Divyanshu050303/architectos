@@ -38,3 +38,12 @@ class InvalidCapacityConfig(DomainError):
 
     code = "invalid_capacity_config"
     message = "The capacity analysis configuration is invalid."
+
+
+class InvalidScenario(DomainError):
+    """A scenario that cannot be applied: invalid growth, a target in the wrong unit, a change to
+    something that does not exist or to a value the IR refuses. ``details`` = {"field", "reason"}
+    (and ``index`` for the scenario)."""
+
+    code = "invalid_capacity_scenario"
+    message = "The capacity scenario is invalid."
