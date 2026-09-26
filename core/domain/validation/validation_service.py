@@ -205,6 +205,7 @@ class ValidationService:
             await project_access(uow, project_id, user_id, Permission.ARCHITECTURE_READ)
             report = await _run_of(uow, project_id, architecture_id, run_id)
             rows = await uow.validations.list_findings(
+                project_id,
                 report.run.id,
                 FindingQuery(
                     query.severity,

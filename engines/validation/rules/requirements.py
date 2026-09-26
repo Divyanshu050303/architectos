@@ -317,7 +317,15 @@ class Verdicts:
         self, context: ValidationContext, requirement: Requirement, default: frozenset[NodeKind]
     ) -> tuple[Node, ...] | Judged:
         scope = requirement.content.scope
-        kinds = default & _SCOPE_KINDS.get(scope, default) or _SCOPE_KINDS.get(scope, default)
+        kinds = default & _SCOPE_KINDS.get(scope, default)
+        if not kinds:
+            # The scope names components this check does not concern (data residency of an API):
+            # never widen or swap the concerned kinds, which could pass on the wrong components.
+            concerned = " or ".join(sorted(k.value for k in default))
+            return Judged(
+                Verdict.NOT_VERIFIABLE,
+                f"This check concerns {concerned} components; the requirement is scoped to {scope.value}.",
+            )
         nodes = context.topology.nodes_of_kind(*sorted(kinds))
         if not nodes:
             return Judged(

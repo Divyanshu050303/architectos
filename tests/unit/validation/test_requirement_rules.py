@@ -194,6 +194,32 @@ def test_data_residency_concerns_only_data_holders() -> None:
     assert of(violated, "requirement_violated")[0].blocking  # critical priority blocks
 
 
+@pytest.mark.parametrize("scope", [RequirementScope.API, RequirementScope.SERVICE])
+def test_a_scope_outside_the_concerned_components_is_never_widened(scope: RequirementScope) -> None:
+    residency = requirement(
+        1,
+        type=RequirementType.COMPLIANCE,
+        category="data_residency",
+        scope=scope,
+        structured_data={"metric": "regions", "operator": "in", "values": ["eu-west-1"]},
+    )
+    # The API is in the region, the database is not: checking the API alone would wrongly pass.
+    judged = verdict_of(run(placed(db="us-east-1"), residency))
+    assert judged.verdict is Verdict.NOT_VERIFIABLE
+    assert f"scoped to {scope.value}" in judged.reason
+
+
+def test_storage_scoped_to_databases_checks_only_databases() -> None:
+    scoped = dataclasses.replace(
+        storage(">=", "50"),
+        content=dataclasses.replace(storage(">=", "50").content, scope=RequirementScope.DATABASE),
+    )
+    ir = traced(api_and_postgres(nodes=(*api_and_postgres().nodes, node("files", NodeKind.STORAGE))), 1)
+    assert (
+        verdict_of(run(ir, scoped)).verdict is Verdict.SATISFIED
+    )  # the unsized object store is out of scope
+
+
 def test_a_scope_without_components_is_not_applicable() -> None:
     queues = requirement(1, scope=RequirementScope.QUEUE)
     judged = verdict_of(run(placed(), queues))

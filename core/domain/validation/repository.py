@@ -25,6 +25,9 @@ class ValidationRunRepository(Protocol):
         """Newest first, at most ``query.limit``."""
         ...
 
-    async def list_findings(self, run_id: uuid.UUID, query: FindingQuery) -> list[tuple[int, Finding]]:
-        """(position, finding) in canonical order after ``query.after``, at most ``query.limit``."""
+    async def list_findings(
+        self, project_id: uuid.UUID, run_id: uuid.UUID, query: FindingQuery
+    ) -> list[tuple[int, Finding]]:
+        """(position, finding) of a run of the project (scoped by both, as defense in depth), in
+        canonical order after ``query.after``, at most ``query.limit``."""
         ...

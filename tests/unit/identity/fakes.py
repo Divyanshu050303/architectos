@@ -817,7 +817,12 @@ class FakeValidationRunRepository:
         ]
         return sorted(found, key=lambda r: (r.run.requested_at, r.run.id), reverse=True)[: query.limit]
 
-    async def list_findings(self, run_id: uuid.UUID, query: FindingQuery) -> list[tuple[int, Finding]]:
+    async def list_findings(
+        self, project_id: uuid.UUID, run_id: uuid.UUID, query: FindingQuery
+    ) -> list[tuple[int, Finding]]:
+        report = self.reports.get(run_id)
+        if report is None or report.run.project_id != project_id:
+            return []
         return [
             (position, f)
             for position, f in enumerate(self.findings.get(run_id, ()))
