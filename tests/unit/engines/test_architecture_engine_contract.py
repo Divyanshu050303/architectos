@@ -102,6 +102,7 @@ async def test_a_proposal_becomes_a_revision_traceable_to_its_requirement_set(
     architecture, revision = await ArchitectureService(uow, clock=clock).create(
         project_id=world.project.id,
         user_id=world.ada.id,
+        name="Proposed architecture",
         ir=proposal.ir,
         source=RevisionSource.SYSTEM,
         reason=proposal.rationale,

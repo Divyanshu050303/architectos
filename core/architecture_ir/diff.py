@@ -10,10 +10,14 @@ matters to them: ``technology``, ``resources`` (replicas, CPU, memory, storage),
 ``endpoints``, ``semantics`` (protocol, kind, interaction), ``metadata``, ``provenance``,
 ``traceability``, and so on.
 
+Values of settings that look like secrets (``password``, ``token``, ``api_key``, …) are
+redacted: the change is reported, the values are not.
+
 The result is plain data, suitable for API responses, change review of AI proposals, audit
 history, evolution and migration planning. The same two inputs always give the same diff.
 """
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -39,6 +43,38 @@ RESOURCE_PROPERTIES = frozenset(
         "partitions",
     }
 )
+
+
+# Settings whose values must never appear in a diff (e.g. preserved from an import): the change is
+# reported, the values are not.
+SECRET_FIELD = re.compile(
+    r"passw(or)?d|secret|token|api[_-]?key|private[_-]?key|access[_-]?key|credential|authorization|cookie",
+    re.IGNORECASE,
+)
+REDACTED = "[redacted]"
+
+
+def _scrubbed(value: Any) -> Any:
+    """``value`` with every secret-looking key's value replaced, at any depth, in objects and in
+    the objects inside lists."""
+    if isinstance(value, Mapping):
+        return {
+            k: REDACTED if SECRET_FIELD.search(str(k)) and v is not None else _scrubbed(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [_scrubbed(v) for v in value]
+    return value
+
+
+def _redacted(path: str, value: Any) -> Any:
+    """A changed value as it may be shown: redacted if its own name looks like a secret, else with
+    any secret nested inside it (e.g. in a list of connection settings) redacted."""
+    if value is None or not path.startswith(("configuration.", "metadata.")):
+        return value
+    if SECRET_FIELD.search(path.rsplit(".", 1)[-1]):
+        return REDACTED
+    return _scrubbed(value)
 
 
 class ChangeKind(StrEnum):
@@ -195,7 +231,7 @@ def _field_changes(
     old, new = _leaves(before), _leaves(after)
     ignored = set(skip)
     return tuple(
-        FieldChange(path, old.get(path), new.get(path), _category(path))
+        FieldChange(path, _redacted(path, old.get(path)), _redacted(path, new.get(path)), _category(path))
         for path in sorted(old.keys() | new.keys())
         if path not in ignored and old.get(path) != new.get(path)
     )

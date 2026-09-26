@@ -39,7 +39,12 @@ class AuditAction(StrEnum):
     REQUIREMENT_ANALYSIS_CREATED = "requirement_analysis.created"
     REQUIREMENT_PROMOTED = "requirement.promoted"  # created from an analysis's candidate
     ARCHITECTURE_CREATED = "architecture.created"
-    ARCHITECTURE_REVISED = "architecture.revised"  # every new revision after the first
+    ARCHITECTURE_UPDATED = "architecture.updated"  # name or description (no revision)
+    ARCHITECTURE_REVISED = "architecture.revised"  # a new content revision after the first
+    ARCHITECTURE_REVISION_RESTORED = "architecture.revision_restored"  # a new revision restoring an older one
+    ARCHITECTURE_ARCHIVED = "architecture.archived"
+    ARCHITECTURE_RESTORED = "architecture.restored"  # back from the archive
+    ARCHITECTURE_DELETED = "architecture.deleted"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

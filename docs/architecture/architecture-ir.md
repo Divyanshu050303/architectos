@@ -177,17 +177,26 @@ definitions (`make schemas`); a test fails if it is out of date or disagrees wit
 
 ## 13. Architecture revisioning
 
-A project has one architecture; its content lives in **immutable, numbered revisions**
-(`core/domain/architecture/versions.py`). Revision n+1 is created from revision n and records its
-parent, `source` (`user`, `ai`, `discovery`, `import`, `system`), a generated summary of what
-changed, an optional reason, the IR schema version, the content hash and the requirement set it was
-designed against (carried over from the parent unless given).
+A project has many architectures (ADR-010). Each architecture's **metadata** (name, description,
+lifecycle status) lives on its record and changes without creating a revision; its **content**
+lives in **immutable, numbered revisions** (`core/domain/architecture/versions.py`). Revision n+1
+is created from revision n and records its parent, `source` (`user`, `ai`, `discovery`, `import`,
+`system`), a generated summary of what changed, an optional reason, the IR schema version, the
+content hash, the requirement set it was designed against (carried over from the parent unless
+given) and, for a restore, the revision whose content it restores (`restored_from`).
 
+- Revision numbers are per architecture, increase by one and are never reused.
 - Edits are based on a revision (`baseVersion`) that must be current; otherwise
-  `architecture_version_conflict`: nothing is merged or overwritten silently.
-- An edit that changes nothing creates no revision.
+  `architecture_version_conflict`: nothing is merged or overwritten silently. The architecture row
+  is locked while a revision is written, so concurrent edits of one revision create exactly one.
+- A change that leaves the content as it is creates no revision (and succeeds).
+- **Restoring** revision k creates a new revision with k's content; nothing in between is erased and
+  the current pointer never moves backwards.
 - The database refuses any change to a stored revision (append-only trigger) and guarantees the
-  current revision exists and that each revision's parent is the previous one.
+  current revision exists, belongs to the architecture, that each revision's parent is the previous
+  one and that a restore names an earlier revision of the same architecture.
+- A stored revision is returned exactly as stored, in its own schema version; reading it for the
+  engines upgrades a copy in memory, never the stored snapshot.
 
 ## 14. Diff behaviour
 
@@ -202,8 +211,9 @@ migration planning.
 
 ## 15. Persistence strategy
 
-PostgreSQL, no graph database (migration 0008): `architectures` (one per project, pointing at the
-current revision through a deferred composite foreign key), `architecture_revisions` (append-only;
+PostgreSQL, no graph database (migrations 0008 and 0009): `architectures` (many per project, with
+their metadata and lifecycle, pointing at the current revision through a deferred composite foreign
+key; live names unique per project), `architecture_revisions` (append-only;
 the IR as canonical JSONB, at most 16 MiB, with schema version, hash, parent, source, summary,
 reason and requirement set) and `architecture_layouts` (positions, never versioned). Composite
 foreign keys keep an architecture, its revisions, its layout and the referenced requirement set
@@ -366,6 +376,13 @@ settings the IR does not recognize (`extra`) and one inferred value:
 Every block marked as an IR example is read by the real reader in
 `tests/unit/architecture_ir/test_ir_documentation.py`, and the diff example is recomputed there,
 so these examples cannot drift from the code.
+
+## Working on it locally
+
+`make db-up migrate` starts PostgreSQL and applies the migrations; `make test-unit` runs the IR,
+revision, diff and service tests without a database; `make test-integration` the persistence,
+concurrency and API tests; `make test-security` the tenant, authentication, audit and documentation
+sweeps; `make schemas` regenerates the JSON Schema after a model change.
 
 ## Repository audit
 

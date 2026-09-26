@@ -7,15 +7,19 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     Text,
     UniqueConstraint,
     Uuid,
+    column,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from core.domain.architecture.entities import MAX_DESCRIPTION_LENGTH, MAX_NAME_LENGTH
 from core.domain.architecture.versions import MAX_REASON_LENGTH, MAX_SUMMARY_LENGTH, RevisionSource
 
 from .base import Base, CreatedAt, Timestamps, UuidPrimaryKey
@@ -26,22 +30,50 @@ _SOURCES = ", ".join(f"'{s.value}'" for s in RevisionSource)
 
 
 class ArchitectureRecord(UuidPrimaryKey, Timestamps, Base):
-    """A project's architecture (at most one per project). Its content is in its revisions; this
-    row says which one is current. A deferred foreign key guarantees the current revision exists,
-    and deletion is not possible while revisions reference it (history is never lost)."""
+    """An architecture of a project: its metadata, lifecycle and current revision. Its content is
+    in its revisions; a deferred foreign key guarantees the current revision exists. Deletion is
+    soft (``deleted_at``, only from the archived state), so revisions are never lost."""
 
     __tablename__ = "architectures"
 
     project_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("projects.id", ondelete="RESTRICT"), nullable=False
     )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
     current_revision: Mapped[int] = mapped_column(Integer, nullable=False)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    updated_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
-        UniqueConstraint("project_id"),  # one architecture per project; serves the RESTRICT check
         UniqueConstraint("id", "project_id"),  # target of the same-project foreign keys
+        # A project's live architectures, newest first (listing); also serves the RESTRICT check.
+        Index(
+            "ix_architectures_project_id_created_at_id_live",
+            "project_id",
+            "created_at",
+            "id",
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+        # Names are unique among a project's live architectures, ignoring case.
+        Index(
+            "uq_architectures_project_id_name_live",
+            "project_id",
+            func.lower(column("name")),
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
         CheckConstraint("current_revision >= 1", name="current_revision_positive"),
+        CheckConstraint(f"char_length(name) BETWEEN 1 AND {MAX_NAME_LENGTH}", name="name_length"),
+        CheckConstraint(f"char_length(description) <= {MAX_DESCRIPTION_LENGTH}", name="description_length"),
+        CheckConstraint("status IN ('active', 'archived')", name="status_valid"),
+        CheckConstraint(
+            "(status = 'archived') = (archived_at IS NOT NULL)", name="archived_at_matches_status"
+        ),
+        CheckConstraint("deleted_at IS NULL OR status = 'archived'", name="deleted_only_when_archived"),
         ForeignKeyConstraint(
             ["id", "current_revision"],
             ["architecture_revisions.architecture_id", "architecture_revisions.number"],
@@ -71,12 +103,12 @@ class ArchitectureRevisionRecord(UuidPrimaryKey, CreatedAt, Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     reason: Mapped[str | None] = mapped_column(Text)
     requirement_set_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    restored_from_number: Mapped[int | None] = mapped_column(Integer)  # the revision it restores
     # No foreign key, like the other append-only tables: an immutable row cannot be SET NULL.
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
 
     __table_args__ = (
-        UniqueConstraint("architecture_id", "number"),  # one revision n; target of the parent key
-        UniqueConstraint("project_id", "number"),  # lookups by project (one architecture per project)
+        UniqueConstraint("architecture_id", "number"),  # revision n of an architecture; all lookups
         ForeignKeyConstraint(
             ["architecture_id", "project_id"],
             ["architectures.id", "architectures.project_id"],
@@ -95,7 +127,17 @@ class ArchitectureRevisionRecord(UuidPrimaryKey, CreatedAt, Base):
             name="fk_architecture_revisions_requirement_set_requirement_sets",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["architecture_id", "restored_from_number"],
+            ["architecture_revisions.architecture_id", "architecture_revisions.number"],
+            name="fk_architecture_revisions_restored_from_architecture_revisions",
+            ondelete="RESTRICT",
+        ),
         CheckConstraint("number >= 1", name="number_positive"),
+        CheckConstraint(
+            "restored_from_number IS NULL OR restored_from_number < number",
+            name="restores_an_earlier_revision",
+        ),
         CheckConstraint(
             "(number = 1 AND parent_number IS NULL) OR parent_number = number - 1",
             name="parent_is_previous",

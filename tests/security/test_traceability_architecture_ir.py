@@ -64,7 +64,7 @@ DONE: dict[str, list[str]] = {
     "schema versioning is explicit": [
         f"{IR}.test_ir_serialization::test_schema_versions_are_explicit",
         f"{IR}.test_ir_serialization::test_older_documents_are_upgraded_step_by_step_without_touching_the_input",
-        f"{DB}::test_an_older_schema_is_upgraded_when_read",
+        f"{DB}::test_an_older_schema_is_read_through_upgrades_and_its_snapshot_is_kept",
     ],
     "architecture revisions are immutable": [
         f"{U}.architecture.test_revisions::test_revisions_are_immutable",
@@ -82,7 +82,7 @@ DONE: dict[str, list[str]] = {
     "persistence is transaction-safe": [
         f"{I}.database.test_architecture_revision_race::test_concurrent_edits_of_one_revision_create_one_revision",
         f"{DB}::test_the_current_revision_must_exist",
-        f"{DB}::test_one_architecture_per_project_and_the_transaction_stays_usable",
+        f"{DB}::test_a_failed_write_leaves_nothing_behind",
     ],
     "project and organization boundaries are enforced": [
         f"{API}::test_who_may_read_and_change",

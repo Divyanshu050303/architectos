@@ -31,7 +31,7 @@ the web app a proposed wire contract but no backend.
 - **Canonical JSON, versioned format.** One deterministic JSON form (sorted, exact decimals as
   strings) with a content hash, a strict reader (unknown fields refused), a generated JSON Schema,
   and an explicit `schema_version` with pure upgrades applied on read.
-- **Immutable revisions, identity-based diff.** A project has one architecture whose content lives
+- **Immutable revisions, identity-based diff.** An architecture's content lives
   in append-only, numbered revisions (PostgreSQL JSONB, trigger-protected), each with parent,
   source, summary, reason, hash and the requirement set it was designed against. Edits are applied
   as commands to the current revision only (optimistic concurrency, no silent merge). The diff
@@ -53,3 +53,6 @@ the web app a proposed wire contract but no backend.
 - The web app's proposed contract (node `position`, edges with `source`/`target`, free-text
   technology, twelve node kinds) differs from the IR; the frontend alignment step adopts the IR
   (see docs/frontend/architecture-contract.md).
+
+Superseded in part by ADR-010: a project may have many architectures, each with its own metadata
+and lifecycle.

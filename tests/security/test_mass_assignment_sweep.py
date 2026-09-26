@@ -55,7 +55,8 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "promote_candidates_api_v1_projects__project_id__requirement_analyses__analysis_id__promote_post": {
         "candidateKeys": ["cand_0000000000000000"]
     },
-    "create_architecture_api_v1_projects__project_id__architecture_post": {
+    "create_architecture_api_v1_projects__project_id__architectures_post": {
+        "name": "Sweep",
         "ir": {
             "schema_version": 1,
             "name": "Sweep",
@@ -63,13 +64,22 @@ VALID_BODIES: dict[str, dict[str, object]] = {
         },
         "source": "import",  # declared: user or import, never ai, discovery or system
     },
-    "edit_architecture_api_v1_projects__project_id__architecture_commands_post": {
+    "update_architecture_api_v1_projects__project_id__architectures__architecture_id__patch": {
+        "name": "Renamed"
+    },
+    "replace_architecture_content_api_v1_projects__project_id__architectures__architecture_id__content_put": {
+        "baseVersion": 1,
+        "ir": {"schema_version": 1, "name": "Sweep"},
+    },
+    "edit_architecture_api_v1_projects__project_id__architectures__architecture_id__commands_post": {
         "baseVersion": 1,
         "commands": [{"type": "change_replicas", "nodeId": "api", "replicas": 2}],
     },
-    "save_architecture_layout_api_v1_projects__project_id__architecture_layout_put": {
+    "save_architecture_layout_api_v1_projects__project_id__architectures__architecture_id__layout_put": {
         "positions": {"api": {"x": 1, "y": 2}}
     },
+    "restore_architecture_version_api_v1_projects__project_id__architectures__architecture_id"
+    "__versions__version__restore_post": {"baseVersion": 1},
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",
