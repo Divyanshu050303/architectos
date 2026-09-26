@@ -3,6 +3,7 @@ the unit a node's work is counted in."""
 
 from collections.abc import Iterable
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from core.architecture_ir.component import NodeKind
 from core.architecture_ir.node import Node
@@ -11,7 +12,8 @@ from core.domain.capacity.results import Demand, Estimate, Evidence, Source
 from core.domain.capacity.units import Dimension, Quantity
 from core.domain.requirements.value_objects import decimal_to_str
 
-from .engine import ModelMeta
+if TYPE_CHECKING:  # the engine imports the headroom step, which uses these helpers
+    from .engine import ModelMeta
 
 _UNIT_BY_DIMENSION = {
     Dimension.REQUEST_RATE: "requests/second",

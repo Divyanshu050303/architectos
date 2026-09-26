@@ -43,6 +43,10 @@ CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MAX_TEXT = 2000
 MAX_ID = 256
 MAX_ITEMS = 200
+# Resources whose demand grows in proportion to the workload rate (every traffic multiplier is a
+# fixed ratio), so capacity / demand is the workload multiple at which they saturate. Connections
+# (pools are fixed) and time_to_full are not.
+LINEAR_RESOURCES = frozenset({"work_rate", "cpu", "bandwidth", "storage", "storage_growth"})
 
 
 class Source(StrEnum):
@@ -637,6 +641,11 @@ class Summary:
     bottlenecks: Mapping[str, int]  # per certainty
     unsupported: int
     highest_utilization: Decimal | None  # the largest known ratio, if any
+    # The smallest capacity / demand over resources that grow with the workload: the workload
+    # multiple at which the first known limit is reached. Complete only when every component the
+    # workload reaches has a known throughput utilization; otherwise an unknown limit may come first.
+    saturation_multiple: Decimal | None = None
+    saturation_complete: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -644,6 +653,8 @@ class Summary:
             "bottlenecks": dict(self.bottlenecks),
             "unsupported": self.unsupported,
             "highest_utilization": _number(self.highest_utilization),
+            "saturation_multiple": _number(self.saturation_multiple),
+            "saturation_complete": self.saturation_complete,
         }
 
 
@@ -694,12 +705,37 @@ class CapacityResult:
         statuses = Counter(c.status.value for c in self.components)
         certainty = Counter(b.certainty.value for b in self.bottlenecks)
         ratios = [u.ratio for c in self.components for u in c.utilization if u.ratio is not None]
+        multiples = [
+            _round(u.capacity.canonical / u.demand.canonical)
+            for c in self.components
+            for u in c.utilization
+            if u.resource in LINEAR_RESOURCES
+            and u.demand is not None
+            and u.capacity is not None
+            and u.demand.canonical > 0
+        ]
+        reached = [
+            c
+            for c in self.components
+            if any(d.quantity.canonical > 0 for d in c.demand) or c.node_id in self._incomplete()
+        ]
+        complete = bool(reached) and all(
+            any(u.resource == "work_rate" and u.ratio is not None for u in c.utilization) for c in reached
+        )
         return Summary(
             components={s.value: statuses.get(s.value, 0) for s in ComponentStatus},
             bottlenecks={c.value: certainty.get(c.value, 0) for c in Certainty},
             unsupported=len(self.unsupported),
             highest_utilization=max(ratios) if ratios else None,
+            saturation_multiple=min(multiples) if multiples else None,
+            saturation_complete=complete
+            and not self._incomplete()
+            and not any(u.code == "no_entry" for u in self.unsupported),
         )
+
+    def _incomplete(self) -> set[str]:
+        """Nodes whose demand is not fully known (the analysis reports each as unsupported)."""
+        return {u.element_id for u in self.unsupported if u.code in {"demand_incomplete", "cyclic_traffic"}}
 
     def to_dict(self) -> dict[str, Any]:
         return {

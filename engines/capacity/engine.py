@@ -40,6 +40,7 @@ from core.domain.capacity.results import (
 )
 from core.domain.parameters import ParamSpec, parameter_problem, with_defaults
 
+from . import headroom
 from .context import CapacityContext
 
 log = logging.getLogger("architectos.capacity")
@@ -306,11 +307,24 @@ def analyze(
         components.append(component)
         unsupported += problems
     limitations = [CATALOG_UNAVAILABLE, NO_MEASUREMENTS] + ([] if components else [NO_COMPONENTS])
+    in_scope = {c.node_id for c in components}
+    unsupported += [
+        Unsupported(
+            node_id,
+            "demand_incomplete",
+            f"Only part of the demand reaching {node_id} is known (see the routing reported before it): "
+            "its demand is a lower bound, and nothing is compared against it.",
+        )
+        for node_id in sorted(propagation.incomplete & in_scope)
+        if node_id not in {u.element_id for u in unsupported if u.code == "cyclic_traffic"}
+    ]
+    assessed, bottlenecks = headroom.assess(components, context, propagation.incomplete)
     return CapacityResult(
         model_set=registry.model_set(models),
         context_fingerprint=context.fingerprint,
-        components=tuple(components),
+        components=tuple(assessed),
         connections=propagation.connections,
+        bottlenecks=tuple(bottlenecks),
         unsupported=tuple(unsupported),
         limitations=tuple(limitations),
     )
