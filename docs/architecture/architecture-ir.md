@@ -92,7 +92,9 @@ reached:
   `multi_az`, `storage_bytes`, `max_connections`, `replication_mode`, `backup_*`,
   `eviction_policy`, `persistence`, `partitions`, `replication_factor`, `retention_seconds`,
   `boundary_type`; on connections `timeout_seconds`, `retries`, `tls`, `dead_letter`, `port`,
-  and for traffic `traffic_ratio`, `calls_per_request`, `cache_hit_ratio`, `access` (see
+  and for traffic `traffic_ratio`, `calls_per_request`, `cache_hit_ratio`, `access`, `pool_size`;
+  capacity on nodes `throughput_limit_per_second`, `throughput_per_replica_per_second`,
+  `cpu_core_seconds_per_request`, `network_bandwidth_bytes_per_second` (see
   [the capacity engine](capacity-engine.md#demand-propagation)).
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.

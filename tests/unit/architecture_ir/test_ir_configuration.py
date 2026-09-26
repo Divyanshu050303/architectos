@@ -133,6 +133,7 @@ def test_connection_configuration() -> None:
         "calls_per_request",
         "cache_hit_ratio",
         "access",
+        "pool_size",
     }
 
 

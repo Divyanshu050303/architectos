@@ -248,6 +248,35 @@ NODE_PROPERTIES: dict[str, PropertySpec] = {
             "How long data is kept, in seconds.",
             minimum="0",
         ),
+        # capacity (declared by the architect or read from a system; read by the capacity engine)
+        _spec(
+            "throughput_limit_per_second",
+            _D,
+            _DEPLOYED,
+            "Most units of work (requests, operations or events) the component handles per second, in total.",
+            minimum="0",
+        ),
+        _spec(
+            "throughput_per_replica_per_second",
+            _D,
+            _RUNNING,
+            "Most units of work one replica handles per second.",
+            minimum="0",
+        ),
+        _spec(
+            "cpu_core_seconds_per_request",
+            _D,
+            _COMPUTE,
+            "CPU time one unit of work costs, in core-seconds (0.02 = 20 ms of one core).",
+            minimum="0",
+        ),
+        _spec(
+            "network_bandwidth_bytes_per_second",
+            _I,
+            _DEPLOYED,
+            "Network throughput available to the component, in bytes per second.",
+            minimum="0",
+        ),
         # boundaries
         _spec(
             "boundary_type",
@@ -291,6 +320,14 @@ CONNECTION_PROPERTIES: dict[str, PropertySpec] = {
             "Share of this traffic a cache in front of the target answers; only misses arrive.",
             minimum="0",
             maximum="1",
+        ),
+        _spec(
+            "pool_size",
+            _I,
+            {CONNECTION},
+            "Connections each replica of the source keeps open to the target (a connection pool).",
+            minimum="0",
+            maximum="100000",
         ),
         _spec(
             "access",

@@ -99,6 +99,7 @@ class ModelInputs:
     context: CapacityContext
     demand: tuple[Demand, ...]  # the demand propagated to this node
     parameters: Mapping[str, Any]
+    demand_complete: bool = True  # False: the demand is a lower bound (see Propagation.incomplete)
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +226,8 @@ def _component(
     context: CapacityContext,
     models: tuple[CapacityModel, ...],
     demand: tuple[Demand, ...],
+    *,
+    complete: bool,
 ) -> tuple[ComponentResult, list[Unsupported]]:
     applicable = [m for m in models if node.kind in m.meta.kinds]
     if not applicable:
@@ -246,9 +249,8 @@ def _component(
             applied.append((meta.id, meta.version))
             missing += lacking
             continue
-        inputs = ModelInputs(
-            node, context, demand, with_defaults(meta.parameters, parameters.get(meta.id, {}))
-        )
+        chosen = with_defaults(meta.parameters, parameters.get(meta.id, {}))
+        inputs = ModelInputs(node, context, demand, chosen, demand_complete=complete)
         try:
             output = _checked(meta, node, model.estimate(inputs))
         except InvalidCapacityResult:
@@ -298,7 +300,9 @@ def analyze(
     for node in context.ir.nodes:  # id order
         if node.kind in OUT_OF_SCOPE:
             continue
-        component, problems = _component(node, context, models, propagation.nodes.get(node.id, ()))
+        demand = propagation.nodes.get(node.id, ())
+        complete = node.id not in propagation.incomplete
+        component, problems = _component(node, context, models, demand, complete=complete)
         components.append(component)
         unsupported += problems
     limitations = [CATALOG_UNAVAILABLE, NO_MEASUREMENTS] + ([] if components else [NO_COMPONENTS])
