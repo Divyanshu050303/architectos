@@ -47,6 +47,7 @@ class AuditAction(StrEnum):
     ARCHITECTURE_RESTORED = "architecture.restored"  # back from the archive
     ARCHITECTURE_DELETED = "architecture.deleted"
     ARCHITECTURE_VALIDATED = "architecture.validated"  # a validation run was stored
+    ARCHITECTURE_CAPACITY_ANALYZED = "architecture.capacity_analyzed"  # a capacity analysis was stored
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

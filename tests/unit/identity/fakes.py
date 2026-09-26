@@ -21,6 +21,10 @@ from core.domain.architecture.entities import (
 from core.domain.architecture.errors import ArchitectureNameTaken
 from core.domain.architecture.versions import ArchitectureRevision, NewRevision
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
+from core.domain.capacity.analyses import AnalysisReport, CapacityAnalysis
+from core.domain.capacity.queries import AnalysisQuery, BottleneckQuery, ComponentQuery
+from core.domain.capacity.results import Bottleneck, ComponentResult, Unsupported
+from core.domain.capacity.scenarios import ScalingOption, ScenarioOutcome
 from core.domain.identity.entities import (
     DeletedUserValues,
     NewSession,
@@ -835,6 +839,80 @@ class FakeValidationRunRepository:
         ][: query.limit]
 
 
+class FakeCapacityAnalysisRepository:
+    """Keeps each analysis's report, components and bottlenecks, like the append-only tables."""
+
+    def __init__(self) -> None:
+        self.reports: dict[uuid.UUID, AnalysisReport] = {}
+        self.components: dict[uuid.UUID, tuple[ComponentResult, ...]] = {}
+        self.bottlenecks: dict[uuid.UUID, tuple[Bottleneck, ...]] = {}
+
+    async def add(
+        self,
+        analysis: CapacityAnalysis,
+        inputs: Mapping[str, Any],
+        scaling: tuple[ScalingOption, ...],
+        unsupported_scaling: tuple[Unsupported, ...],
+        scenarios: tuple[ScenarioOutcome, ...],
+    ) -> AnalysisReport:
+        report = AnalysisReport.of(analysis, inputs, scaling, unsupported_scaling, scenarios)
+        self.reports[analysis.id] = report
+        result = analysis.result
+        self.components[analysis.id] = result.components if result else ()
+        self.bottlenecks[analysis.id] = result.bottlenecks if result else ()
+        return report
+
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, analysis_id: uuid.UUID
+    ) -> AnalysisReport | None:
+        report = self.reports.get(analysis_id)
+        if report is None or (report.analysis.project_id, report.analysis.architecture_id) != (
+            project_id,
+            architecture_id,
+        ):
+            return None
+        return report
+
+    async def list_for_architecture(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: AnalysisQuery
+    ) -> list[AnalysisReport]:
+        found = [
+            r
+            for r in self.reports.values()
+            if (r.analysis.project_id, r.analysis.architecture_id) == (project_id, architecture_id)
+            and (query.revision is None or r.analysis.revision_number == query.revision)
+            and (query.after is None or (r.analysis.requested_at, r.analysis.id) < query.after)
+        ]
+        return sorted(found, key=lambda r: (r.analysis.requested_at, r.analysis.id), reverse=True)[
+            : query.limit
+        ]
+
+    async def list_components(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: ComponentQuery
+    ) -> list[ComponentResult]:
+        report = self.reports.get(analysis_id)
+        if report is None or report.analysis.project_id != project_id:
+            return []
+        return [
+            c
+            for c in self.components[analysis_id]
+            if (query.status is None or c.status is query.status)
+            and (query.after is None or c.node_id > query.after)
+        ][: query.limit]
+
+    async def list_bottlenecks(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: BottleneckQuery
+    ) -> list[Bottleneck]:
+        report = self.reports.get(analysis_id)
+        if report is None or report.analysis.project_id != project_id:
+            return []
+        return [
+            b
+            for b in self.bottlenecks[analysis_id]
+            if query.certainty is None or b.certainty is query.certainty
+        ]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -851,6 +929,7 @@ class FakeUnitOfWork:
         self._requirement_analyses = FakeRequirementAnalysisRepository(clock)
         self._architectures = FakeArchitectureRepository(clock)
         self._validations = FakeValidationRunRepository()
+        self._capacity = FakeCapacityAnalysisRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -909,6 +988,10 @@ class FakeUnitOfWork:
     @property
     def validations(self) -> FakeValidationRunRepository:
         return self._validations
+
+    @property
+    def capacity(self) -> FakeCapacityAnalysisRepository:
+        return self._capacity
 
     async def __aenter__(self) -> Self:
         return self

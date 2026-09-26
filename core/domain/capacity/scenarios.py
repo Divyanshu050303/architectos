@@ -18,8 +18,8 @@ from typing import Any, Self
 
 from core.domain.requirements.value_objects import decimal_to_str
 
-from .errors import InvalidQuantity, InvalidScenario
-from .results import Bottleneck, CapacityResult, Evidence, Unsupported
+from .errors import InvalidCapacityResult, InvalidQuantity, InvalidScenario
+from .results import AnalysisStatus, Bottleneck, CapacityResult, Evidence, Summary, Unsupported
 from .units import Quantity, exact
 
 MAX_SCENARIOS = 10
@@ -215,6 +215,23 @@ class ScalingOption:
             "evidence": [e.to_dict() for e in self.evidence],
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ScalingOption:
+        return cls(
+            data["node_id"],
+            data["resource"],
+            ScalingKind(data["kind"]),
+            Quantity.from_dict(data["current"]),
+            Quantity.from_dict(data["required"]),
+            data["basis"],
+            data["model_id"],
+            tuple(Evidence(e["label"], e["value"]) for e in data.get("evidence", ())),
+        )
+
+
+def _decimal_or_none(value: Any) -> Decimal | None:
+    return Decimal(value) if value is not None else None
+
 
 @dataclass(frozen=True, slots=True)
 class ResourceDelta:
@@ -243,6 +260,24 @@ class ResourceDelta:
             "utilization_before": number(self.utilization_before),
             "utilization_after": number(self.utilization_after),
         }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ResourceDelta:
+        return cls(
+            data["node_id"],
+            data["resource"],
+            *(
+                _decimal_or_none(data.get(name))
+                for name in (
+                    "demand_before",
+                    "demand_after",
+                    "capacity_before",
+                    "capacity_after",
+                    "utilization_before",
+                    "utilization_after",
+                )
+            ),
+        )
 
 
 def _bottleneck_key(b: Bottleneck) -> tuple[str, str, str]:
@@ -303,6 +338,22 @@ class Comparison:
             "resolved_bottlenecks": [list(k) for k in self.resolved_bottlenecks],
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Comparison:
+        def evidence(items: Any) -> tuple[Evidence, ...]:
+            return tuple(Evidence(e["label"], e["value"]) for e in items)
+
+        def keys(items: Any) -> tuple[tuple[str, str, str], ...]:
+            return tuple((k[0], k[1], k[2]) for k in items)
+
+        return cls(
+            evidence(data["changed_inputs"]),
+            evidence(data["changed_configuration"]),
+            tuple(ResourceDelta.from_dict(d) for d in data["resources"]),
+            keys(data["new_bottlenecks"]),
+            keys(data["resolved_bottlenecks"]),
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ScenarioResult:
@@ -320,3 +371,59 @@ class ScenarioResult:
             "unsupported_scaling": [u.to_dict() for u in self.unsupported_scaling],
             "comparison": self.comparison.to_dict(),
         }
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioOutcome:
+    """A scenario as stored with its analysis: its status, summary, bottlenecks, scaling options
+    and comparison with the baseline (not a second copy of every component)."""
+
+    scenario: Scenario
+    status: AnalysisStatus
+    summary: Summary
+    result_fingerprint: str
+    bottlenecks: tuple[Bottleneck, ...]
+    scaling: tuple[ScalingOption, ...]
+    unsupported_scaling: tuple[Unsupported, ...]
+    comparison: Comparison
+
+    @classmethod
+    def of(cls, result: ScenarioResult) -> ScenarioOutcome:
+        return cls(
+            result.scenario,
+            result.result.status,
+            result.result.summary,
+            result.result.fingerprint,
+            result.result.bottlenecks,
+            result.scaling,
+            result.unsupported_scaling,
+            result.comparison,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "scenario": self.scenario.to_dict(),
+            "status": self.status.value,
+            "summary": self.summary.to_dict(),
+            "result_fingerprint": self.result_fingerprint,
+            "bottlenecks": [b.to_dict() for b in self.bottlenecks],
+            "scaling": [o.to_dict() for o in self.scaling],
+            "unsupported_scaling": [u.to_dict() for u in self.unsupported_scaling],
+            "comparison": self.comparison.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> ScenarioOutcome:
+        try:
+            return cls(
+                Scenario.from_dict(data["scenario"]),
+                AnalysisStatus(data["status"]),
+                Summary.from_dict(data["summary"]),
+                data["result_fingerprint"],
+                tuple(Bottleneck.from_dict(b) for b in data["bottlenecks"]),
+                tuple(ScalingOption.from_dict(o) for o in data["scaling"]),
+                tuple(Unsupported.from_dict(u) for u in data["unsupported_scaling"]),
+                Comparison.from_dict(data["comparison"]),
+            )
+        except (KeyError, ValueError, TypeError) as error:
+            raise InvalidCapacityResult(details={"fields": [type(error).__name__]}) from None

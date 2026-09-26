@@ -74,7 +74,7 @@ Account-level events (`user.*`, `session.revoked`) are recorded too, without an 
 | | Owner | Admin | Member | Viewer |
 |---|:-:|:-:|:-:|:-:|
 | `organization.read`, `member.read`, `project.read`, `architecture.read` | ✓ | ✓ | ✓ | ✓ |
-| `project.create`, `project.update`, `architecture.create`, `.update`, `.validate`, `.simulate`, `.evolve` | ✓ | ✓ | ✓ | |
+| `project.create`, `project.update`, `architecture.create`, `.update`, `.validate`, `.analyze`, `.simulate`, `.evolve` | ✓ | ✓ | ✓ | |
 | `organization.update`, `member.invite`, `member.remove`, `member.update_role`, `audit.read`, `project.delete`, `project.policy_update`, `architecture.delete` | ✓ | ✓ | | |
 | `organization.delete` | ✓ | | | |
 

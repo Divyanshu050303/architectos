@@ -47,3 +47,11 @@ class InvalidScenario(DomainError):
 
     code = "invalid_capacity_scenario"
     message = "The capacity scenario is invalid."
+
+
+class CapacityAnalysisNotFound(DomainError):
+    """No such analysis for this architecture (also when it belongs to another architecture,
+    project or tenant: indistinguishable on purpose)."""
+
+    code = "capacity_analysis_not_found"
+    message = "Capacity analysis not found."

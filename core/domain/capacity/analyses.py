@@ -18,7 +18,17 @@ from datetime import datetime
 from typing import Any
 
 from .errors import InvalidAnalysisTransition, InvalidWorkload
-from .results import MODEL_ID, AnalysisStatus, CapacityResult, Summary
+from .results import (
+    MODEL_ID,
+    AnalysisStatus,
+    CapacityResult,
+    Demand,
+    Limitation,
+    ModelSet,
+    Summary,
+    Unsupported,
+)
+from .scenarios import MAX_SCENARIOS, ScalingOption, Scenario, ScenarioOutcome
 from .workload import MAX_ASSUMPTIONS, WorkloadAssumption, WorkloadProfile
 
 MAX_SELECTED_MODELS = 50
@@ -141,3 +151,61 @@ class CapacityAnalysis:
     def fail(self, error: AnalysisError, at: datetime) -> CapacityAnalysis:
         self._move(AnalysisStatus.FAILED.value)
         return replace(self, status=AnalysisStatus.FAILED.value, completed_at=at, error=error)
+
+
+@dataclass(frozen=True, slots=True)
+class AnalysisReport:
+    """A stored analysis as read back: everything but its components and bottlenecks, which are
+    read page by page. ``analysis.result`` is None here; what the result established is stored
+    with the analysis (summary, connections' demand, unsupported, limitations, scenarios)."""
+
+    analysis: CapacityAnalysis
+    inputs: Mapping[str, Any]  # AnalysisRequest.inputs(): the workload snapshot and settings
+    model_set: ModelSet | None = None
+    context_fingerprint: str | None = None
+    result_fingerprint: str | None = None
+    summary: Summary | None = None
+    connections: tuple[Demand, ...] = ()
+    unsupported: tuple[Unsupported, ...] = ()
+    limitations: tuple[Limitation, ...] = ()
+    scaling: tuple[ScalingOption, ...] = ()  # for the baseline
+    unsupported_scaling: tuple[Unsupported, ...] = ()
+    scenarios: tuple[ScenarioOutcome, ...] = ()
+
+    @classmethod
+    def of(
+        cls,
+        analysis: CapacityAnalysis,
+        inputs: Mapping[str, Any],
+        scaling: tuple[ScalingOption, ...] = (),
+        unsupported_scaling: tuple[Unsupported, ...] = (),
+        scenarios: tuple[ScenarioOutcome, ...] = (),
+    ) -> AnalysisReport:
+        """The report of an analysis just executed (its result still attached)."""
+        result = analysis.result
+        bare = replace(analysis, result=None)
+        if result is None:
+            return cls(bare, inputs)
+        return cls(
+            bare,
+            inputs,
+            result.model_set,
+            result.context_fingerprint,
+            result.fingerprint,
+            result.summary,
+            result.connections,
+            result.unsupported,
+            result.limitations,
+            scaling,
+            unsupported_scaling,
+            scenarios,
+        )
+
+
+def check_scenarios(scenarios: tuple[Scenario, ...]) -> tuple[Scenario, ...]:
+    if len(scenarios) > MAX_SCENARIOS:
+        raise InvalidWorkload(details={"field": "scenarios", "reason": "too_many"})
+    names = [s.name for s in scenarios]
+    if len(names) != len(set(names)):
+        raise InvalidWorkload(details={"field": "scenarios", "reason": "duplicate_name"})
+    return scenarios

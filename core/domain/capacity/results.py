@@ -657,6 +657,17 @@ class Summary:
             "saturation_complete": self.saturation_complete,
         }
 
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Summary:
+        return cls(
+            data["components"],
+            data["bottlenecks"],
+            data["unsupported"],
+            _read_decimal(data.get("highest_utilization")),
+            _read_decimal(data.get("saturation_multiple")),
+            bool(data.get("saturation_complete", False)),
+        )
+
 
 def derive_status(components: Iterable[ComponentResult]) -> AnalysisStatus:
     """completed: every component in scope is estimated; partial: some are; insufficient_input:

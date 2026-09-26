@@ -20,6 +20,7 @@ PRIVILEGED = {
 }
 
 # A valid body per operation. A new endpoint with a body must be added here (see the guard test).
+WORKLOAD = {"name": "Peak", "type": "request_response", "peakRate": {"value": 100, "unit": "requests/second"}}
 VALID_BODIES: dict[str, dict[str, object]] = {
     "register_api_v1_auth_register_post": {"email": "x@example.com", "password": PASSWORD, "name": "X"},
     "verify_email_api_v1_auth_verify_email_post": {"token": "A" * 43},
@@ -84,6 +85,8 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "run_validation_api_v1_projects__project_id__architectures__architecture_id__validations_post": {
         "profile": "default"
     },
+    "run_capacity_analysis_api_v1_projects__project_id__architectures__architecture_id"
+    "__capacity_analyses_post": {"workload": WORKLOAD},
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",

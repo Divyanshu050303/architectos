@@ -114,6 +114,12 @@ class Plan:
     prepare: Prepare = nothing
 
 
+CAPACITY_WORKLOAD = {
+    "name": "Peak",
+    "type": "request_response",
+    "peakRate": {"value": 100, "unit": "requests/second"},
+}
+
 PLANS: dict[str, Plan] = {
     "create_project_api_v1_organizations__organization_id__projects_post": Plan(
         {"project.created"}, "created", {"name": "Audited"}
@@ -189,6 +195,12 @@ PLANS: dict[str, Plan] = {
     ),
     f"restore_architecture{_ARCH}restore_post": Plan(
         {"architecture.restored"}, "architecture", None, with_archived_architecture
+    ),
+    f"run_capacity_analysis{_ARCH}capacity_analyses_post": Plan(
+        {"architecture.capacity_analyzed"},
+        "architecture",
+        {"workload": CAPACITY_WORKLOAD, "label": "Audited"},
+        with_architecture,
     ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
@@ -318,6 +330,12 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     assert run.status_code == 201, run.text
+    analysis = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/capacity-analyses",
+        json={"workload": CAPACITY_WORKLOAD},
+        headers=auth,
+    )
+    assert analysis.status_code == 201, analysis.text
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -335,6 +353,7 @@ async def test_read_only_endpoints_write_nothing(
         "analysis_id": target.analysis_id,
         "architecture_id": target.architecture_id,
         "run_id": run.json()["id"],
+        "capacity_analysis_id": analysis.json()["id"],
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

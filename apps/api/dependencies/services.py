@@ -15,6 +15,7 @@ from apps.api.middleware.rate_limit import RateLimiter, RateLimits
 from apps.api.middleware.request_id import current_request_id
 from core.domain.architecture.architecture_service import ArchitectureService
 from core.domain.audit.audit_service import AuditService
+from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
 from core.domain.identity.auth_service import AuthService, VerificationSettings
@@ -267,6 +268,16 @@ def get_validation_service(
 
 
 ValidationServiceDep = Annotated[ValidationService, Depends(get_validation_service)]
+
+
+def get_capacity_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> CapacityService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return CapacityService(SqlAlchemyUnitOfWork(db, client), request.app.state.capacity_engine, clock=clock)
+
+
+CapacityServiceDep = Annotated[CapacityService, Depends(get_capacity_service)]
 
 
 def get_requirement_analysis_service(
