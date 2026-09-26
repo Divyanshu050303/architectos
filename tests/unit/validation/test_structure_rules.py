@@ -62,7 +62,6 @@ def test_the_registry_ships_every_rule_once_in_both_profiles() -> None:
     assert len(ids) == len(set(ids))
     assert {"default", "strict"} <= registry.profiles()
     assert registry is not default_registry()  # never a shared, mutable instance
-    assert all(r.meta.category in (Category.STRUCTURE, Category.COMPLETENESS) for r in registry.rules())
 
 
 # --- disconnected components ---------------------------------------------------------------------

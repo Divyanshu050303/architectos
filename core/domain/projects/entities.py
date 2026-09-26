@@ -10,13 +10,14 @@ Rules (see docs/domain/projects.md):
 """
 
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from core.domain.organizations.entities import Membership
 
 from .enums import ProjectStatus
 from .errors import ProjectArchived, ProjectNotArchived, ProjectNotFound
+from .policies import ArchitecturePolicy
 from .value_objects import (
     ProjectSettings,
     normalize_project_description,
@@ -73,6 +74,7 @@ class Project:
     deleted_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    policy: ArchitecturePolicy = field(default_factory=ArchitecturePolicy)  # what validation enforces
 
     @property
     def is_archived(self) -> bool:
@@ -109,6 +111,12 @@ class Project:
             else self.description,
             settings=settings if settings is not None else self.settings,
         )
+
+    def with_policy(self, policy: ArchitecturePolicy) -> Project:
+        """The whole policy is replaced (it is small, and a partial merge of lists would be
+        ambiguous)."""
+        self.ensure_modifiable()
+        return replace(self, policy=policy)
 
     def archive(self, at: datetime) -> Project:
         if self.is_deleted:

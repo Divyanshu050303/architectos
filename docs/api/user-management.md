@@ -75,7 +75,7 @@ Account-level events (`user.*`, `session.revoked`) are recorded too, without an 
 |---|:-:|:-:|:-:|:-:|
 | `organization.read`, `member.read`, `project.read`, `architecture.read` | ✓ | ✓ | ✓ | ✓ |
 | `project.create`, `project.update`, `architecture.create`, `.update`, `.validate`, `.simulate`, `.evolve` | ✓ | ✓ | ✓ | |
-| `organization.update`, `member.invite`, `member.remove`, `member.update_role`, `audit.read`, `project.delete`, `architecture.delete` | ✓ | ✓ | | |
+| `organization.update`, `member.invite`, `member.remove`, `member.update_role`, `audit.read`, `project.delete`, `project.policy_update`, `architecture.delete` | ✓ | ✓ | | |
 | `organization.delete` | ✓ | | | |
 
 Rules on top of the matrix:

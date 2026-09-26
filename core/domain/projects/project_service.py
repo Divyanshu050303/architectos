@@ -16,6 +16,7 @@ from core.domain.unit_of_work import UnitOfWork
 
 from .entities import NewProject, Project, ProjectAccess
 from .errors import ProjectNotFound
+from .policies import ArchitecturePolicy
 from .queries import ProjectCursor, ProjectQuery, ProjectSort
 from .repository import ProjectLock
 from .value_objects import ProjectSettings
@@ -133,6 +134,37 @@ class ProjectService:
                     resource_type="project",
                     resource_id=saved.id,
                     metadata={"fields": fields},
+                )
+            )
+        return ProjectAccess(project=saved, membership=access.membership)
+
+    async def update_policy(
+        self, *, project_id: uuid.UUID, user_id: uuid.UUID, policy: ArchitecturePolicy
+    ) -> ProjectAccess:
+        """Replaces the architecture policy (owners and admins: it constrains what members may
+        design). Unchanged: nothing is saved or recorded. The audit names the changed fields,
+        never their values."""
+        async with self._uow as uow:
+            access = await uow.projects.get_for_member(
+                project_id, user_id=user_id, lock=ProjectLock.EXCLUSIVE
+            )
+            if access is None:
+                raise ProjectNotFound
+            access.membership.require(Permission.PROJECT_POLICY_UPDATE)
+            current = access.project
+            changed = current.with_policy(policy)
+            if changed == current:
+                return access
+            saved = await uow.projects.save(changed)
+            before, after = current.policy.to_dict(), policy.to_dict()
+            await uow.audit.record(
+                AuditEvent(
+                    AuditAction.PROJECT_POLICY_UPDATED,
+                    actor_user_id=user_id,
+                    organization_id=saved.organization_id,
+                    resource_type="project",
+                    resource_id=saved.id,
+                    metadata={"fields": sorted(k for k in after if after[k] != before[k])},
                 )
             )
         return ProjectAccess(project=saved, membership=access.membership)

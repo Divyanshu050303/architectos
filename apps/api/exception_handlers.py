@@ -72,6 +72,7 @@ from core.domain.organizations.errors import (
     SoleOwnerOfOrganization,
 )
 from core.domain.projects.errors import (
+    InvalidArchitecturePolicy,
     InvalidProjectDescription,
     InvalidProjectName,
     InvalidProjectSettings,
@@ -177,6 +178,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     ArchitectureUnchanged: 422,
     InvalidRevision: 422,
     InvalidLayout: 422,
+    InvalidArchitecturePolicy: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

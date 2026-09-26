@@ -46,11 +46,20 @@ The central permission matrix (`core/domain/organizations/permissions.py`, see
 |---|---|---|---|---|
 | `project.read` | ✓ | ✓ | ✓ | ✓ |
 | `project.create`, `project.update` | | ✓ | ✓ | ✓ |
-| `project.archive` (archive and restore), `project.delete` | | | ✓ | ✓ |
+| `project.archive` (archive and restore), `project.delete`, `project.policy_update` | | | ✓ | ✓ |
 
 Every request resolves **user → membership → project's organization → permission** in one query,
 inside the operation's transaction: `get project by id` is never trusted on its own. A non-member,
 a deleted project and a deleted organization are all `404`.
+
+## Architecture policy
+
+A project has one typed **architecture policy** (`core/domain/projects/policies.py`), enforced by
+the validation engine's `policy.*` rules: allowed and prohibited technologies, allowed regions, TLS
+required on communicating connections, a maximum component count. Empty lists and `null` constrain
+nothing; the empty policy is the default. The policy is replaced as a whole by owners and admins
+(`project.policy_update`), is read-only while the project is archived, and every change is audited
+as `project.policy_updated` with the names of the changed fields.
 
 ## Concurrency
 

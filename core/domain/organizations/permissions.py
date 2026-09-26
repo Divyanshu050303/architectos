@@ -27,6 +27,7 @@ class Permission(StrEnum):
     PROJECT_UPDATE = "project.update"
     PROJECT_ARCHIVE = "project.archive"  # archive and restore
     PROJECT_DELETE = "project.delete"
+    PROJECT_POLICY_UPDATE = "project.policy_update"  # the architecture policy validation enforces
 
     REQUIREMENT_READ = "requirement.read"
     REQUIREMENT_CREATE = "requirement.create"
@@ -75,6 +76,7 @@ _ADMIN = _MEMBER | {
     Permission.AUDIT_READ,
     Permission.PROJECT_ARCHIVE,
     Permission.PROJECT_DELETE,
+    Permission.PROJECT_POLICY_UPDATE,
     Permission.ARCHITECTURE_DELETE,
 }
 

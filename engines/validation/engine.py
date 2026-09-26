@@ -23,6 +23,7 @@ from core.domain.validation.errors import InvalidFinding, InvalidValidationConfi
 from core.domain.validation.results import (
     Category,
     Finding,
+    Limitation,
     RequirementResult,
     RuleFailure,
     RuleSet,
@@ -34,6 +35,21 @@ from .context import MAX_SELECTED_RULES, ValidationConfig, ValidationContext
 from .severity import apply_override
 
 log = logging.getLogger("architectos.validation")
+
+CATALOG_UNAVAILABLE = Limitation(
+    "catalog_unavailable",
+    "No component catalog is available: configuration is checked against the architecture "
+    "schema's property definitions only, not against what each technology supports or limits.",
+)
+NO_POLICY = Limitation(
+    "no_policy",
+    "The project has no architecture policy, so no policy rule constrained this architecture.",
+)
+
+
+def limitations(context: ValidationContext) -> tuple[Limitation, ...]:
+    """What no rule of this run could check, whichever rules were selected."""
+    return (CATALOG_UNAVAILABLE,) if context.has_policy else (CATALOG_UNAVAILABLE, NO_POLICY)
 
 
 class Input(StrEnum):
@@ -246,4 +262,5 @@ def validate(context: ValidationContext, registry: Registry) -> ValidationResult
         findings=tuple(findings),
         requirement_results=tuple(verdicts),
         failures=tuple(failures),
+        limitations=limitations(context),
     )

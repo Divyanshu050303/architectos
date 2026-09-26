@@ -329,6 +329,33 @@ class RuleFailure:
 
 
 @dataclass(frozen=True, slots=True)
+class Limitation:
+    """Something this validation could not check at all, for every rule (e.g. no component
+    catalog, no project policy): stated, so an absence of findings is not read as a pass."""
+
+    code: str  # e.g. "catalog_unavailable"
+    message: str
+
+    def __post_init__(self) -> None:
+        _check(
+            [
+                None if isinstance(self.code, str) and CODE.fullmatch(self.code) else "code",
+                _text_problem(self.message, "message"),
+            ]
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"code": self.code, "message": self.message}
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Limitation:
+        try:
+            return cls(data["code"], data["message"])
+        except (KeyError, TypeError) as error:
+            raise InvalidFinding(details={"fields": [type(error).__name__]}) from None
+
+
+@dataclass(frozen=True, slots=True)
 class Summary:
     """Always derived from the findings and verdicts (``summarize``), never kept separately."""
 
@@ -395,6 +422,7 @@ class ValidationResult:
     findings: tuple[Finding, ...] = ()
     requirement_results: tuple[RequirementResult, ...] = ()
     failures: tuple[RuleFailure, ...] = ()
+    limitations: tuple[Limitation, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
@@ -407,6 +435,9 @@ class ValidationResult:
         )
         object.__setattr__(
             self, "failures", tuple(sorted(self.failures, key=lambda f: (f.rule_id, f.rule_version, f.error)))
+        )
+        object.__setattr__(
+            self, "limitations", tuple(sorted(dict.fromkeys(self.limitations), key=lambda x: x.code))
         )
 
     @property
@@ -422,6 +453,7 @@ class ValidationResult:
             "findings": [f.to_dict() for f in self.findings],
             "requirements": [r.to_dict() for r in self.requirement_results],
             "failures": [f.to_dict() for f in self.failures],
+            "limitations": [x.to_dict() for x in self.limitations],
         }
         return hashlib.sha256(
             json.dumps(document, sort_keys=True, separators=(",", ":")).encode()

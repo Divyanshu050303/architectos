@@ -35,6 +35,7 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "change_role_api_v1_organizations__organization_id__members__member_id__patch": {"role": "viewer"},
     "create_project_api_v1_organizations__organization_id__projects_post": {"name": "Food Delivery"},
     "update_project_api_v1_projects__project_id__patch": {"name": "Orders"},
+    "put_architecture_policy_api_v1_projects__project_id__architecture_policy_put": {"requireTls": True},
     "create_requirement_api_v1_projects__project_id__requirements_post": {
         "type": "functional",
         "category": "order",

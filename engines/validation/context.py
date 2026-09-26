@@ -1,7 +1,7 @@
 """The immutable inputs of one validation, and the configuration a request may choose.
 
 Rules read the context and never change it: every part is immutable (the IR, the revision
-reference, the requirements), and the graph index (``topology``) is built once and shared.
+reference, the requirements, the policy), and the graph index (``topology``) is built once and shared.
 ``fingerprint`` identifies every input besides the architecture's content (which the revision's
 content hash identifies), so equal fingerprints and equal hashes mean equal validations.
 """
@@ -16,6 +16,7 @@ from typing import Any
 from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.topology import Topology
 from core.architecture_ir.versioning import IR_SCHEMA_VERSION
+from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.requirements.entities import Requirement
 from core.domain.validation.results import Severity
 
@@ -56,6 +57,11 @@ class ValidationContext:
     revision: RevisionInfo
     requirements: tuple[Requirement, ...] = ()  # the project's requirements in play (live)
     config: ValidationConfig = field(default_factory=ValidationConfig)
+    policy: ArchitecturePolicy | None = None  # the project's policy at the time of the run
+
+    @property
+    def has_policy(self) -> bool:
+        return self.policy is not None and not self.policy.is_empty
 
     @cached_property
     def topology(self) -> Topology:
@@ -73,5 +79,6 @@ class ValidationContext:
             ],
             "requirements": sorted([str(r.id), r.version] for r in self.requirements),
             "config": self.config.to_dict(),
+            "policy": self.policy.to_dict() if self.has_policy and self.policy else None,
         }
         return hashlib.sha256(json.dumps(document, sort_keys=True, default=str).encode()).hexdigest()

@@ -122,6 +122,9 @@ PLANS: dict[str, Plan] = {
         {"project.updated"}, "project", {"name": "Renamed"}
     ),
     "archive_project_api_v1_projects__project_id__archive_post": Plan({"project.archived"}, "project"),
+    "put_architecture_policy_api_v1_projects__project_id__architecture_policy_put": Plan(
+        {"project.policy_updated"}, "project", {"prohibitedTechnologies": ["mongodb"], "requireTls": True}
+    ),
     "restore_project_api_v1_projects__project_id__restore_post": Plan(
         {"project.restored"}, "project", None, archive
     ),
