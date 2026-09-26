@@ -83,12 +83,15 @@ class Objective:
     duration: Quantity | None = None  # recovery_time, data_loss
     node_ids: tuple[str, ...] = ()  # empty: the architecture (paths, or every relevant component)
     requirement_id: uuid.UUID | None = None  # the requirement it translates, if any
+    strict: bool = False  # more than / less than, rather than at least / at most
 
     def __post_init__(self) -> None:
         if not isinstance(self.key, str) or not KEY.fullmatch(self.key):
             raise _invalid("objectives.key", "invalid_key")
-        if not isinstance(self.kind, ObjectiveKind):
+        if not isinstance(self.kind, ObjectiveKind) or self.kind is ObjectiveKind.UNSUPPORTED:
             raise _invalid("objectives.kind", "unknown_kind")
+        if not isinstance(self.strict, bool):
+            raise _invalid("objectives.strict", "not_a_boolean")
         object.__setattr__(self, "node_ids", _ids(self.node_ids, "objectives.node_ids", MAX_SCOPE))
         timed = self.kind in {ObjectiveKind.RECOVERY_TIME, ObjectiveKind.DATA_LOSS}
         if timed:
@@ -117,10 +120,24 @@ class Objective:
         return in_seconds(self.duration, "objectives.duration") if self.duration is not None else None
 
     @property
+    def at_most(self) -> bool:
+        return self.kind in {ObjectiveKind.RECOVERY_TIME, ObjectiveKind.DATA_LOSS}
+
+    @property
     def stated(self) -> str:
+        """The objective as a bound, e.g. ">= 0.999", "<= 15 min"."""
+        operator = ("<" if self.strict else "<=") if self.at_most else (">" if self.strict else ">=")
         if self.duration is not None:
-            return f"{decimal_to_str(self.duration.value)} {self.duration.unit}"
-        return decimal_to_str(self.target) if self.target is not None else ""
+            return f"{operator} {decimal_to_str(self.duration.value)} {self.duration.unit}"
+        return f"{operator} {decimal_to_str(self.target)}" if self.target is not None else ""
+
+    def met(self, actual: Decimal) -> bool:
+        """Whether ``actual`` (a fraction, seconds or a count) meets the objective."""
+        bound = self.seconds if self.at_most else self.target
+        assert bound is not None  # noqa: S101 -- construction requires it
+        if self.at_most:
+            return actual < bound if self.strict else actual <= bound
+        return actual > bound if self.strict else actual >= bound
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -130,6 +147,7 @@ class Objective:
             "duration": self.duration.to_dict() if self.duration is not None else None,
             "node_ids": list(self.node_ids),
             "requirement_id": str(self.requirement_id) if self.requirement_id else None,
+            "strict": self.strict,
         }
 
 

@@ -13,6 +13,7 @@ from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.topology import Topology
 from core.domain.reliability.analyses import ReliabilityAnalysisRequest
 from core.domain.reliability.inputs import ComponentReliability
+from core.domain.requirements.entities import Requirement
 from core.domain.validation.options import RevisionInfo
 
 
@@ -21,6 +22,9 @@ class ReliabilityContext:
     ir: ArchitectureIR
     revision: RevisionInfo
     request: ReliabilityAnalysisRequest
+    # The project's live requirements (any status): in-force availability and reliability ones
+    # become objectives.
+    requirements: tuple[Requirement, ...] = ()
 
     @cached_property
     def topology(self) -> Topology:
@@ -41,5 +45,6 @@ class ReliabilityContext:
                 self.revision.schema_version,
             ],
             "request": self.request.inputs(),
+            "requirements": sorted([str(r.id), r.version, r.content.status.value] for r in self.requirements),
         }
         return hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()

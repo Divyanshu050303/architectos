@@ -54,7 +54,7 @@ K = NodeKind
 _DEPLOYED = frozenset(NodeKind) - {K.CLIENT, K.EXTERNAL, K.BOUNDARY}
 _HOLDS_DATA = frozenset({K.DATABASE, K.CACHE, K.STORAGE, K.QUEUE, K.OBSERVABILITY})
 _STORES = frozenset({K.DATABASE, K.STORAGE})
-_SCOPE_KINDS: dict[RequirementScope, frozenset[NodeKind]] = {
+SCOPE_KINDS: dict[RequirementScope, frozenset[NodeKind]] = {
     RequirementScope.SERVICE: frozenset({K.SERVICE, K.WORKER}),
     RequirementScope.API: frozenset({K.SERVICE, K.GATEWAY}),
     RequirementScope.DATABASE: frozenset({K.DATABASE}),
@@ -62,7 +62,7 @@ _SCOPE_KINDS: dict[RequirementScope, frozenset[NodeKind]] = {
     RequirementScope.DATA: _HOLDS_DATA,
 }
 _IN_TRANSIT = re.compile(r"\b(transit|tls|ssl|https)\b", re.IGNORECASE)
-_SEVERITY = {
+SEVERITY_BY_PRIORITY = {
     RequirementPriority.CRITICAL: Severity.CRITICAL,
     RequirementPriority.HIGH: Severity.HIGH,
     RequirementPriority.MEDIUM: Severity.MEDIUM,
@@ -276,7 +276,7 @@ class Verdicts:
             remediation="Change the elements named here so they comply, or revise the requirement.",
             entity_ids=capped(judged.entity_ids),
             evidence=judged.evidence,
-            severity=_SEVERITY[priority],
+            severity=SEVERITY_BY_PRIORITY[priority],
             blocking=priority is RequirementPriority.CRITICAL,
             requirement_id=str(requirement.id),
         )
@@ -317,7 +317,7 @@ class Verdicts:
         self, context: ValidationContext, requirement: Requirement, default: frozenset[NodeKind]
     ) -> tuple[Node, ...] | Judged:
         scope = requirement.content.scope
-        kinds = default & _SCOPE_KINDS.get(scope, default)
+        kinds = default & SCOPE_KINDS.get(scope, default)
         if not kinds:
             # The scope names components this check does not concern (data residency of an API):
             # never widen or swap the concerned kinds, which could pass on the wrong components.
@@ -427,7 +427,7 @@ class Verdicts:
             if "retention_seconds" in n.configuration.values
             or n.configuration.is_unknown("retention_seconds")
         ]
-        scoped = _SCOPE_KINDS.get(requirement.content.scope)
+        scoped = SCOPE_KINDS.get(requirement.content.scope)
         if scoped is not None:
             stating = [n for n in stating if n.kind in scoped]
         if not stating:

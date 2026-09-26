@@ -263,9 +263,12 @@ def test_objectives_are_typed_and_unit_aware() -> None:
     rto = Objective(
         "rto", ObjectiveKind.RECOVERY_TIME, duration=Quantity.of("15", "min"), node_ids=("db", "api", "db")
     )
-    assert (rto.seconds, rto.node_ids, rto.stated) == (Decimal(900), ("api", "db"), "15 min")
+    assert (rto.seconds, rto.node_ids, rto.stated) == (Decimal(900), ("api", "db"), "<= 15 min")
     target = Objective("slo", ObjectiveKind.AVAILABILITY, target=Decimal("0.999"))
-    assert target.stated == "0.999"
+    assert target.stated == ">= 0.999"
+    assert (target.met(Decimal("0.999")), target.met(Decimal("0.9989"))) == (True, False)
+    strict = Objective("rto2", ObjectiveKind.RECOVERY_TIME, duration=Quantity.of("1", "min"), strict=True)
+    assert (strict.stated, strict.met(Decimal(60)), strict.met(Decimal(59))) == ("< 1 min", False, True)
     assert Objective("n", ObjectiveKind.REDUNDANCY, target=Decimal("2.0")).target == Decimal(2)
 
 

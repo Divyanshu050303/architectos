@@ -85,6 +85,7 @@ class FindingType(StrEnum):
     CIRCULAR_DEPENDENCY = "circular_dependency"
     AVAILABILITY_NOT_EVALUABLE = "availability_not_evaluable"
     UNVERIFIED_RELIABILITY_DATA = "unverified_reliability_data"
+    REDUNDANCY_BELOW_OBJECTIVE = "redundancy_below_objective"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +103,7 @@ class ReliabilityFinding:
     missing: tuple[str, ...] = ()
     model_id: str | None = None
     model_version: int | None = None
+    objective: str | None = None  # the objective it is about, if any (part of its identity)
 
     def __post_init__(self) -> None:
         for name in ("node_ids", "connection_ids", "missing", "assumptions"):
@@ -123,13 +125,16 @@ class ReliabilityFinding:
                 ids_problem(self.assumptions, "assumptions"),
                 ids_problem(self.missing, "missing"),
                 None if (self.model_id is None) == (self.model_version is None) else "model_version",
+                text_problem(self.objective, "objective", required=False),
             ]
         )
 
     @property
     def id(self) -> str:
-        """Stable: the same type about the same elements has the same id in every analysis."""
-        key = json.dumps([self.type.value, list(self.node_ids), list(self.connection_ids)])
+        """Stable: the same type about the same elements (and objective) has the same id in every
+        analysis."""
+        parts: list[Any] = [self.type.value, list(self.node_ids), list(self.connection_ids)]
+        key = json.dumps(parts + ([self.objective] if self.objective is not None else []))
         return "rel_" + hashlib.sha256(key.encode()).hexdigest()[:16]
 
     def sort_key(self) -> tuple[int, str, str]:
@@ -151,6 +156,7 @@ class ReliabilityFinding:
             "missing": list(self.missing),
             "model_id": self.model_id,
             "model_version": self.model_version,
+            "objective": self.objective,
         }
 
     @classmethod
@@ -170,6 +176,7 @@ class ReliabilityFinding:
                 missing=tuple(data.get("missing") or ()),
                 model_id=data.get("model_id"),
                 model_version=data.get("model_version"),
+                objective=data.get("objective"),
             )
         except (KeyError, ValueError, TypeError) as error:
             raise InvalidReliabilityResult(details={"fields": [type(error).__name__]}) from None
@@ -180,6 +187,7 @@ class ObjectiveKind(StrEnum):
     RECOVERY_TIME = "recovery_time"  # RTO: at most a duration
     DATA_LOSS = "data_loss"  # RPO: at most a duration
     REDUNDANCY = "redundancy"  # at least a number of replicas or members
+    UNSUPPORTED = "unsupported"  # a requirement no reliability model checks (results only)
 
 
 @dataclass(frozen=True, slots=True)
