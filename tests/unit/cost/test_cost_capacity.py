@@ -19,6 +19,7 @@ from core.domain.capacity.analyses import AnalysisReport, AnalysisRequest, Capac
 from core.domain.capacity.results import AnalysisStatus
 from core.domain.capacity.units import Quantity
 from core.domain.capacity.workload import WorkloadProfile, WorkloadType
+from core.domain.cost.aggregation import summarize
 from core.domain.cost.analyses import CostAnalysisRequest
 from core.domain.cost.capacity import CapacityBasis
 from core.domain.cost.errors import IncompatibleCapacityAnalysis, InvalidCostRequest
@@ -287,3 +288,14 @@ def test_the_basis_keeps_what_cost_needs_of_the_analysis() -> None:
     assert option is not None
     assert (option.model_id, option.required.value) == ("replica-throughput", Decimal(2))
     assert basis.required_replicas("cdn") is None
+
+
+def test_the_summary_of_an_engine_result_traces_workload_sensitivity() -> None:
+    summary = summarize(cost(capacity(), from_capacity=True))
+    by_sensitivity = {s.key: s.monthly.amount for s in summary.by_sensitivity}
+    assert by_sensitivity == {
+        "stepwise": Decimal("119.136"),  # the api's required replicas
+        "linear": Decimal("134.6869872"),  # cdn 55.845 + bus 13.14 + logs 65.7 + files 0.0019872
+    }
+    assert summary.drivers.workload_sensitive == summary.totals.monthly
+    assert not summary.known_total_is_lower_bound

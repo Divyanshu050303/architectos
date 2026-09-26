@@ -19,7 +19,7 @@ import json
 import re
 import uuid
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
@@ -292,39 +292,56 @@ class Totals:
 
 @dataclass(frozen=True, slots=True)
 class Share:
-    """A known amount of a group (a component, a category, …) and its share of the known total."""
+    """The known amount of a group (a component, a category, a provider, …), its share of the known
+    total, and how many of its lines are priced or unknown. ``key`` is None for the lines that have
+    no value for the grouping (e.g. the provider of a line no price was found for)."""
 
-    key: str
+    key: str | None
     monthly: Money
-    share: Decimal | None  # of the known monthly total; None when the total is 0
+    share: Decimal | None  # of the known monthly total; None when that total is 0
+    priced_items: int
     unknown_items: int
+
+    @property
+    def complete(self) -> bool:
+        return self.unknown_items == 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
+            "hourly": convert(self.monthly, BillingPeriod.MONTH, BillingPeriod.HOUR).to_dict(),
             "monthly": self.monthly.to_dict(),
+            "annual": convert(self.monthly, BillingPeriod.MONTH, BillingPeriod.YEAR).to_dict(),
             "share": decimal_to_str(self.share) if self.share is not None else None,
+            "priced_items": self.priced_items,
             "unknown_items": self.unknown_items,
+            "complete": self.complete,
         }
 
 
-def breakdown(lines: Iterable[LineItem], key: Any, currency: str) -> tuple[Share, ...]:
-    """Known monthly amounts per ``key(line)``, largest first (ties by key), with unknown counts."""
-    known: dict[str, Money] = defaultdict(lambda: Money.zero(currency))
-    unknown: dict[str, int] = defaultdict(int)
+def breakdown(
+    lines: Iterable[LineItem], key: Callable[[LineItem], str | None], currency: str
+) -> tuple[Share, ...]:
+    """Known monthly amounts per ``key(line)``, largest first (ties by key, None last), with priced
+    and unknown counts. Every amount must be in ``currency``: another currency is refused
+    (``CurrencyMismatch``), never combined. The groups' amounts add up exactly to the known total."""
+    known: dict[str | None, Money] = {}
+    priced: dict[str | None, int] = defaultdict(int)
+    unknown: dict[str | None, int] = defaultdict(int)
     for line in lines:
         name = key(line)
+        total = known.setdefault(name, Money.zero(currency))
         if line.monthly is not None:
-            known[name] = known[name] + line.monthly
+            known[name] = total + line.monthly  # CurrencyMismatch for another currency
+            priced[name] += 1
         else:
-            known.setdefault(name, Money.zero(currency))
             unknown[name] += 1
     grand = sum((m.amount for m in known.values()), Decimal(0))
     shares = [
-        Share(name, money, stored(money.amount / grand) if grand else None, unknown[name])
+        Share(name, money, stored(money.amount / grand) if grand else None, priced[name], unknown[name])
         for name, money in known.items()
     ]
-    return tuple(sorted(shares, key=lambda s: (-s.monthly.amount, s.key)))
+    return tuple(sorted(shares, key=lambda s: (-s.monthly.amount, s.key is None, s.key or "")))
 
 
 @dataclass(frozen=True, slots=True)
@@ -385,6 +402,19 @@ class CostResult:
 
     def by_kind(self) -> tuple[Share, ...]:
         return breakdown(self.line_items, lambda line: line.kind.value, self.currency)
+
+    def by_resource(self) -> tuple[Share, ...]:
+        return breakdown(self.line_items, lambda line: line.resource, self.currency)
+
+    def by_provider(self) -> tuple[Share, ...]:
+        return breakdown(
+            self.line_items, lambda line: line.price.provider if line.price else None, self.currency
+        )
+
+    def by_region(self) -> tuple[Share, ...]:
+        return breakdown(
+            self.line_items, lambda line: line.price.region if line.price else None, self.currency
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
