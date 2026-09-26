@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from .configuration import CONNECTION_PROPERTIES, NODE_PROPERTIES, ValueType
 from .errors import ElementType
 from .model import ArchitectureIR
 from .serialization import to_dict
@@ -52,6 +53,22 @@ SECRET_FIELD = re.compile(
     re.IGNORECASE,
 )
 REDACTED = "[redacted]"
+# Typed properties whose values are a closed set (a choice or a boolean) cannot hold a secret, even
+# when their name looks like one (``authorization``, ``secret_source``): their values are shown.
+_CLOSED = frozenset(
+    spec.name
+    for spec in (*NODE_PROPERTIES.values(), *CONNECTION_PROPERTIES.values())
+    if spec.type in {ValueType.CHOICE, ValueType.BOOLEAN}
+)
+
+
+def is_secret_path(path: str) -> bool:
+    """Whether the value at ``path`` (``configuration.x``, ``configuration.extra.x``,
+    ``metadata.x``, possibly after an element id: ``api.configuration.x``) must never be shown: its
+    name looks like a secret and it is not a closed typed property directly under ``configuration``."""
+    head, _, name = path.rpartition(".")
+    typed = name in _CLOSED and (head == "configuration" or head.endswith(".configuration"))
+    return bool(SECRET_FIELD.search(name)) and not typed
 
 
 def _scrubbed(value: Any) -> Any:
@@ -72,7 +89,7 @@ def _redacted(path: str, value: Any) -> Any:
     any secret nested inside it (e.g. in a list of connection settings) redacted."""
     if value is None or not path.startswith(("configuration.", "metadata.")):
         return value
-    if SECRET_FIELD.search(path.rsplit(".", 1)[-1]):
+    if is_secret_path(path):
         return REDACTED
     return _scrubbed(value)
 

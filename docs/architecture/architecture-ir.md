@@ -104,7 +104,14 @@ reached:
   `mtbf_seconds`, `mttr_seconds`, `min_healthy_replicas`, `failure_independence`
   (`independent`/`correlated`/`unknown`), `failover_mode` (`none`/`manual`/`automatic`),
   `failover_seconds`, `redundancy_group`, `redundancy_group_min_healthy`,
-  `replication_lag_seconds`, `backup_interval_seconds`: declared, never defaulted.
+  `replication_lag_seconds`, `backup_interval_seconds`: declared, never defaulted; security on
+  nodes `exposure` (`public`/`internal`/`private`), `authentication` (`none` or a mechanism),
+  `authorization` (`none` or a model), `sensitive_operations`, `management_interface`,
+  `data_classification` (`public` < `internal` < `confidential` < `restricted`), `personal_data`,
+  `encryption_at_rest` (data stores, queues, observability), `secrets_required`, `secret_source`,
+  `secret_rotation`, `audit_logging`, on boundaries `trust_level` (for `trust_zone` boundaries), on
+  connections `authentication`, `data_classification`, `personal_data`: what the architecture
+  models, never proof that a control is implemented, and never assumed when absent.
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.
 - `extra`: settings the IR does not recognize, **preserved as found** (bounded; fractional numbers
@@ -242,7 +249,7 @@ domain, never in the ORM models.
 | Constraints | kinds, technologies, component references, configuration, topology |
 | Validation | the whole IR; its findings are about suitability, separate from structural validity |
 | Reliability | `critical`, `multi_az`, `availability_zones`, `replication_*`, `dependents_of` |
-| Security | boundaries (`trust_zone`, `network`), `tls`, protocols, external nodes |
+| Security | trust zones and `trust_level`, the security properties above, `tls`, protocols, direction, external nodes, and the names (never the values) of preserved settings that look like secrets |
 | Cost | technologies, `instance_class`, sizes, replicas |
 | Observability | observability nodes and what reaches them |
 | Simulation | a stable revision: its number and content hash identify exactly what was simulated |

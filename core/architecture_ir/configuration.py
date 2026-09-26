@@ -45,6 +45,14 @@ REGION = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")  # e.g. eu-west-1, eu-west-1a
 PRICING_IDENTIFIER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 PRICING_SKU = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/+-]{0,127}$")
 REDUNDANCY_GROUP = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")  # e.g. "api-regions"
+# Security choices shared by nodes and connections (read by the security engine).
+EXPOSURES = frozenset({"public", "internal", "private"})
+AUTHENTICATION_MECHANISMS = frozenset(
+    {"none", "password", "api_key", "token", "oauth2", "mtls", "iam", "other"}
+)
+DATA_CLASSIFICATIONS = frozenset({"public", "internal", "confidential", "restricted"})
+SECRET_SOURCES = frozenset({"secret_manager", "environment", "file", "configuration", "hardcoded"})
+TRUST_LEVELS = frozenset({"untrusted", "partner", "internal", "restricted"})
 CONNECTION = "connection"
 
 
@@ -394,6 +402,76 @@ NODE_PROPERTIES: dict[str, PropertySpec] = {
             "Time between backups, in seconds (the data a restore can lose).",
             minimum="0",
         ),
+        # security (read by the security engine: declared by the architect or read from a system; a
+        # control that is absent is not modeled, never assumed present, and never assumed absent)
+        _spec(
+            "exposure",
+            _C,
+            _DEPLOYED,
+            "Who can reach the component over the network: public (the internet), internal (the "
+            "organization's networks) or private (only its own network or boundary).",
+            choices=EXPOSURES,
+        ),
+        _spec(
+            "authentication",
+            _C,
+            _DEPLOYED,
+            "How callers authenticate to the component; none: it accepts unauthenticated requests.",
+            choices=AUTHENTICATION_MECHANISMS,
+        ),
+        _spec(
+            "authorization",
+            _C,
+            _DEPLOYED,
+            "How the component decides what an authenticated caller may do; none: it does not.",
+            choices={"none", "rbac", "abac", "acl", "policy", "other"},
+        ),
+        _spec(
+            "sensitive_operations",
+            _B,
+            _DEPLOYED,
+            "It performs sensitive operations, e.g. payments, account or permission changes, data export.",
+        ),
+        _spec(
+            "management_interface",
+            _B,
+            _DEPLOYED,
+            "It exposes an administrative or management interface.",
+        ),
+        _spec(
+            "data_classification",
+            _C,
+            _DEPLOYED,
+            "The most sensitive data it holds or handles.",
+            choices=DATA_CLASSIFICATIONS,
+        ),
+        _spec("personal_data", _B, _DEPLOYED, "It holds or handles personal data."),
+        _spec(
+            "encryption_at_rest",
+            _B,
+            _DATA | {K.QUEUE, K.OBSERVABILITY},
+            "Stored data is encrypted at rest.",
+        ),
+        _spec(
+            "secrets_required",
+            _B,
+            _DEPLOYED - {K.EXTERNAL},
+            "It needs secrets (credentials, keys, tokens) to run.",
+        ),
+        _spec(
+            "secret_source",
+            _C,
+            _DEPLOYED - {K.EXTERNAL},
+            "Where it gets its secrets.",
+            choices=SECRET_SOURCES,
+        ),
+        _spec("secret_rotation", _B, _DEPLOYED - {K.EXTERNAL}, "Its secrets are rotated automatically."),
+        _spec(
+            "audit_logging",
+            _B,
+            _DEPLOYED - {K.EXTERNAL},
+            "Security-relevant actions on it are recorded in an audit log.",
+        ),
         # boundaries
         _spec(
             "boundary_type",
@@ -401,6 +479,13 @@ NODE_PROPERTIES: dict[str, PropertySpec] = {
             {K.BOUNDARY},
             "What the boundary delimits.",
             choices={"system", "network", "region", "availability_zone", "account", "cluster", "trust_zone"},
+        ),
+        _spec(
+            "trust_level",
+            _C,
+            {K.BOUNDARY},
+            "How far what runs inside a trust zone (boundary_type trust_zone) is trusted.",
+            choices=TRUST_LEVELS,
         ),
     ]
 }
@@ -411,6 +496,22 @@ CONNECTION_PROPERTIES: dict[str, PropertySpec] = {
         _spec("timeout_seconds", _D, {CONNECTION}, "How long the source waits, in seconds.", minimum="0"),
         _spec("retries", _I, {CONNECTION}, "Retries after a failure.", minimum="0"),
         _spec("tls", _B, {CONNECTION}, "Traffic is encrypted in transit."),
+        # security (read by the security engine; nothing is assumed when they are absent)
+        _spec(
+            "authentication",
+            _C,
+            {CONNECTION},
+            "How the source authenticates to the target over this connection; none: it does not.",
+            choices=AUTHENTICATION_MECHANISMS,
+        ),
+        _spec(
+            "data_classification",
+            _C,
+            {CONNECTION},
+            "The most sensitive data the connection carries.",
+            choices=DATA_CLASSIFICATIONS,
+        ),
+        _spec("personal_data", _B, {CONNECTION}, "The connection carries personal data."),
         _spec("dead_letter", _B, {CONNECTION}, "Messages that keep failing go to a dead-letter queue."),
         _spec("port", _I, {CONNECTION}, "Target port.", minimum="1", maximum="65535"),
         # traffic (read by the capacity engine; nothing is assumed when they are absent)

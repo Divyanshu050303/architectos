@@ -177,9 +177,12 @@
           "items": {
             "enum": [
               "access",
+              "authentication",
               "cache_hit_ratio",
               "calls_per_request",
+              "data_classification",
               "dead_letter",
+              "personal_data",
               "pool_size",
               "port",
               "retries",
@@ -202,6 +205,19 @@
                 "write"
               ]
             },
+            "authentication": {
+              "description": "How the source authenticates to the target over this connection; none: it does not.",
+              "enum": [
+                "api_key",
+                "iam",
+                "mtls",
+                "none",
+                "oauth2",
+                "other",
+                "password",
+                "token"
+              ]
+            },
             "cache_hit_ratio": {
               "description": "Share of this traffic a cache in front of the target answers; only misses arrive.",
               "pattern": "^-?\\d+(\\.\\d+)?$",
@@ -212,8 +228,21 @@
               "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
             },
+            "data_classification": {
+              "description": "The most sensitive data the connection carries.",
+              "enum": [
+                "confidential",
+                "internal",
+                "public",
+                "restricted"
+              ]
+            },
             "dead_letter": {
               "description": "Messages that keep failing go to a dead-letter queue.",
+              "type": "boolean"
+            },
+            "personal_data": {
+              "description": "The connection carries personal data.",
               "type": "boolean"
             },
             "pool_size": {
@@ -434,6 +463,9 @@
         "unknown": {
           "items": {
             "enum": [
+              "audit_logging",
+              "authentication",
+              "authorization",
               "autoscaling_max_replicas",
               "autoscaling_min_replicas",
               "autoscaling_target_cpu_ratio",
@@ -446,12 +478,16 @@
               "cpu_core_seconds_per_request",
               "cpu_limit_cores",
               "cpu_request_cores",
+              "data_classification",
               "deployment_model",
+              "encryption_at_rest",
               "eviction_policy",
+              "exposure",
               "failover_mode",
               "failover_seconds",
               "failure_independence",
               "instance_class",
+              "management_interface",
               "max_connections",
               "memory_limit_bytes",
               "memory_request_bytes",
@@ -462,6 +498,7 @@
               "network_bandwidth_bytes_per_second",
               "partitions",
               "persistence",
+              "personal_data",
               "pricing_conditions",
               "pricing_service",
               "pricing_sku",
@@ -476,9 +513,14 @@
               "replication_mode",
               "retention_seconds",
               "runtime",
+              "secret_rotation",
+              "secret_source",
+              "secrets_required",
+              "sensitive_operations",
               "storage_bytes",
               "throughput_limit_per_second",
-              "throughput_per_replica_per_second"
+              "throughput_per_replica_per_second",
+              "trust_level"
             ]
           },
           "type": "array",
@@ -487,6 +529,34 @@
         "values": {
           "additionalProperties": false,
           "properties": {
+            "audit_logging": {
+              "description": "Security-relevant actions on it are recorded in an audit log.",
+              "type": "boolean"
+            },
+            "authentication": {
+              "description": "How callers authenticate to the component; none: it accepts unauthenticated requests.",
+              "enum": [
+                "api_key",
+                "iam",
+                "mtls",
+                "none",
+                "oauth2",
+                "other",
+                "password",
+                "token"
+              ]
+            },
+            "authorization": {
+              "description": "How the component decides what an authenticated caller may do; none: it does not.",
+              "enum": [
+                "abac",
+                "acl",
+                "none",
+                "other",
+                "policy",
+                "rbac"
+              ]
+            },
             "autoscaling_max_replicas": {
               "description": "Most instances the autoscaler starts.",
               "minimum": 0,
@@ -556,6 +626,15 @@
               "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
             },
+            "data_classification": {
+              "description": "The most sensitive data it holds or handles.",
+              "enum": [
+                "confidential",
+                "internal",
+                "public",
+                "restricted"
+              ]
+            },
             "deployment_model": {
               "description": "How it runs.",
               "enum": [
@@ -566,6 +645,10 @@
                 "serverless",
                 "virtual_machine"
               ]
+            },
+            "encryption_at_rest": {
+              "description": "Stored data is encrypted at rest.",
+              "type": "boolean"
             },
             "eviction_policy": {
               "description": "What the cache evicts when full.",
@@ -578,6 +661,14 @@
                 "volatile_lru",
                 "volatile_random",
                 "volatile_ttl"
+              ]
+            },
+            "exposure": {
+              "description": "Who can reach the component over the network: public (the internet), internal (the organization's networks) or private (only its own network or boundary).",
+              "enum": [
+                "internal",
+                "private",
+                "public"
               ]
             },
             "failover_mode": {
@@ -605,6 +696,10 @@
               "description": "Provider instance class, e.g. db.r6g.large.",
               "minLength": 1,
               "type": "string"
+            },
+            "management_interface": {
+              "description": "It exposes an administrative or management interface.",
+              "type": "boolean"
             },
             "max_connections": {
               "description": "Connection limit.",
@@ -657,6 +752,10 @@
                 "none",
                 "snapshot"
               ]
+            },
+            "personal_data": {
+              "description": "It holds or handles personal data.",
+              "type": "boolean"
             },
             "pricing_conditions": {
               "description": "Conditions the price must carry, e.g. on_demand.",
@@ -739,6 +838,28 @@
               "minLength": 1,
               "type": "string"
             },
+            "secret_rotation": {
+              "description": "Its secrets are rotated automatically.",
+              "type": "boolean"
+            },
+            "secret_source": {
+              "description": "Where it gets its secrets.",
+              "enum": [
+                "configuration",
+                "environment",
+                "file",
+                "hardcoded",
+                "secret_manager"
+              ]
+            },
+            "secrets_required": {
+              "description": "It needs secrets (credentials, keys, tokens) to run.",
+              "type": "boolean"
+            },
+            "sensitive_operations": {
+              "description": "It performs sensitive operations, e.g. payments, account or permission changes, data export.",
+              "type": "boolean"
+            },
             "storage_bytes": {
               "description": "Provisioned storage, in bytes.",
               "minimum": 0,
@@ -753,6 +874,15 @@
               "description": "Most units of work one replica handles per second.",
               "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
+            },
+            "trust_level": {
+              "description": "How far what runs inside a trust zone (boundary_type trust_zone) is trusted.",
+              "enum": [
+                "internal",
+                "partner",
+                "restricted",
+                "untrusted"
+              ]
             }
           },
           "type": "object"
