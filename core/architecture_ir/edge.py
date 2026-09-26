@@ -6,6 +6,7 @@ Its identity is ``id`` (stable across revisions); ``source_id`` → ``target_id`
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Self
 
 from .configuration import CONNECTION, CONNECTION_PROPERTIES, Configuration
 from .dependency import PROTOCOL, ConnectionKind, Interaction
@@ -54,6 +55,12 @@ class Connection:
     metadata: Mapping[str, str] = field(default_factory=dict)
     provenance: Provenance | None = None
     field_provenance: Mapping[str, Provenance] = field(default_factory=dict)
+
+    def __copy__(self) -> Self:
+        return self  # immutable: a copy would be indistinguishable
+
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        return self
 
     def __post_init__(self) -> None:
         if isinstance(self.name, str):

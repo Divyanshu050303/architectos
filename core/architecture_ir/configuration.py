@@ -19,6 +19,7 @@ from collections.abc import Iterable, Mapping, Set
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
+from typing import Self
 
 from .component import NodeKind
 from .errors import Violation, raise_if
@@ -296,6 +297,12 @@ class Configuration:
     values: Mapping[str, ConfigValue] = field(default_factory=dict)
     unknown: Set[str] = frozenset()  # stored as a frozenset
     extra: Mapping[str, Json] = field(default_factory=dict)
+
+    def __copy__(self) -> Self:
+        return self  # immutable: a copy would be indistinguishable
+
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        return self
 
     def __post_init__(self) -> None:
         if isinstance(self.values, Mapping):

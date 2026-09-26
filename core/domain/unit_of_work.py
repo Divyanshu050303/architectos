@@ -8,6 +8,7 @@ commit on their own. This keeps SQLAlchemy out of the domain while services own 
 from types import TracebackType
 from typing import Protocol, Self
 
+from core.domain.architecture.repository import ArchitectureRepository
 from core.domain.audit.repository import AuditRepository
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
 from core.domain.organizations.repository import (
@@ -59,6 +60,9 @@ class UnitOfWork(Protocol):
 
     @property
     def requirement_analyses(self) -> RequirementAnalysisRepository: ...
+
+    @property
+    def architectures(self) -> ArchitectureRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

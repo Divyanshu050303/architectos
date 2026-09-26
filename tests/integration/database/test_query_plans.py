@@ -12,6 +12,22 @@ pytestmark = pytest.mark.integration
 
 
 QUERIES = {
+    "architecture of a project": (
+        "SELECT * FROM architectures WHERE project_id = :p",
+        "uq_architectures_project_id",
+        "project",
+    ),
+    "architecture revision": (
+        "SELECT * FROM architecture_revisions WHERE project_id = :p AND number = 7",
+        "uq_architecture_revisions_project_id_number",
+        "project",
+    ),
+    "architecture history": (
+        "SELECT number, summary FROM architecture_revisions WHERE project_id = :p AND number < 20 "
+        "ORDER BY number DESC LIMIT 51",
+        "uq_architecture_revisions_project_id_number",
+        "project",
+    ),
     "project list": (
         "SELECT * FROM projects WHERE organization_id = :p AND deleted_at IS NULL "
         "ORDER BY created_at DESC, id DESC LIMIT 51",
@@ -115,15 +131,33 @@ SEED = [
         SELECT id FROM requirements WHERE project_id = s.project_id ORDER BY number LIMIT 20
     ) r ON true
     """,
+    """
+    INSERT INTO architectures (id, project_id, current_revision)
+    SELECT gen_random_uuid(), id, 30 FROM (SELECT id FROM projects ORDER BY id LIMIT 100) p
+    WHERE NOT EXISTS (SELECT 1 FROM architectures a WHERE a.project_id = p.id)
+    """,
+    """
+    INSERT INTO architecture_revisions (id, architecture_id, project_id, number, parent_number, ir,
+                                        ir_schema_version, content_hash, source, summary)
+    SELECT gen_random_uuid(), a.id, a.project_id, g, NULLIF(g - 1, 0), '{}'::jsonb, 1, repeat('a', 64),
+           'user', 'x'
+    FROM architectures a CROSS JOIN generate_series(1, 30) g
+    WHERE NOT EXISTS (SELECT 1 FROM architecture_revisions r WHERE r.architecture_id = a.id)
+    """,
     "ANALYZE organizations, projects, requirements, requirement_versions, requirement_sets, "
-    "requirement_set_items",
+    "requirement_set_items, architectures, architecture_revisions",
 ]
 
 
 async def test_every_hot_query_uses_its_index(db: AsyncSession) -> None:
     for statement in SEED:
         await db.execute(text(statement))
-    busy_project = await db.scalar(text("SELECT project_id FROM requirements LIMIT 1"))
+    busy_project = await db.scalar(
+        text(
+            "SELECT project_id FROM requirements "
+            "WHERE project_id IN (SELECT project_id FROM architectures) LIMIT 1"
+        )
+    )
     busy_org = await db.scalar(
         text("SELECT organization_id FROM projects WHERE id = :p"), {"p": busy_project}
     )

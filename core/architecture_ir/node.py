@@ -10,6 +10,7 @@ changes it (moving a box is not an architecture change).
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Self
 
 from .component import NodeKind, Technology, component_problems
 from .configuration import NODE_PROPERTIES, Configuration
@@ -87,6 +88,12 @@ class Node:
     metadata: Mapping[str, str] = field(default_factory=dict)
     provenance: Provenance | None = None  # None: the architecture's provenance applies
     field_provenance: Mapping[str, Provenance] = field(default_factory=dict)  # e.g. "configuration.replicas"
+
+    def __copy__(self) -> Self:
+        return self  # immutable: a copy would be indistinguishable
+
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        return self
 
     def __post_init__(self) -> None:
         if isinstance(self.name, str):

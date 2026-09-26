@@ -163,3 +163,9 @@ def test_all_or_nothing_and_the_result_must_be_valid() -> None:
         apply_commands(ir, [AddConnection(connection("api-db-2", kind=ConnectionKind.DATA_ACCESS))])
     assert refused(ir) == {"index": None, "reason": "empty"}
     assert refused(ir, *([RenameNode("api", "x")] * (MAX_COMMANDS + 1)))["reason"] == "too_many"
+
+
+def test_setting_what_is_already_there_changes_nothing() -> None:
+    ir = api_and_postgres()
+    same = apply_commands(ir, [RenameNode("api", "Orders API"), ChangeReplicas("api", 3)], provenance=EDIT)
+    assert same == ir  # no provenance stamped for a non-change

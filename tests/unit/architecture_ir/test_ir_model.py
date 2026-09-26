@@ -1,5 +1,6 @@
 """The architecture graph: nodes, connections and the structural invariants (Architecture IR phase 1)."""
 
+import copy
 import dataclasses
 import uuid
 from decimal import Decimal
@@ -254,3 +255,10 @@ def test_connections_carry_their_semantics() -> None:
     assert rules(lambda: connection(protocol="HTTP/2")) == {"invalid_protocol"}
     assert rules(lambda: connection(critical="yes")) == {"not_a_boolean"}
     assert Decimal(link.configuration.get("retries")) == 5  # type: ignore[arg-type]
+
+
+def test_copies_are_the_same_immutable_value() -> None:
+    ir = api_and_postgres()
+    assert copy.deepcopy(ir) is ir
+    assert copy.copy(ir.nodes[0]) is ir.nodes[0]
+    assert copy.deepcopy({"ir": ir})["ir"] is ir

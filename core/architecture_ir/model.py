@@ -23,6 +23,7 @@ engines' job.
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Self
 
 from .component import NodeKind
 from .edge import Connection
@@ -65,6 +66,12 @@ class ArchitectureIR:
     metadata: Mapping[str, str] = field(default_factory=dict)
     provenance: Provenance | None = None  # applies to every element without its own
     schema_version: int = IR_SCHEMA_VERSION
+
+    def __copy__(self) -> Self:
+        return self  # immutable: a copy would be indistinguishable
+
+    def __deepcopy__(self, memo: dict[int, object]) -> Self:
+        return self
 
     def __post_init__(self) -> None:
         if isinstance(self.name, str):

@@ -1,11 +1,22 @@
 """In-memory stand-ins for the persistence layer and mailer, for service tests without a database."""
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from dataclasses import fields as dataclass_fields
 from datetime import UTC, datetime, timedelta
 from types import TracebackType
 from typing import Any, Self
 
+from core.domain.architecture.entities import (
+    Architecture,
+    ArchitectureLayout,
+    NewArchitecture,
+    Position,
+    RevisionSummary,
+)
+from core.domain.architecture.errors import ArchitectureAlreadyExists
+from core.domain.architecture.versions import ArchitectureRevision, NewRevision
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.identity.entities import (
     DeletedUserValues,
@@ -629,6 +640,93 @@ class FakeRequirementAnalysisRepository:
         return found if found and found.project_id == project_id else None
 
 
+class FakeArchitectureRepository:
+    """One architecture per project, append-only revisions, a layout per architecture."""
+
+    def __init__(self, clock: FakeClock) -> None:
+        self._clock = clock
+        self.architectures: dict[uuid.UUID, Architecture] = {}  # by project
+        self.revisions: dict[tuple[uuid.UUID, int], ArchitectureRevision] = {}  # (project, number)
+        self.layouts: dict[uuid.UUID, ArchitectureLayout] = {}  # by project
+
+    def _store(self, project_id: uuid.UUID, revision: NewRevision) -> ArchitectureRevision:
+        key = (project_id, revision.number)
+        assert key not in self.revisions, "revisions are append-only"
+        stored = ArchitectureRevision(
+            id=uuid.uuid7(),
+            created_at=self._clock(),
+            **{f.name: getattr(revision, f.name) for f in dataclass_fields(revision)},
+        )
+        self.revisions[key] = stored
+        return stored
+
+    async def add(
+        self, architecture: NewArchitecture, first: NewRevision
+    ) -> tuple[Architecture, ArchitectureRevision]:
+        if architecture.project_id in self.architectures:
+            raise ArchitectureAlreadyExists
+        stored = Architecture(
+            id=architecture.id,
+            project_id=architecture.project_id,
+            current_revision=first.number,
+            created_by_user_id=architecture.created_by_user_id,
+            created_at=self._clock(),
+            updated_at=self._clock(),
+        )
+        self.architectures[architecture.project_id] = stored
+        return stored, self._store(architecture.project_id, first)
+
+    async def get(self, project_id: uuid.UUID, *, for_update: bool = False) -> Architecture | None:
+        return self.architectures.get(project_id)
+
+    async def add_revision(
+        self, architecture: Architecture, revision: NewRevision
+    ) -> tuple[Architecture, ArchitectureRevision]:
+        current = self.architectures[architecture.project_id]
+        assert current.current_revision == revision.parent_number, "the parent must be current"
+        stored = self._store(architecture.project_id, revision)
+        moved = replace(current, current_revision=revision.number, updated_at=self._clock())
+        self.architectures[architecture.project_id] = moved
+        return moved, stored
+
+    async def get_revision(self, project_id: uuid.UUID, number: int) -> ArchitectureRevision | None:
+        return self.revisions.get((project_id, number))
+
+    async def list_revisions(
+        self, project_id: uuid.UUID, *, before: int | None, limit: int
+    ) -> list[RevisionSummary]:
+        found = sorted(
+            (r for (p, n), r in self.revisions.items() if p == project_id and (before is None or n < before)),
+            key=lambda r: r.number,
+            reverse=True,
+        )
+        return [
+            RevisionSummary(
+                number=r.number,
+                parent_number=r.parent_number,
+                source=r.source,
+                summary=r.summary,
+                reason=r.reason,
+                content_hash=r.content_hash,
+                ir_schema_version=r.ir_schema_version,
+                requirement_set_id=r.requirement_set_id,
+                created_by_user_id=r.created_by_user_id,
+                created_at=r.created_at,
+            )
+            for r in found[:limit]
+        ]
+
+    async def get_layout(self, project_id: uuid.UUID) -> ArchitectureLayout:
+        return self.layouts.get(project_id, ArchitectureLayout())
+
+    async def save_layout(
+        self, architecture: Architecture, positions: Mapping[str, Position], user_id: uuid.UUID
+    ) -> ArchitectureLayout:
+        layout = ArchitectureLayout(dict(positions), user_id, self._clock())
+        self.layouts[architecture.project_id] = layout
+        return layout
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -643,6 +741,7 @@ class FakeUnitOfWork:
         self._requirements = FakeRequirementRepository(clock)
         self._requirement_sets = FakeRequirementSetRepository(clock)
         self._requirement_analyses = FakeRequirementAnalysisRepository(clock)
+        self._architectures = FakeArchitectureRepository(clock)
         self.commits = 0
         self.rollbacks = 0
 
@@ -693,6 +792,10 @@ class FakeUnitOfWork:
     @property
     def requirement_analyses(self) -> FakeRequirementAnalysisRepository:
         return self._requirement_analyses
+
+    @property
+    def architectures(self) -> FakeArchitectureRepository:
+        return self._architectures
 
     async def __aenter__(self) -> Self:
         return self

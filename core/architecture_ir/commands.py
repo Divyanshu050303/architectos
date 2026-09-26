@@ -9,8 +9,9 @@ Rules beyond the web app's:
 - removing a node removes its connections, and drops it (and them) from the assumptions and
   decisions that referred to them; a boundary that still contains nodes cannot be removed;
 - configuring sets or clears (``None``) known properties; a value that was unknown becomes known;
-- with a ``provenance`` (e.g. ``user_edit`` by the editor), every field a command sets is stamped
-  with it, and new elements without provenance receive it.
+- with a ``provenance`` (e.g. ``user_edit`` by the editor), every field a command actually changes
+  is stamped with it, and new elements without provenance receive it; setting a value to what it
+  already is changes nothing.
 
 Commands are applied in order, all or nothing: the first invalid command stops everything
 (``InvalidArchitectureCommand`` names it by index), and the result must be a valid IR.
@@ -148,7 +149,12 @@ def _configure(node: Node, values: Mapping[str, ConfigValue | None], provenance:
         k: v for k, v in node.field_provenance.items() if k.removeprefix("configuration.") not in cleared
     }
     updated = replace(node, configuration=configuration, field_provenance=field_provenance)
-    return _stamp(updated, [f"configuration.{k}" for k in values if k not in cleared], provenance)
+    changed = [
+        f"configuration.{k}"
+        for k in values
+        if k not in cleared and (configuration.get(k) != current.get(k) or current.is_unknown(k))
+    ]
+    return _stamp(updated, changed, provenance)  # only what really changed is attributed
 
 
 def _remove_nodes(draft: _Draft, node_ids: tuple[str, ...]) -> None:
@@ -194,7 +200,11 @@ def _apply(draft: _Draft, command: Command, provenance: Provenance | None) -> No
                 del draft.connections[connection_id]
             draft.forget(set(connection_ids))
         case RenameNode(node_id=node_id, name=name):
-            draft.nodes[node_id] = _stamp(replace(draft.node(node_id), name=name), ["name"], provenance)
+            before = draft.node(node_id)
+            renamed = replace(before, name=name)
+            draft.nodes[node_id] = _stamp(
+                renamed, ["name"] if renamed.name != before.name else [], provenance
+            )
         case UpdateConfiguration(node_id=node_id, values=values):
             draft.nodes[node_id] = _configure(draft.node(node_id), values, provenance)
         case ChangeReplicas(node_id=node_id, replicas=replicas):
