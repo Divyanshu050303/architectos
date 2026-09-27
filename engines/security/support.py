@@ -1,41 +1,29 @@
 """Readings of declared security facts that several analyzers share, each three-valued where the
 architecture may not say: True, False, or None (not modeled). Nothing here assumes a default."""
 
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from core.architecture_ir.dependency import ENCRYPTED_PROTOCOLS
 from core.architecture_ir.edge import Connection
 from core.domain.capacity.results import Certainty
 from core.domain.engine_results import Evidence
-from core.domain.facts import ElementFacts
+from core.domain.facts import ElementFacts, certainty_of, labelled_evidence
 from core.domain.security.inputs import ConnectionSecurity
 from core.domain.security.results import FindingType, SecurityFinding
-from core.domain.security.values import redacted
 from core.domain.validation.results import Severity
 
 if TYPE_CHECKING:
     from .engine import AnalyzerMeta
 
+# Shared with every engine that reads declared facts (core/domain/facts.py), under the names the
+# security analyzers use.
+evidence = labelled_evidence
+certainty = certainty_of
+
 MECHANISM_NOT_VERIFIED = (
     "A declared control is taken as the architecture names it; whether it is implemented and "
     "configured correctly is not established."
 )
-
-
-def evidence(facts: ElementFacts, names: Iterable[str]) -> tuple[Evidence, ...]:
-    """The declared facts among ``names``, labelled with their element (``api.configuration.x``),
-    with their provenance; a secret-looking value is never shown."""
-    return tuple(redacted(f"{facts.element_id}.{e.label}", e.value) for e in facts.evidence(names))
-
-
-def certainty(*used: tuple[ElementFacts, Iterable[str]]) -> Certainty:
-    """``modeled`` when every fact used was declared by a person or read from a system;
-    ``candidate`` when any was inferred or proposed by a language model."""
-    for facts, names in used:
-        if any(facts.facts[n].proposed for n in names if n in facts.facts):
-            return Certainty.CANDIDATE
-    return Certainty.MODELED
 
 
 def transport_protected(connection: Connection, facts: ConnectionSecurity) -> bool | None:

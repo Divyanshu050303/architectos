@@ -15,8 +15,9 @@ from typing import Protocol, Self
 
 from core.architecture_ir.configuration import Configuration, ConfigValue
 from core.architecture_ir.provenance import Provenance
-from core.domain.capacity.results import Source
+from core.domain.capacity.results import Certainty, Source
 from core.domain.engine_results import Evidence
+from core.domain.redaction import redacted
 from core.domain.requirements.value_objects import decimal_to_str
 
 
@@ -102,3 +103,18 @@ class ElementFacts:
 
     def evidence(self, names: Iterable[str]) -> tuple[Evidence, ...]:
         return tuple(self.facts[n].evidence() for n in names if n in self.facts)
+
+
+def labelled_evidence(facts: ElementFacts, names: Iterable[str]) -> tuple[Evidence, ...]:
+    """The declared facts among ``names``, labelled with their element (``api.configuration.x``),
+    with their provenance; a secret-looking value is never shown."""
+    return tuple(redacted(f"{facts.element_id}.{e.label}", e.value) for e in facts.evidence(names))
+
+
+def certainty_of(*used: tuple[ElementFacts, Iterable[str]]) -> Certainty:
+    """``modeled`` when every fact used was declared by a person or read from a system;
+    ``candidate`` when any was inferred or proposed by a language model."""
+    for facts, names in used:
+        if any(facts.facts[n].proposed for n in names if n in facts.facts):
+            return Certainty.CANDIDATE
+    return Certainty.MODELED
