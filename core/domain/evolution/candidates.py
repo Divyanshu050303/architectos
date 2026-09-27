@@ -264,6 +264,56 @@ class ImpactRef:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class ValidationNote:
+    """One thing validation established about a candidate: a finding the overlay introduces or
+    resolves, a requirement it violates or leaves unverifiable, a rule that could not run, or why the
+    overlay was refused — with the exact elements concerned."""
+
+    code: str  # introduced_finding, resolved_finding, requirement_violated, requirement_not_verifiable,
+    # rule_failed, overlay_refused
+    message: str
+    reference: str | None = None  # the finding, requirement or rule id
+    element_ids: tuple[str, ...] = ()
+    blocking: bool = False
+
+    def __post_init__(self) -> None:
+        if isinstance(self.element_ids, tuple) and all(isinstance(e, str) for e in self.element_ids):
+            object.__setattr__(self, "element_ids", tuple(sorted(set(self.element_ids))))
+        _check(
+            [
+                _code(self.code, "validation.code"),
+                _text(self.message, "validation.message"),
+                _text(self.reference, "validation.reference", MAX_REFERENCE, required=False),
+                _strings(self.element_ids, "validation.element_ids"),
+                None if isinstance(self.blocking, bool) else "validation.blocking",
+            ]
+        )
+
+    @property
+    def key(self) -> tuple[str, str, tuple[str, ...]]:
+        return (self.code, self.reference or "", self.element_ids)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "code": self.code,
+            "message": self.message,
+            "reference": self.reference,
+            "element_ids": list(self.element_ids),
+            "blocking": self.blocking,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        return cls(
+            data["code"],
+            data["message"],
+            data.get("reference"),
+            tuple(data.get("element_ids") or ()),
+            bool(data.get("blocking", False)),
+        )
+
+
 _EFFECTS = ("benefits", "tradeoffs", "complexity", "migration", "risks")
 
 
@@ -285,6 +335,7 @@ class Candidate:
     risks: tuple[Effect, ...] = ()  # risks and failure modes it may add
     missing: tuple[str, ...] = ()  # what is unknown about it, and would decide it
     validation: ValidationState = ValidationState.NOT_VALIDATED
+    validation_notes: tuple[ValidationNote, ...] = ()
     impacts: tuple[ImpactRef, ...] = ()
     status: ProposalStatus = ProposalStatus.PROPOSED
 
@@ -313,6 +364,7 @@ class Candidate:
                 *(_items(getattr(self, name), Effect, name) for name in _EFFECTS),
                 _strings(self.missing, "missing"),
                 None if isinstance(self.validation, ValidationState) else "validation",
+                _items(self.validation_notes, ValidationNote, "validation_notes"),
                 _items(self.impacts, ImpactRef, "impacts"),
                 None if self.status is ProposalStatus.PROPOSED else "status",
             ]
@@ -332,6 +384,9 @@ class Candidate:
             effects = getattr(self, name)
             if isinstance(effects, tuple) and all(isinstance(e, Effect) for e in effects):
                 sort(self, name, tuple(sorted(set(effects), key=lambda e: e.key)))
+        notes = self.validation_notes
+        if isinstance(notes, tuple) and all(isinstance(n, ValidationNote) for n in notes):
+            sort(self, "validation_notes", tuple(sorted(set(notes), key=lambda n: n.key)))
         if isinstance(self.impacts, tuple) and all(isinstance(i, ImpactRef) for i in self.impacts):
             sort(self, "impacts", tuple(sorted(set(self.impacts), key=lambda i: i.source.value)))
 
@@ -366,6 +421,7 @@ class Candidate:
             **{name: [e.to_dict() for e in getattr(self, name)] for name in _EFFECTS},
             "missing": list(self.missing),
             "validation": self.validation.value,
+            "validation_notes": [n.to_dict() for n in self.validation_notes],
             "impacts": [i.to_dict() for i in self.impacts],
         }
 
@@ -386,6 +442,9 @@ class Candidate:
                 **{name: tuple(Effect.from_dict(e) for e in data.get(name) or ()) for name in _EFFECTS},
                 missing=tuple(data.get("missing") or ()),
                 validation=ValidationState(data.get("validation", ValidationState.NOT_VALIDATED.value)),
+                validation_notes=tuple(
+                    ValidationNote.from_dict(n) for n in data.get("validation_notes") or ()
+                ),
                 impacts=tuple(ImpactRef.from_dict(i) for i in data.get("impacts") or ()),
                 status=ProposalStatus(data.get("status", ProposalStatus.PROPOSED.value)),
             )
