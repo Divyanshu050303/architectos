@@ -234,6 +234,13 @@ def analyze(
 ) -> SimulationResult:
     """The simulation's result. InvalidSimulationRequest for a scenario that does not fit the
     revision or the limits (nothing has run then)."""
+    return simulate(context, registry, limits)[0]
+
+
+def simulate(
+    context: SimulationContext, registry: Registry, limits: SimulationLimits = DEFAULT_LIMITS
+) -> tuple[SimulationResult, Overlay]:
+    """The simulation's result and the overlay it evaluated (stored to reconstruct it)."""
     limits.check(context.request.scenario)
     plan = check_scenario(context.ir, context.request)
     overlay = apply_scenario(context.ir, context.revision, context.request.scenario)
@@ -258,7 +265,7 @@ def analyze(
     stated = tuple(Evidence(f"assumption.{a.key}", a.statement) for a in context.request.assumptions)
     planned = tuple(Evidence(f"plan.{p.key}", f"{p.type.id} v{p.type.version}") for p in plan.parts)
     deltas, cut = _bounded([d for e in evaluations.values() for d in e.deltas], limits)
-    return SimulationResult(
+    result = SimulationResult(
         engine_set=ModelSet.of(versions),
         scenario_fingerprint=context.request.scenario.fingerprint,
         context_fingerprint=context.fingerprint,
@@ -273,3 +280,4 @@ def analyze(
         + tuple(u for e in evaluations.values() for u in e.unsupported),
         limitations=(MODEL_BASED, NO_DEFAULTS),
     )
+    return result, overlay

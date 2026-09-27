@@ -241,6 +241,15 @@ PLANS: dict[str, Plan] = {
     f"run_observability_analysis{_ARCH}observability_analyses_post": Plan(
         {"architecture.observability_analyzed"}, "architecture", {"label": "Audited"}, with_architecture
     ),
+    f"run_simulation{_ARCH}simulations_post": Plan(
+        {"architecture.simulated"},
+        "architecture",
+        {
+            "scenario": {"name": "Outage", "failures": [{"kind": "component", "target": "api"}]},
+            "label": "Audited",
+        },
+        with_architecture,
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -399,6 +408,12 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     assert observability.status_code == 201, observability.text
+    simulation = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/simulations",
+        json={"scenario": {"name": "Outage", "failures": [{"kind": "component", "target": "api"}]}},
+        headers=auth,
+    )
+    assert simulation.status_code == 201, simulation.text
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -421,6 +436,8 @@ async def test_read_only_endpoints_write_nothing(
         "reliability_analysis_id": reliability.json()["id"],
         "security_analysis_id": security.json()["id"],
         "observability_analysis_id": observability.json()["id"],
+        "simulation_id": simulation.json()["id"],
+        "other_simulation_id": simulation.json()["id"],
     }
     for op in reads:
         response = await client.request(op.method, op.url(**ids), headers=auth)

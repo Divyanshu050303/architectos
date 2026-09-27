@@ -36,6 +36,7 @@ from core.domain.requirements.analysis_service import RequirementAnalysisService
 from core.domain.requirements.requirement_service import RequirementService
 from core.domain.requirements.requirement_set_service import RequirementSetService
 from core.domain.security.security_service import SecurityService
+from core.domain.simulations.simulation_service import SimulationService
 from core.domain.validation.validation_service import ValidationService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -353,3 +354,15 @@ def get_observability_service(
 
 
 ObservabilityServiceDep = Annotated[ObservabilityService, Depends(get_observability_service)]
+
+
+def get_simulation_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> SimulationService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return SimulationService(
+        SqlAlchemyUnitOfWork(db, client), request.app.state.simulation_engine, clock=clock
+    )
+
+
+SimulationServiceDep = Annotated[SimulationService, Depends(get_simulation_service)]

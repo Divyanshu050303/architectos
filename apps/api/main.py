@@ -31,6 +31,7 @@ from apps.api.routes import (
     requirement_sets,
     requirements,
     security,
+    simulations,
     users,
     validations,
 )
@@ -40,6 +41,7 @@ from engines.observability.service import DeterministicObservabilityEngine
 from engines.reliability.service import DeterministicReliabilityEngine
 from engines.requirements.factory import build_engine
 from engines.security.service import DeterministicSecurityEngine
+from engines.simulation.service import DeterministicSimulationEngine
 from engines.validation.service import DeterministicValidationEngine
 
 API_PREFIX = "/api/v1"
@@ -82,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.reliability_engine = DeterministicReliabilityEngine()
     app.state.security_engine = DeterministicSecurityEngine()
     app.state.observability_engine = DeterministicObservabilityEngine()
+    app.state.simulation_engine = DeterministicSimulationEngine()
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -132,4 +135,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(reliability.router, prefix=API_PREFIX)
     app.include_router(security.router, prefix=API_PREFIX)
     app.include_router(observability.router, prefix=API_PREFIX)
+    app.include_router(simulations.router, prefix=API_PREFIX)
     return app

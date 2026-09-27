@@ -113,6 +113,10 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "__security_analyses_post": {"label": "Sweep"},
     "run_observability_analysis_api_v1_projects__project_id__architectures__architecture_id"
     "__observability_analyses_post": {"label": "Sweep"},
+    "run_simulation_api_v1_projects__project_id__architectures__architecture_id__simulations_post": {
+        "scenario": {"name": "Sweep", "workload": {"growth": "2"}},
+        "label": "Sweep",
+    },
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",

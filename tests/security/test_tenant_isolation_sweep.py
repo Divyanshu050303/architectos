@@ -136,7 +136,15 @@ async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing
             headers=ada,
         )
     ).json()
+    simulation = await client.post(
+        f"/api/v1/projects/{project['id']}/architectures/{architecture['id']}/simulations",
+        json={"scenario": {"name": "Growth", "workload": {"growth": "2"}}},
+        headers=ada,
+    )
+    assert simulation.status_code == 201, simulation.text
     ids = {
+        "simulation_id": simulation.json()["id"],
+        "other_simulation_id": simulation.json()["id"],
         "capacity_analysis_id": analysis["id"],
         "cost_analysis_id": cost["id"],
         "reliability_analysis_id": reliability["id"],

@@ -119,6 +119,7 @@ POLICIES: dict[str, dict[str, Rule]] = {
     "run_reliability_analysis": {"user": Rule(120, timedelta(hours=1))},
     "run_security_analysis": {"user": Rule(120, timedelta(hours=1))},
     "run_observability_analysis": {"user": Rule(120, timedelta(hours=1))},
+    "run_simulation": {"user": Rule(120, timedelta(hours=1))},
     "create_invitation": {"user": Rule(50, timedelta(hours=1))},
     "accept_invitation": {"ip": Rule(30, timedelta(hours=1))},
 }
