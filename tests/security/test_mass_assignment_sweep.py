@@ -113,6 +113,25 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "__security_analyses_post": {"label": "Sweep"},
     "run_observability_analysis_api_v1_projects__project_id__architectures__architecture_id"
     "__observability_analyses_post": {"label": "Sweep"},
+    "run_evolution_analysis_api_v1_projects__project_id__architectures__architecture_id"
+    "__evolution_analyses_post": {
+        "goals": [{"type": "availability_objective", "target": {"value": "0.999", "unit": "ratio"}}]
+    },
+    "draft_decision_api_v1_projects__project_id__decisions_post": {
+        "architectureId": "01a0de60-a784-7244-8ecc-62afb5352f47",
+        "analysisId": "01a0de60-a784-7244-8ecc-62afb5352f48",
+    },
+    "accept_decision_api_v1_projects__project_id__decisions__decision_id__accept_post": {
+        "candidateId": "evo_" + "0" * 20,
+        "rationale": "Fits.",
+    },
+    "reject_decision_api_v1_projects__project_id__decisions__decision_id__reject_post": {"rationale": "No."},
+    "supersede_decision_api_v1_projects__project_id__decisions__decision_id__supersede_post": {
+        "byDecisionId": "01a0de60-a784-7244-8ecc-62afb5352f49"
+    },
+    "link_decision_revision_api_v1_projects__project_id__decisions__decision_id__resulting_revision_post": {
+        "revision": 2
+    },
     "run_simulation_api_v1_projects__project_id__architectures__architecture_id__simulations_post": {
         "scenario": {"name": "Sweep", "workload": {"growth": "2"}},
         "label": "Sweep",

@@ -20,6 +20,8 @@ from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
 from core.domain.cost.cost_service import CostService
 from core.domain.cost.snapshots import PricingService
+from core.domain.decisions.decision_service import DecisionService
+from core.domain.evolution.evolution_service import EvolutionService
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
@@ -366,3 +368,22 @@ def get_simulation_service(
 
 
 SimulationServiceDep = Annotated[SimulationService, Depends(get_simulation_service)]
+
+
+def get_evolution_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> EvolutionService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return EvolutionService(SqlAlchemyUnitOfWork(db, client), request.app.state.evolution_engine, clock=clock)
+
+
+EvolutionServiceDep = Annotated[EvolutionService, Depends(get_evolution_service)]
+
+
+def get_decision_service(
+    db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> DecisionService:
+    return DecisionService(SqlAlchemyUnitOfWork(db, client), clock=clock)
+
+
+DecisionServiceDep = Annotated[DecisionService, Depends(get_decision_service)]

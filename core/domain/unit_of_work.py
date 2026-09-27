@@ -12,6 +12,8 @@ from core.domain.architecture.repository import ArchitectureRepository
 from core.domain.audit.repository import AuditRepository
 from core.domain.capacity.repository import CapacityAnalysisRepository
 from core.domain.cost.repository import CostAnalysisRepository, PricingSnapshotRepository
+from core.domain.decisions.repository import DecisionRepository
+from core.domain.evolution.repository import EvolutionRepository
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
 from core.domain.observability.repository import ObservabilityAnalysisRepository
 from core.domain.organizations.repository import (
@@ -94,6 +96,12 @@ class UnitOfWork(Protocol):
 
     @property
     def simulations(self) -> SimulationRepository: ...
+
+    @property
+    def evolution(self) -> EvolutionRepository: ...
+
+    @property
+    def decisions(self) -> DecisionRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

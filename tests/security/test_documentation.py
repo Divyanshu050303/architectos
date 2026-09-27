@@ -12,7 +12,9 @@ from core.domain.architecture import errors as architecture_errors
 from core.domain.audit.entities import AuditAction
 from core.domain.capacity import errors as capacity_errors
 from core.domain.cost import errors as cost_errors
+from core.domain.decisions import errors as decision_errors
 from core.domain.errors import DomainError
+from core.domain.evolution import errors as evolution_errors
 from core.domain.observability import errors as observability_errors
 from core.domain.projects import errors as project_errors
 from core.domain.reliability import errors as reliability_errors
@@ -40,6 +42,8 @@ API_DOCS = "".join(
         "security.md",
         "observability.md",
         "simulations.md",
+        "evolution.md",
+        "decisions.md",
     )
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
@@ -61,10 +65,11 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
-    # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability and 6 simulation
-    # endpoints (GET /validation/rules, /capacity/models, /cost/models, /reliability/models,
-    # /security/analyzers, /observability/analyzers and /simulation/catalog are not project-scoped)
-    assert len(served) == 74
+    # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability, 6 simulation, 6
+    # evolution and 8 decision endpoints (GET /validation/rules, /capacity/models, /cost/models,
+    # /reliability/models, /security/analyzers, /observability/analyzers, /simulation/catalog and
+    # /evolution/catalog are not project-scoped)
+    assert len(served) == 88
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -100,6 +105,12 @@ def test_every_error_code_is_documented() -> None:
             observability_errors.ObservabilityAnalysisNotFound,
             simulation_errors.InvalidSimulationRequest,
             simulation_errors.SimulationNotFound,
+            evolution_errors.InvalidEvolutionRequest,
+            evolution_errors.EvolutionAnalysisNotFound,
+            evolution_errors.CandidateNotFound,
+            decision_errors.InvalidDecision,
+            decision_errors.DecisionNotFound,
+            decision_errors.InvalidDecisionTransition,
         )
     }
     assert {code for code in codes if code not in API_DOCS} == set()
@@ -109,7 +120,7 @@ def test_every_audit_action_is_documented() -> None:
     actions = {
         a.value
         for a in AuditAction
-        if a.value.split(".")[0] in {"project", "requirement", "requirement_set", "architecture"}
+        if a.value.split(".")[0] in {"project", "requirement", "requirement_set", "architecture", "decision"}
     }
     assert {a for a in actions if a not in API_DOCS} == set()
 
@@ -134,6 +145,7 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-015-deterministic-security.md",
         "ADR-016-deterministic-observability.md",
         "ADR-017-deterministic-simulation.md",
+        "ADR-018-deterministic-evolution.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
@@ -155,3 +167,5 @@ def test_the_decisions_are_recorded() -> None:
     assert (DOCS / "architecture" / "observability-engine.md").exists()
     assert (DOCS / "frontend" / "simulation-contract.md").exists()
     assert (DOCS / "architecture" / "simulation-engine.md").exists()
+    assert (DOCS / "frontend" / "evolution-contract.md").exists()
+    assert (DOCS / "architecture" / "evolution-engine.md").exists()

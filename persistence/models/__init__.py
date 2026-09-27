@@ -5,7 +5,9 @@ from .audit_log import AuditLogRecord
 from .base import Base
 from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, CapacityComponentRecord
 from .cost import CostAnalysisRecord, CostLineItemRecord
+from .decision import DecisionRecord
 from .email_verification_token import EmailVerificationTokenRecord
+from .evolution import EvolutionAnalysisRecord, EvolutionCandidateRecord
 from .invitation import InvitationRecord
 from .observability import (
     ObservabilityAnalysisRecord,
@@ -38,7 +40,10 @@ __all__ = [
     "CapacityComponentRecord",
     "CostAnalysisRecord",
     "CostLineItemRecord",
+    "DecisionRecord",
     "EmailVerificationTokenRecord",
+    "EvolutionAnalysisRecord",
+    "EvolutionCandidateRecord",
     "InvitationRecord",
     "ObservabilityAnalysisRecord",
     "ObservabilityComponentRecord",

@@ -52,7 +52,9 @@ from core.domain.cost.errors import (
     InvalidPricingSnapshot,
     PricingSnapshotNotFound,
 )
+from core.domain.decisions.errors import DecisionNotFound, InvalidDecision, InvalidDecisionTransition
 from core.domain.errors import DomainError
+from core.domain.evolution.errors import CandidateNotFound, EvolutionAnalysisNotFound, InvalidEvolutionRequest
 from core.domain.identity.errors import (
     AccountDisabled,
     IncorrectPassword,
@@ -222,6 +224,12 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     ObservabilityAnalysisNotFound: 404,
     InvalidSimulationRequest: 422,
     SimulationNotFound: 404,
+    InvalidEvolutionRequest: 422,
+    EvolutionAnalysisNotFound: 404,
+    CandidateNotFound: 404,
+    InvalidDecision: 422,
+    DecisionNotFound: 404,
+    InvalidDecisionTransition: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

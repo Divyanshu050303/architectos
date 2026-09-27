@@ -9,6 +9,8 @@ from persistence.repositories.architectures import SqlAlchemyArchitectureReposit
 from persistence.repositories.audit_logs import SqlAlchemyAuditRepository
 from persistence.repositories.capacity import SqlAlchemyCapacityAnalysisRepository
 from persistence.repositories.cost import SqlAlchemyCostAnalysisRepository
+from persistence.repositories.decisions import SqlAlchemyDecisionRepository
+from persistence.repositories.evolution import SqlAlchemyEvolutionRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.observability import SqlAlchemyObservabilityAnalysisRepository
 from persistence.repositories.organizations import (
@@ -61,6 +63,8 @@ class SqlAlchemyUnitOfWork:
         self.security = SqlAlchemySecurityAnalysisRepository(session)
         self.observability = SqlAlchemyObservabilityAnalysisRepository(session)
         self.simulations = SqlAlchemySimulationRepository(session)
+        self.evolution = SqlAlchemyEvolutionRepository(session)
+        self.decisions = SqlAlchemyDecisionRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

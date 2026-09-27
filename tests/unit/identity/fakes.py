@@ -35,6 +35,10 @@ from core.domain.cost.queries import (
 )
 from core.domain.cost.reports import CostReport
 from core.domain.cost.results import LineItem
+from core.domain.decisions.entities import Decision, DecisionStatus
+from core.domain.evolution.candidates import Candidate
+from core.domain.evolution.queries import CandidateQuery, EvolutionQuery
+from core.domain.evolution.reports import EvolutionReport
 from core.domain.identity.entities import (
     DeletedUserValues,
     NewSession,
@@ -1315,6 +1319,110 @@ class FakeSimulationRepository:
         ]
 
 
+class FakeEvolutionRepository:
+    def __init__(self) -> None:
+        self.reports: dict[uuid.UUID, EvolutionReport] = {}
+        self.stored: dict[uuid.UUID, tuple[Candidate, ...]] = {}
+
+    async def add(self, report: EvolutionReport, candidates: tuple[Candidate, ...]) -> EvolutionReport:
+        self.reports[report.analysis.id] = report
+        self.stored[report.analysis.id] = candidates
+        return report
+
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, analysis_id: uuid.UUID
+    ) -> EvolutionReport | None:
+        report = self.reports.get(analysis_id)
+        if report is None or (report.analysis.project_id, report.analysis.architecture_id) != (
+            project_id,
+            architecture_id,
+        ):
+            return None
+        return report
+
+    async def list_for_architecture(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: EvolutionQuery
+    ) -> list[EvolutionReport]:
+        found = [
+            r
+            for r in self.reports.values()
+            if (r.analysis.project_id, r.analysis.architecture_id) == (project_id, architecture_id)
+            and (query.revision is None or r.analysis.revision_number == query.revision)
+            and (query.after is None or (r.analysis.requested_at, r.analysis.id) < query.after)
+        ]
+        return sorted(found, key=lambda r: (r.analysis.requested_at, r.analysis.id), reverse=True)[
+            : query.limit
+        ]
+
+    def _of(self, project_id: uuid.UUID, analysis_id: uuid.UUID) -> bool:
+        report = self.reports.get(analysis_id)
+        return report is not None and report.analysis.project_id == project_id
+
+    async def list_candidates(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: CandidateQuery
+    ) -> list[tuple[int, Candidate]]:
+        if not self._of(project_id, analysis_id):
+            return []
+        return [
+            (position, c)
+            for position, c in enumerate(self.stored[analysis_id])
+            if (query.category is None or c.category is query.category)
+            and (query.validation is None or c.validation is query.validation)
+            and (query.goal is None or query.goal in c.goals)
+            and (query.after is None or position > query.after)
+        ][: query.limit]
+
+    async def get_candidate(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, candidate_id: str
+    ) -> Candidate | None:
+        if not self._of(project_id, analysis_id):
+            return None
+        return next((c for c in self.stored[analysis_id] if c.id == candidate_id), None)
+
+    async def candidates(self, project_id: uuid.UUID, analysis_id: uuid.UUID) -> tuple[Candidate, ...]:
+        return self.stored[analysis_id] if self._of(project_id, analysis_id) else ()
+
+
+class FakeDecisionRepository:
+    def __init__(self) -> None:
+        self.decisions: dict[uuid.UUID, Decision] = {}
+
+    async def add(self, decision: Decision) -> Decision:
+        self.decisions[decision.id] = decision
+        return decision
+
+    async def update(self, decision: Decision) -> Decision:
+        assert decision.id in self.decisions
+        self.decisions[decision.id] = decision
+        return decision
+
+    async def get(self, project_id: uuid.UUID, decision_id: uuid.UUID) -> Decision | None:
+        decision = self.decisions.get(decision_id)
+        return decision if decision is not None and decision.project_id == project_id else None
+
+    async def next_number(self, project_id: uuid.UUID) -> int:
+        return max((d.number for d in self.decisions.values() if d.project_id == project_id), default=0) + 1
+
+    async def list_for_project(
+        self,
+        project_id: uuid.UUID,
+        *,
+        architecture_id: uuid.UUID | None = None,
+        status: DecisionStatus | None = None,
+        after: int | None = None,
+        limit: int = 50,
+    ) -> list[Decision]:
+        found = [
+            d
+            for d in self.decisions.values()
+            if d.project_id == project_id
+            and (architecture_id is None or d.architecture_id == architecture_id)
+            and (status is None or d.status is status)
+            and (after is None or d.number > after)
+        ]
+        return sorted(found, key=lambda d: d.number)[:limit]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1338,6 +1446,8 @@ class FakeUnitOfWork:
         self._security = FakeSecurityAnalysisRepository()
         self._observability = FakeObservabilityAnalysisRepository()
         self._simulations = FakeSimulationRepository()
+        self._evolution = FakeEvolutionRepository()
+        self._decisions = FakeDecisionRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1424,6 +1534,14 @@ class FakeUnitOfWork:
     @property
     def simulations(self) -> FakeSimulationRepository:
         return self._simulations
+
+    @property
+    def evolution(self) -> FakeEvolutionRepository:
+        return self._evolution
+
+    @property
+    def decisions(self) -> FakeDecisionRepository:
+        return self._decisions
 
     async def __aenter__(self) -> Self:
         return self

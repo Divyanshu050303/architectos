@@ -198,6 +198,37 @@ SPECIFIED = PUBLIC | {
         "/comparisons/{other_simulation_id}",
     ),
     ("GET", "/api/v1/simulation/catalog"),
+    # Milestone 13: evolution analyses of an architecture, and decision records of a project.
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/evolution-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/evolution-analyses"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/evolution-analyses/{evolution_analysis_id}",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/evolution-analyses/{evolution_analysis_id}"
+        "/candidates",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/evolution-analyses/{evolution_analysis_id}"
+        "/candidates/{candidate_id}",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/evolution-analyses/{evolution_analysis_id}"
+        "/alternatives",
+    ),
+    ("GET", "/api/v1/evolution/catalog"),
+    ("POST", "/api/v1/projects/{project_id}/decisions"),
+    ("GET", "/api/v1/projects/{project_id}/decisions"),
+    ("GET", "/api/v1/projects/{project_id}/decisions/{decision_id}"),
+    ("GET", "/api/v1/projects/{project_id}/decisions/{decision_id}/document"),
+    ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/accept"),
+    ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/reject"),
+    ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/supersede"),
+    ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/resulting-revision"),
 }
 
 
