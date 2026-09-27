@@ -20,10 +20,11 @@ sets values, it does not remove them).
 """
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from decimal import Decimal
 
 from core.domain.capacity.analyses import AnalysisRequest
-from core.domain.capacity.ports import CapacityEngine
+from core.domain.capacity.ports import CapacityEngine, EngineOutput
 from core.domain.capacity.results import AnalysisStatus, CapacityResult, Utilization
 from core.domain.capacity.scenarios import ConfigurationChange as CapacityChange
 from core.domain.capacity.scenarios import Scenario as CapacityScenario
@@ -60,6 +61,41 @@ def capacity_scenario(scenario: Scenario) -> tuple[CapacityScenario, tuple[Unsup
     if scenario.workload is not None:
         return scenario.workload.capacity_scenario(scenario.name, tuple(changes)), tuple(unsupported)
     return CapacityScenario(name=scenario.name, changes=tuple(changes)), tuple(unsupported)
+
+
+@dataclass(frozen=True, slots=True)
+class CapacityRun:
+    """The Capacity Engine's baseline and scenario for one simulation, shared by the evaluators."""
+
+    request: AnalysisRequest
+    scenario: CapacityScenario
+    unsupported: tuple[Unsupported, ...]  # what the capacity scenario cannot express
+    output: EngineOutput
+
+    @property
+    def outcome(self) -> ScenarioResult:
+        [outcome] = self.output.scenarios
+        return outcome
+
+
+def capacity_run(context: SimulationContext, engine: CapacityEngine) -> CapacityRun:
+    """The Capacity Engine run of this simulation (its workload profile required), once per
+    simulation: the capacity and the cost evaluators read the same results."""
+    key = ("capacity", "run")
+    if key not in context.memo:
+        request = context.request
+        assert request.workload is not None  # noqa: S101 -- callers check the workload is given
+        scenario, unsupported = capacity_scenario(request.scenario)
+        capacity_request = AnalysisRequest(
+            architecture_id=request.architecture_id,
+            revision_number=request.revision_number,
+            workload=request.workload,
+            entries=request.entries,
+        )
+        output = engine.analyze(context.ir, context.revision, capacity_request, (scenario,))
+        context.memo[key] = CapacityRun(capacity_request, scenario, unsupported, output)
+    run: CapacityRun = context.memo[key]
+    return run
 
 
 def _utilization(result: CapacityResult) -> dict[tuple[str, str], Utilization]:
@@ -160,16 +196,9 @@ class CapacityEvaluator:
     ) -> Evaluation:
         request = context.request
         assert request.workload is not None  # noqa: S101 -- required by the declaration
-        scenario, unsupported = capacity_scenario(request.scenario)
-        capacity_request = AnalysisRequest(
-            architecture_id=request.architecture_id,
-            revision_number=request.revision_number,
-            workload=request.workload,
-            entries=request.entries,
-        )
-        output = self._engine.analyze(context.ir, context.revision, capacity_request, (scenario,))
-        [outcome] = output.scenarios
-        baseline, projected = output.result, outcome.result
+        run_ = capacity_run(context, self._engine)
+        scenario, unsupported, outcome = run_.scenario, run_.unsupported, run_.outcome
+        baseline, projected = run_.output.result, outcome.result
         gaps = unsupported + _failures(overlay) + outcome.unsupported_scaling
         if baseline.status in NOT_CALCULATED and projected.status in NOT_CALCULATED:
             message = "No capacity model applies to the components in scope."

@@ -1,8 +1,8 @@
 """The immutable inputs of one simulation: the exact revision, the request (scenario, analyses,
 workload, entries, pricing inputs, assumptions), the project's in-force requirements, the pricing
-snapshot and the project's cloud provider when cost is asked. Evaluators read it and never change it.
-``fingerprint`` identifies every input besides the architecture's content (which the revision's
-content hash identifies).
+snapshot and the project's cloud provider and currency when cost is asked. Evaluators read it and
+never change it. ``fingerprint`` identifies every input besides the architecture's content (which
+the revision's content hash identifies).
 """
 
 import hashlib
@@ -26,6 +26,7 @@ class SimulationContext:
     requirements: tuple[Requirement, ...] = ()  # the project's in-force requirements
     snapshot: PricingSnapshot | None = None  # the request's pricing snapshot, read by the service
     provider: str | None = None  # the project's cloud provider, for cost
+    currency: str | None = None  # the project's currency, for cost (ISO 4217)
 
     @cached_property
     def memo(self) -> dict[Any, Any]:
@@ -45,5 +46,6 @@ class SimulationContext:
             "requirements": sorted([str(r.id), r.version, r.content.status.value] for r in self.requirements),
             "snapshot": [str(self.snapshot.id), self.snapshot.content_hash] if self.snapshot else None,
             "provider": self.provider,
+            "currency": self.currency,
         }
         return hashlib.sha256(json.dumps(document, sort_keys=True).encode()).hexdigest()
