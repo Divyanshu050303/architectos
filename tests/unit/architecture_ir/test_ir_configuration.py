@@ -137,6 +137,9 @@ def test_connection_configuration() -> None:
         "authentication",
         "data_classification",
         "personal_data",
+        "telemetry",
+        "trace_propagation",
+        "health_check",
     }
 
 

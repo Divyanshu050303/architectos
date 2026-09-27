@@ -182,12 +182,15 @@
               "calls_per_request",
               "data_classification",
               "dead_letter",
+              "health_check",
               "personal_data",
               "pool_size",
               "port",
               "retries",
+              "telemetry",
               "timeout_seconds",
               "tls",
+              "trace_propagation",
               "traffic_ratio"
             ]
           },
@@ -241,6 +244,10 @@
               "description": "Messages that keep failing go to a dead-letter queue.",
               "type": "boolean"
             },
+            "health_check": {
+              "description": "The source checks the target's health over this connection.",
+              "type": "boolean"
+            },
             "personal_data": {
               "description": "The connection carries personal data.",
               "type": "boolean"
@@ -262,6 +269,14 @@
               "minimum": 0,
               "type": "integer"
             },
+            "telemetry": {
+              "description": "The telemetry signals this connection carries from its source: logs, metrics, traces.",
+              "items": {
+                "pattern": "^(logs|metrics|traces)$",
+                "type": "string"
+              },
+              "type": "array"
+            },
             "timeout_seconds": {
               "description": "How long the source waits, in seconds.",
               "pattern": "^-?\\d+(\\.\\d+)?$",
@@ -269,6 +284,10 @@
             },
             "tls": {
               "description": "Traffic is encrypted in transit.",
+              "type": "boolean"
+            },
+            "trace_propagation": {
+              "description": "The trace context is propagated across this connection.",
               "type": "boolean"
             },
             "traffic_ratio": {
@@ -463,6 +482,8 @@
         "unknown": {
           "items": {
             "enum": [
+              "alert_delivery",
+              "alerts",
               "audit_logging",
               "authentication",
               "authorization",
@@ -475,9 +496,11 @@
               "backup_interval_seconds",
               "backup_retention_seconds",
               "boundary_type",
+              "correlation_ids",
               "cpu_core_seconds_per_request",
               "cpu_limit_cores",
               "cpu_request_cores",
+              "criticality",
               "data_classification",
               "deployment_model",
               "encryption_at_rest",
@@ -486,16 +509,20 @@
               "failover_mode",
               "failover_seconds",
               "failure_independence",
+              "health_check",
               "instance_class",
+              "logs",
               "management_interface",
               "max_connections",
               "memory_limit_bytes",
               "memory_request_bytes",
+              "metrics",
               "min_healthy_replicas",
               "mtbf_seconds",
               "mttr_seconds",
               "multi_az",
               "network_bandwidth_bytes_per_second",
+              "owner",
               "partitions",
               "persistence",
               "personal_data",
@@ -518,8 +545,12 @@
               "secrets_required",
               "sensitive_operations",
               "storage_bytes",
+              "structured_logs",
               "throughput_limit_per_second",
               "throughput_per_replica_per_second",
+              "trace_context",
+              "trace_sampling_ratio",
+              "traces",
               "trust_level"
             ]
           },
@@ -529,6 +560,24 @@
         "values": {
           "additionalProperties": false,
           "properties": {
+            "alert_delivery": {
+              "description": "How the observability system delivers alerts: none, email, chat, paging or other.",
+              "enum": [
+                "chat",
+                "email",
+                "none",
+                "other",
+                "paging"
+              ]
+            },
+            "alerts": {
+              "description": "The signals alert rules watch for it: a metric kind, health or logs.",
+              "items": {
+                "pattern": "^(errors|latency|throughput|saturation|resources|availability|health|logs)$",
+                "type": "string"
+              },
+              "type": "array"
+            },
             "audit_logging": {
               "description": "Security-relevant actions on it are recorded in an audit log.",
               "type": "boolean"
@@ -611,6 +660,10 @@
                 "trust_zone"
               ]
             },
+            "correlation_ids": {
+              "description": "Its logs carry the request's correlation identifier.",
+              "type": "boolean"
+            },
             "cpu_core_seconds_per_request": {
               "description": "CPU time one unit of work costs, in core-seconds (0.02 = 20 ms of one core).",
               "pattern": "^-?\\d+(\\.\\d+)?$",
@@ -625,6 +678,13 @@
               "description": "CPU reserved per instance, in cores.",
               "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
+            },
+            "criticality": {
+              "description": "How much the system depends on it being observable: critical or standard.",
+              "enum": [
+                "critical",
+                "standard"
+              ]
             },
             "data_classification": {
               "description": "The most sensitive data it holds or handles.",
@@ -692,10 +752,18 @@
                 "unknown"
               ]
             },
+            "health_check": {
+              "description": "It exposes a health check.",
+              "type": "boolean"
+            },
             "instance_class": {
               "description": "Provider instance class, e.g. db.r6g.large.",
               "minLength": 1,
               "type": "string"
+            },
+            "logs": {
+              "description": "It emits logs.",
+              "type": "boolean"
             },
             "management_interface": {
               "description": "It exposes an administrative or management interface.",
@@ -715,6 +783,14 @@
               "description": "Memory reserved per instance, in bytes.",
               "minimum": 0,
               "type": "integer"
+            },
+            "metrics": {
+              "description": "The kinds of metrics it exposes: errors, latency, throughput, saturation, resources or availability.",
+              "items": {
+                "pattern": "^(errors|latency|throughput|saturation|resources|availability)$",
+                "type": "string"
+              },
+              "type": "array"
             },
             "min_healthy_replicas": {
               "description": "Fewest healthy replicas the component needs to serve (k of n).",
@@ -739,6 +815,12 @@
               "description": "Network throughput available to the component, in bytes per second.",
               "minimum": 0,
               "type": "integer"
+            },
+            "owner": {
+              "description": "The team or rotation responsible for it, e.g. payments-oncall.",
+              "minLength": 1,
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
             },
             "partitions": {
               "description": "Partitions (or shards) of the queue or topic.",
@@ -865,6 +947,10 @@
               "minimum": 0,
               "type": "integer"
             },
+            "structured_logs": {
+              "description": "Its logs are structured (e.g. JSON).",
+              "type": "boolean"
+            },
             "throughput_limit_per_second": {
               "description": "Most units of work (requests, operations or events) the component handles per second, in total.",
               "pattern": "^-?\\d+(\\.\\d+)?$",
@@ -874,6 +960,22 @@
               "description": "Most units of work one replica handles per second.",
               "pattern": "^-?\\d+(\\.\\d+)?$",
               "type": "string"
+            },
+            "trace_context": {
+              "description": "What it does with an incoming trace context: propagate it downstream, or terminate it.",
+              "enum": [
+                "propagate",
+                "terminate"
+              ]
+            },
+            "trace_sampling_ratio": {
+              "description": "Share of its traces kept, as configured (0.1 = 10 %).",
+              "pattern": "^-?\\d+(\\.\\d+)?$",
+              "type": "string"
+            },
+            "traces": {
+              "description": "It emits trace spans.",
+              "type": "boolean"
             },
             "trust_level": {
               "description": "How far what runs inside a trust zone (boundary_type trust_zone) is trusted.",

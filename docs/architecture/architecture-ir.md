@@ -112,6 +112,14 @@ reached:
   `secret_rotation`, `audit_logging`, on boundaries `trust_level` (for `trust_zone` boundaries), on
   connections `authentication`, `data_classification`, `personal_data`: what the architecture
   models, never proof that a control is implemented, and never assumed when absent.
+  Observability on nodes `criticality` (`critical`/`standard`), `logs`, `structured_logs`,
+  `correlation_ids`, `metrics` (kinds: `errors`, `latency`, `throughput`, `saturation`,
+  `resources`, `availability`), `traces`, `trace_context` (`propagate`/`terminate`),
+  `trace_sampling_ratio`, `health_check`, `alerts` (the signals alert rules watch), `owner`, on
+  observability nodes `alert_delivery`; on connections `telemetry` (the signals carried: `logs`,
+  `metrics`, `traces`), `trace_propagation`, `health_check` (the source checks the target): what the
+  architecture models about its instrumentation, never proof that telemetry is emitted, collected or
+  acted on, and never assumed when absent.
 - `unknown`: known properties whose value is **not known** (discovery could not read it). Unknown
   is never the same as absent, and never filled in.
 - `extra`: settings the IR does not recognize, **preserved as found** (bounded; fractional numbers
@@ -251,7 +259,7 @@ domain, never in the ORM models.
 | Reliability | `critical`, `multi_az`, `availability_zones`, `replication_*`, `dependents_of` |
 | Security | trust zones and `trust_level`, the security properties above, `tls`, protocols, direction, external nodes, and the names (never the values) of preserved settings that look like secrets |
 | Cost | technologies, `instance_class`, sizes, replicas |
-| Observability | observability nodes and what reaches them |
+| Observability | criticality, the observability properties above, observability nodes and the telemetry connections reaching them, request paths for trace propagation |
 | Simulation | a stable revision: its number and content hash identify exactly what was simulated |
 | Discovery | produces an IR with `terraform`/`kubernetes`/`cloud_discovery` provenance, `unknown` values and preserved `extra` settings |
 | Evolution, migration | the diff between revisions |
