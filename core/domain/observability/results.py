@@ -11,8 +11,30 @@ works in production.
 - A **check** is the verdict for one requirement or policy rule (``core/domain/checks.py``):
   satisfied or violated by modeled evidence only, never a pass on missing evidence. An objective
   being measurable is never the objective being met: no attainment is computed.
-- The **summary** counts coverage states per dimension, over every component in scope and over the
-  components declared critical; nothing is a percentage.
+- The **summary** aggregates by counting only (``summary``); nothing is a percentage, a score or a
+  maturity level, and every number is reproducible from the components, findings and checks of the
+  result (``ObservabilityResult.from_dict(result.to_dict()).summary() == result.summary()``):
+
+  - ``scope``: the components analyzed (the request's scope, else every component; clients and
+    boundaries are not components), those **eligible** (every dimension applies) and those
+    **unsupported** (third parties: every dimension ``unsupported``). Unsupported components are
+    counted apart, never folded into another state.
+  - ``coverage`` / ``critical_coverage``: per dimension, how many components (all, or those declared
+    critical) are in each state — every state listed, zeros included. A component counts once per
+    dimension; states are never combined across dimensions into one number.
+  - ``collection``: per telemetry signal (logs, metrics, traces), how many components declare it,
+    and of those how many have a modeled path to an observability component (``collected``: coverage
+    ``modeled``) or not (``not_collected``: ``partial``). Components not declaring it are in
+    ``coverage`` (``absent`` or ``unknown``).
+  - ``objectives``: SLO measurability — the verdicts of the ``objective_measurable`` and
+    ``objective_alerted`` checks, and ``unsupported_requirements`` (requirement checks with no
+    supported condition). A satisfied check is a traceable indicator, never an attained objective.
+  - ``findings`` / ``bases`` / ``categories`` / ``checks``: counts by severity, basis, category and
+    verdict. Severity is the finding's, kept apart from coverage: a coverage state has no severity.
+  - ``priorities``: the ids of the first findings in **priority order** (``PRIORITY_SHOWN`` at most):
+    severity (critical first), then basis (``violation``, ``control_gap``, ``potential_risk``,
+    ``not_evaluable`` — a modeled contradiction before a modeled gap before an unknown), then type
+    and id. The same order sorts ``findings``.
 """
 
 import hashlib
@@ -40,9 +62,17 @@ from core.domain.engine_results import FindingBasis as FindingBasis  # noqa: PLC
 from core.domain.validation.results import Severity, Verdict
 
 from .errors import InvalidObservabilityResult
-from .values import CoverageState, Dimension
+from .values import SIGNAL_OF, CoverageState, Dimension
 
 FINDING_ID = re.compile(r"^obs_[0-9a-f]{16}$")
+PRIORITY_SHOWN = 10
+BASIS_ORDER = (
+    FindingBasis.VIOLATION,
+    FindingBasis.CONTROL_GAP,
+    FindingBasis.POTENTIAL_RISK,
+    FindingBasis.NOT_EVALUABLE,
+)
+COLLECTED = (Dimension.LOGGING, Dimension.METRICS, Dimension.TRACING)  # dimensions with a collection path
 
 __all__ = ["MAX_ELEMENTS"]
 
@@ -212,8 +242,9 @@ class ObservabilityFinding:
                 parts.append(str(extra))
         return "obs_" + hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:16]
 
-    def sort_key(self) -> tuple[int, str, str]:
-        return (list(Severity).index(self.severity), self.type.value, self.id)
+    def sort_key(self) -> tuple[int, int, str, str]:
+        """Priority order (see the module doc): severity, basis, type, id."""
+        return (list(Severity).index(self.severity), BASIS_ORDER.index(self.basis), self.type.value, self.id)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -403,16 +434,23 @@ class ObservabilityResult:
         return ObservabilityStatus.PARTIAL
 
     def summary(self) -> dict[str, Any]:
-        """Counts only — coverage states per dimension (all components in scope, and those declared
-        critical), findings by severity, basis and category, checks by verdict. No score, no
-        percentage: every count is reproducible from the components, findings and checks."""
+        """Counts only, reproducible from the components, findings and checks (see the module doc for
+        every aggregation rule). No score, no percentage."""
         critical = tuple(c for c in self.components if c.criticality == "critical")
+        unsupported = sum(
+            1 for c in self.components if all(s is CoverageState.UNSUPPORTED for s in c.coverage.values())
+        )
         severities = Counter(f.severity.value for f in self.findings)
         bases = Counter(f.basis.value for f in self.findings)
         categories = Counter(f.category.value for f in self.findings)
         verdicts = Counter(c.verdict.value for c in self.checks)
         criticality = Counter(c.criticality or "not_modeled" for c in self.components)
         return {
+            "scope": {
+                "components": len(self.components),
+                "eligible": len(self.components) - unsupported,
+                "unsupported": unsupported,
+            },
             "components": len(self.components),
             "criticality": {k: criticality.get(k, 0) for k in ("critical", "standard", "not_modeled")},
             "coverage": coverage_counts(self.components),
@@ -421,7 +459,37 @@ class ObservabilityResult:
             "bases": {b.value: bases.get(b.value, 0) for b in FindingBasis},
             "categories": {c.value: categories.get(c.value, 0) for c in FindingCategory},
             "checks": {v.value: verdicts.get(v.value, 0) for v in Verdict},
+            "collection": self._collection(),
+            "objectives": self._objectives(),
+            "priorities": [f.id for f in self.findings[:PRIORITY_SHOWN]],
             "unsupported": len(self.unsupported),
+        }
+
+    def _collection(self) -> dict[str, dict[str, int]]:
+        found: dict[str, dict[str, int]] = {}
+        for dimension in COLLECTED:
+            states = Counter(c.coverage[dimension] for c in self.components)
+            collected, uncollected = states[CoverageState.MODELED], states[CoverageState.PARTIAL]
+            found[SIGNAL_OF[dimension]] = {
+                "declared": collected + uncollected,
+                "collected": collected,
+                "not_collected": uncollected,
+            }
+        return found
+
+    def _objectives(self) -> dict[str, Any]:
+        def verdicts(condition: Condition) -> dict[str, int]:
+            counts = Counter(c.verdict.value for c in self.checks if c.condition is condition)
+            return {v.value: counts.get(v.value, 0) for v in Verdict}
+
+        return {
+            "measurable": verdicts(Condition.OBJECTIVE_MEASURABLE),
+            "alerted": verdicts(Condition.OBJECTIVE_ALERTED),
+            "unsupported_requirements": sum(
+                1
+                for c in self.checks
+                if c.condition is Condition.UNSUPPORTED and c.source is CheckSource.REQUIREMENT
+            ),
         }
 
     def to_dict(self) -> dict[str, Any]:
