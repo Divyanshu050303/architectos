@@ -2,7 +2,9 @@
 of these commands, applied as a pure function to produce the next state.
 
 They mirror the web app's editing commands (add, remove, connect, disconnect, rename, configure,
-scale). Layout ("move") is not among them: it never changes the architecture.
+scale). Layout ("move") is not among them: it never changes the architecture. Configuring a
+connection (``UpdateConnectionConfiguration``) is used by simulations to apply a scenario to an
+in-memory copy; the editing API does not offer it yet.
 
 Rules beyond the web app's:
 
@@ -72,6 +74,12 @@ class UpdateConfiguration:
 
 
 @dataclass(frozen=True, slots=True)
+class UpdateConnectionConfiguration:
+    connection_id: str
+    values: Mapping[str, ConfigValue | None]  # None clears the property
+
+
+@dataclass(frozen=True, slots=True)
 class ChangeReplicas:
     node_id: str
     replicas: int
@@ -84,6 +92,7 @@ type Command = (
     | RemoveConnections
     | RenameNode
     | UpdateConfiguration
+    | UpdateConnectionConfiguration
     | ChangeReplicas
 )
 
@@ -94,6 +103,7 @@ COMMAND_NAMES: dict[type[Any], str] = {
     RemoveConnections: "remove_connections",
     RenameNode: "rename_node",
     UpdateConfiguration: "update_configuration",
+    UpdateConnectionConfiguration: "update_connection_configuration",
     ChangeReplicas: "change_replicas",
 }
 
@@ -122,6 +132,12 @@ class _Draft:
             raise _Refused("unknown_node", f"There is no node {node_id!r}.", node_id)
         return node
 
+    def connection(self, connection_id: str) -> Connection:
+        connection = self.connections.get(connection_id)
+        if connection is None:
+            raise _Refused("unknown_connection", f"There is no connection {connection_id!r}.", connection_id)
+        return connection
+
     def forget(self, removed: set[str]) -> None:
         """Drop removed elements from the subjects of assumptions and decisions."""
         self.assumptions = [
@@ -134,13 +150,15 @@ class _Draft:
         ]
 
 
-def _stamp(node: Node, fields: Sequence[str], provenance: Provenance | None) -> Node:
+def _stamp[E: (Node, Connection)](node: E, fields: Sequence[str], provenance: Provenance | None) -> E:
     if provenance is None or not fields:
         return node
     return replace(node, field_provenance={**node.field_provenance, **dict.fromkeys(fields, provenance)})
 
 
-def _configure(node: Node, values: Mapping[str, ConfigValue | None], provenance: Provenance | None) -> Node:
+def _configure[E: (Node, Connection)](
+    node: E, values: Mapping[str, ConfigValue | None], provenance: Provenance | None
+) -> E:
     current = node.configuration
     cleared = {k for k, v in values.items() if v is None}
     merged = {k: v for k, v in {**current.values, **values}.items() if k not in cleared and v is not None}
@@ -207,6 +225,8 @@ def _apply(draft: _Draft, command: Command, provenance: Provenance | None) -> No
             )
         case UpdateConfiguration(node_id=node_id, values=values):
             draft.nodes[node_id] = _configure(draft.node(node_id), values, provenance)
+        case UpdateConnectionConfiguration(connection_id=connection_id, values=values):
+            draft.connections[connection_id] = _configure(draft.connection(connection_id), values, provenance)
         case ChangeReplicas(node_id=node_id, replicas=replicas):
             draft.nodes[node_id] = _configure(draft.node(node_id), {"replicas": replicas}, provenance)
 

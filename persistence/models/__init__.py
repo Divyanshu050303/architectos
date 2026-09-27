@@ -23,6 +23,7 @@ from .requirement_analysis import RequirementAnalysisRecord
 from .requirement_set import RequirementSetItemRecord, RequirementSetRecord
 from .security import SecurityAnalysisRecord, SecurityComponentRecord, SecurityFindingRecord
 from .session import SessionRecord
+from .simulation import SimulationComponentRecord, SimulationDeltaRecord, SimulationRecord
 from .user import UserRecord
 from .validation import ValidationFindingRecord, ValidationRunRecord
 
@@ -60,6 +61,9 @@ __all__ = [
     "SecurityComponentRecord",
     "SecurityFindingRecord",
     "SessionRecord",
+    "SimulationComponentRecord",
+    "SimulationDeltaRecord",
+    "SimulationRecord",
     "UserRecord",
     "ValidationFindingRecord",
     "ValidationRunRecord",

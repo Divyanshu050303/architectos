@@ -180,6 +180,24 @@ SPECIFIED = PUBLIC | {
         "/api/v1/projects/{project_id}/architectures/{architecture_id}/observability-analyses/{observability_analysis_id}/findings",
     ),
     ("GET", "/api/v1/observability/analyzers"),
+    # Milestone 12: simulations of an architecture.
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/simulations"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/simulations"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/simulations/{simulation_id}"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/simulations/{simulation_id}/components",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/simulations/{simulation_id}/deltas",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/simulations/{simulation_id}"
+        "/comparisons/{other_simulation_id}",
+    ),
+    ("GET", "/api/v1/simulation/catalog"),
 }
 
 

@@ -57,6 +57,7 @@ class AuditAction(StrEnum):
     ARCHITECTURE_OBSERVABILITY_ANALYZED = (
         "architecture.observability_analyzed"  # an observability analysis was stored
     )
+    ARCHITECTURE_SIMULATED = "architecture.simulated"  # a simulation was stored
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

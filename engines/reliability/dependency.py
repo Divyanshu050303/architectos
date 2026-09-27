@@ -74,8 +74,14 @@ class Closure:
         )
 
 
-def closure(topology: Topology, entry: str, avoid: frozenset[str] = frozenset()) -> Closure:
-    """What ``entry`` requires, never entering the nodes in ``avoid``."""
+def closure(
+    topology: Topology,
+    entry: str,
+    avoid: frozenset[str] = frozenset(),
+    avoid_connections: frozenset[str] = frozenset(),
+) -> Closure:
+    """What ``entry`` requires, never entering the nodes in ``avoid`` nor following the connections in
+    ``avoid_connections`` (a simulation's unavailable elements)."""
     seen, order = {entry}, [entry]
     required: list[str] = []
     optional: list[str] = []
@@ -84,7 +90,7 @@ def closure(topology: Topology, entry: str, avoid: frozenset[str] = frozenset())
         for connection in sorted(topology.outgoing(queue.popleft()), key=lambda c: c.id):
             match role(connection):
                 case Role.REQUIRED:
-                    if connection.target_id in avoid:
+                    if connection.target_id in avoid or connection.id in avoid_connections:
                         continue
                     required.append(connection.id)
                     if connection.target_id not in seen:

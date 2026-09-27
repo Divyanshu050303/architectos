@@ -45,6 +45,8 @@ class Operation:
             .replace("{reliability_analysis_id}", str(uuid.uuid4()))
             .replace("{security_analysis_id}", str(uuid.uuid4()))
             .replace("{observability_analysis_id}", str(uuid.uuid4()))
+            .replace("{simulation_id}", str(uuid.uuid4()))
+            .replace("{other_simulation_id}", str(uuid.uuid4()))
             .replace("{snapshot_id}", str(uuid.uuid4()))
             .replace("{invitation_token}", "A" * 43)
         ) + ("?from=1&to=1" if url.endswith("/compare") else "")

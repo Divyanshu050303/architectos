@@ -268,6 +268,8 @@ def test_there_is_one_validation_framework() -> None:
         "engines/security/engine.py: Registry",
         # And the observability engine's registry of observability analyzers (Milestone 11).
         "engines/observability/engine.py: Registry",
+        # And the simulation engine's registry of evaluators (Milestone 12): each wraps an engine.
+        "engines/simulation/engine.py: Registry",
     }
     assert set(found) - allowed == set()
 

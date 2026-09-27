@@ -86,6 +86,9 @@ from core.domain.security.queries import SecurityAnalysisQuery, SecurityComponen
 from core.domain.security.reports import SecurityReport
 from core.domain.security.results import ComponentResult as SecurityComponent
 from core.domain.security.results import SecurityFinding
+from core.domain.simulations.queries import SimulationComponentQuery, SimulationDeltaQuery, SimulationQuery
+from core.domain.simulations.reports import SimulationReport
+from core.domain.simulations.results import ComponentOutcome, Delta
 from core.domain.validation.queries import FindingQuery, RunQuery
 from core.domain.validation.results import Finding
 from core.domain.validation.runs import RunInputs, RunReport, ValidationRun
@@ -1232,6 +1235,86 @@ class FakeObservabilityAnalysisRepository(
         ][: query.limit]
 
 
+class FakeSimulationRepository:
+    def __init__(self) -> None:
+        self.reports: dict[uuid.UUID, SimulationReport] = {}
+        self.components: dict[uuid.UUID, tuple[ComponentOutcome, ...]] = {}
+        self.deltas: dict[uuid.UUID, tuple[Delta, ...]] = {}
+
+    async def add(
+        self, report: SimulationReport, components: tuple[ComponentOutcome, ...], deltas: tuple[Delta, ...]
+    ) -> SimulationReport:
+        self.reports[report.simulation.id] = report
+        self.components[report.simulation.id] = components
+        self.deltas[report.simulation.id] = deltas
+        return report
+
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, simulation_id: uuid.UUID
+    ) -> SimulationReport | None:
+        report = self.reports.get(simulation_id)
+        if report is None or (report.simulation.project_id, report.simulation.architecture_id) != (
+            project_id,
+            architecture_id,
+        ):
+            return None
+        return report
+
+    async def list_for_architecture(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: SimulationQuery
+    ) -> list[SimulationReport]:
+        found = [
+            r
+            for r in self.reports.values()
+            if (r.simulation.project_id, r.simulation.architecture_id) == (project_id, architecture_id)
+            and (query.revision is None or r.simulation.revision_number == query.revision)
+            and (query.after is None or (r.simulation.requested_at, r.simulation.id) < query.after)
+        ]
+        return sorted(found, key=lambda r: (r.simulation.requested_at, r.simulation.id), reverse=True)[
+            : query.limit
+        ]
+
+    def _of(self, project_id: uuid.UUID, simulation_id: uuid.UUID) -> bool:
+        report = self.reports.get(simulation_id)
+        return report is not None and report.simulation.project_id == project_id
+
+    async def list_components(
+        self, project_id: uuid.UUID, simulation_id: uuid.UUID, query: SimulationComponentQuery
+    ) -> list[ComponentOutcome]:
+        if not self._of(project_id, simulation_id):
+            return []
+        return [
+            c
+            for c in sorted(self.components[simulation_id], key=lambda c: c.node_id)
+            if (query.unavailable is None or c.unavailable is query.unavailable)
+            and (query.impact is None or c.impact is query.impact)
+            and (query.after is None or c.node_id > query.after)
+        ][: query.limit]
+
+    async def list_deltas(
+        self, project_id: uuid.UUID, simulation_id: uuid.UUID, query: SimulationDeltaQuery
+    ) -> list[tuple[int, Delta]]:
+        if not self._of(project_id, simulation_id):
+            return []
+        return [
+            (position, d)
+            for position, d in enumerate(self.deltas[simulation_id])
+            if (query.analysis is None or d.analysis is query.analysis)
+            and (query.element_id is None or d.element_id == query.element_id)
+            and (query.comparable is None or d.comparable is query.comparable)
+            and (query.after is None or position > query.after)
+        ][: query.limit]
+
+    async def rows(
+        self, project_id: uuid.UUID, simulation_id: uuid.UUID
+    ) -> tuple[tuple[ComponentOutcome, ...], tuple[Delta, ...]]:
+        if not self._of(project_id, simulation_id):
+            return (), ()
+        return tuple(sorted(self.components[simulation_id], key=lambda c: c.node_id)), self.deltas[
+            simulation_id
+        ]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1254,6 +1337,7 @@ class FakeUnitOfWork:
         self._reliability = FakeReliabilityAnalysisRepository()
         self._security = FakeSecurityAnalysisRepository()
         self._observability = FakeObservabilityAnalysisRepository()
+        self._simulations = FakeSimulationRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1336,6 +1420,10 @@ class FakeUnitOfWork:
     @property
     def observability(self) -> FakeObservabilityAnalysisRepository:
         return self._observability
+
+    @property
+    def simulations(self) -> FakeSimulationRepository:
+        return self._simulations
 
     async def __aenter__(self) -> Self:
         return self

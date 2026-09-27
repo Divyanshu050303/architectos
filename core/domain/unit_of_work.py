@@ -27,6 +27,7 @@ from core.domain.requirements.repository import (
     RequirementSetRepository,
 )
 from core.domain.security.repository import SecurityAnalysisRepository
+from core.domain.simulations.repository import SimulationRepository
 from core.domain.validation.repository import ValidationRunRepository
 
 
@@ -90,6 +91,9 @@ class UnitOfWork(Protocol):
 
     @property
     def observability(self) -> ObservabilityAnalysisRepository: ...
+
+    @property
+    def simulations(self) -> SimulationRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

@@ -21,6 +21,7 @@ from core.domain.requirements.enums import RequirementType
 from core.domain.requirements.requirements import METRICS
 from core.domain.requirements.value_objects import UNITS
 from core.domain.security import errors as security_errors
+from core.domain.simulations import errors as simulation_errors
 from core.domain.validation.errors import InvalidValidationConfig, ValidationRunNotFound
 
 from .support import inventory
@@ -38,6 +39,7 @@ API_DOCS = "".join(
         "reliability.md",
         "security.md",
         "observability.md",
+        "simulations.md",
     )
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
@@ -59,10 +61,10 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
-    # validation, 6 capacity, 4 cost, 5 reliability, 5 security and 5 observability endpoints
-    # (GET /validation/rules, /capacity/models, /cost/models, /reliability/models,
-    # /security/analyzers and /observability/analyzers are not project-scoped)
-    assert len(served) == 68
+    # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability and 6 simulation
+    # endpoints (GET /validation/rules, /capacity/models, /cost/models, /reliability/models,
+    # /security/analyzers, /observability/analyzers and /simulation/catalog are not project-scoped)
+    assert len(served) == 74
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -96,6 +98,8 @@ def test_every_error_code_is_documented() -> None:
             security_errors.SecurityAnalysisNotFound,
             observability_errors.InvalidObservabilityRequest,
             observability_errors.ObservabilityAnalysisNotFound,
+            simulation_errors.InvalidSimulationRequest,
+            simulation_errors.SimulationNotFound,
         )
     }
     assert {code for code in codes if code not in API_DOCS} == set()
@@ -129,6 +133,7 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-014-deterministic-reliability.md",
         "ADR-015-deterministic-security.md",
         "ADR-016-deterministic-observability.md",
+        "ADR-017-deterministic-simulation.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
@@ -148,3 +153,5 @@ def test_the_decisions_are_recorded() -> None:
     assert (DOCS / "architecture" / "security-engine.md").exists()
     assert (DOCS / "frontend" / "observability-contract.md").exists()
     assert (DOCS / "architecture" / "observability-engine.md").exists()
+    assert (DOCS / "frontend" / "simulation-contract.md").exists()
+    assert (DOCS / "architecture" / "simulation-engine.md").exists()
