@@ -95,6 +95,7 @@ class SecurityFindingModel(ApiModel):
     threat: StrideCategory | None = Field(description="STRIDE category of a threat candidate.")
     requirement_id: str | None
     policy_rule: str | None
+    check_key: str | None = Field(description="The check a requirement or policy finding reports.")
 
 
 class SecurityFindingPage(ApiModel):

@@ -84,7 +84,8 @@ not (`missing`).
 `GET …/findings?severity=&type=&category=&basis=&certainty=&threat=&cursor=&limit=`, most severe
 first: `{id (stable, sec_…), type, category, basis, severity, certainty (modeled | candidate), title,
 explanation, recommendation, nodeIds, connectionIds, boundaryIds, evidence, assumptions, missing,
-analyzerId, analyzerVersion, threat, requirementId, policyRule}`. `basis` keeps the kinds apart:
+analyzerId, analyzerVersion, threat, requirementId, policyRule, checkKey (the check a requirement or
+policy finding reports)}`. `basis` keeps the kinds apart:
 `control_gap` (a control declared absent where it matters), `potential_risk` (the model could allow
 harm), `violation` (a requirement or policy contradicted by modeled evidence), `not_evaluable` (not
 modeled enough to decide). Types: `unprotected_boundary_crossing`, `crossing_controls_not_modeled`,

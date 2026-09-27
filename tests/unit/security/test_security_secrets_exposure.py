@@ -111,6 +111,15 @@ def test_a_secret_looking_setting_is_reported_by_name_and_never_shown() -> None:
         assert secret not in shown
 
 
+def test_a_dotted_secret_key_is_found() -> None:
+    """Review finding: ``password.hash`` was not recognized, so no finding was produced."""
+    api = node("api", configuration=Configuration(extra={"password.hash": "s3cr3t"}))
+    [risk] = run([api]).findings
+    assert [(e.label, e.value) for e in risk.evidence] == [
+        ("api.configuration.extra.password.hash", REDACTED)
+    ]
+
+
 def test_settings_on_connections_are_examined_too() -> None:
     link = call("api", "db", configuration=Configuration(extra={"connection_password": "x"}))
     [risk] = run([component("api"), component("db", NodeKind.DATABASE)], [link]).findings

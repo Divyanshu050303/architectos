@@ -62,10 +62,27 @@ _CLOSED = frozenset(
 )
 
 
+def _key_after(path: str, marker: str) -> str | None:
+    """The key under ``marker`` (``configuration.extra.`` or ``metadata.``), whole — dots included —
+    whether ``path`` starts with the marker or has it after an element id; None without it."""
+    if path.startswith(marker):
+        return path[len(marker) :]
+    index = path.find("." + marker)
+    return None if index < 0 else path[index + 1 + len(marker) :]
+
+
 def is_secret_path(path: str) -> bool:
     """Whether the value at ``path`` (``configuration.x``, ``configuration.extra.x``,
-    ``metadata.x``, possibly after an element id: ``api.configuration.x``) must never be shown: its
-    name looks like a secret and it is not a closed typed property directly under ``configuration``."""
+    ``metadata.x``, possibly after an element id: ``api.configuration.x``) must never be shown.
+
+    A preserved setting's or metadata entry's key is tested whole: a key may itself contain dots
+    (``password.hash``), so the secret-looking word can be anywhere in it. A typed property directly
+    under ``configuration`` is tested by its name, and shown when its values are a closed set. When
+    a path is ambiguous, it is judged a secret: redacting too much is safe, showing too much is not."""
+    for marker in ("configuration.extra.", "metadata."):
+        key = _key_after(path, marker)
+        if key is not None:
+            return bool(SECRET_FIELD.search(key))
     head, _, name = path.rpartition(".")
     typed = name in _CLOSED and (head == "configuration" or head.endswith(".configuration"))
     return bool(SECRET_FIELD.search(name)) and not typed

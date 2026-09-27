@@ -311,6 +311,30 @@ def test_requirements_follow_their_scope_and_references() -> None:
     )
 
 
+def test_each_condition_of_a_requirement_is_its_own_finding() -> None:
+    """Review finding: two conditions violated on the same element shared one finding id, and one
+    violation was dropped."""
+    req = requirement(
+        1, "authorization", "All admin operations on sensitive resources must be authorized and audited"
+    )
+    nodes = [component("admin-api", sensitive_operations=True, authorization="none", audit_logging=False)]
+    result = run(nodes, requirements=[req])
+    violated = findings(result, T.REQUIREMENT_VIOLATED)
+    assert sorted(f.check_key or "" for f in violated) == [
+        "requirement.req-1.audit_logging",
+        "requirement.req-1.authorization_on_sensitive",
+    ]
+    assert {c.key for c in result.checks} == {f.check_key for f in violated}  # each finding names its check
+
+
+def test_unencrypted_speaks_of_encrypting() -> None:
+    """Review finding: "unencrypted" was not recognized, so the requirement went unchecked."""
+    req = requirement(2, "pii", "Personal data must never be stored unencrypted in the database.")
+    db = component("db", NodeKind.DATABASE, personal_data=True, encryption_at_rest=False)
+    found = check(run([db], requirements=[req]), "requirement.req-2")
+    assert (found.condition, found.verdict) == (Condition.ENCRYPTION_AT_REST, Verdict.VIOLATED)
+
+
 def test_only_security_requirements_in_force_are_evaluated() -> None:
     draft = requirement(4, "encryption", "Data is encrypted at rest.", status=RequirementStatus.DRAFT)
     assert run([component("db", NodeKind.DATABASE)], requirements=[draft]).checks == ()

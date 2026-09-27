@@ -203,12 +203,16 @@ class SecurityFinding:
     threat: StrideCategory | None = None  # threat candidates only (part of the identity)
     requirement_id: str | None = None  # the requirement it concerns (part of the identity)
     policy_rule: str | None = None  # the policy field it concerns (part of the identity)
+    # the check it reports (requirement and policy findings; part of the identity: one requirement
+    # can be checked as several conditions, each its own finding)
+    check_key: str | None = None
 
     def __post_init__(self) -> None:
         for name in ("node_ids", "connection_ids", "boundary_ids", "missing", "assumptions"):
             _sorted(self, name)
         threat = self.type is FindingType.THREAT_CANDIDATE
         category = TYPES[self.type][0] if isinstance(self.type, FindingType) else None
+        checked = category in {FindingCategory.REQUIREMENT, FindingCategory.POLICY}
         _check(
             [
                 None if isinstance(self.type, FindingType) else "type",
@@ -234,6 +238,8 @@ class SecurityFinding:
                 else "policy_rule",
                 text_problem(self.requirement_id, "requirement_id", required=False),
                 text_problem(self.policy_rule, "policy_rule", required=False),
+                None if (self.check_key is not None) == checked else "check_key",
+                text_problem(self.check_key, "check_key", required=False),
             ]
         )
 
@@ -247,15 +253,15 @@ class SecurityFinding:
 
     @property
     def id(self) -> str:
-        """Stable: the same type about the same elements (and threat, requirement or policy rule)
-        has the same id in every analysis."""
+        """Stable: the same type about the same elements (and threat, requirement, policy rule or
+        check) has the same id in every analysis."""
         parts: list[Any] = [
             self.type.value,
             list(self.node_ids),
             list(self.connection_ids),
             list(self.boundary_ids),
         ]
-        for extra in (self.threat, self.requirement_id, self.policy_rule):
+        for extra in (self.threat, self.requirement_id, self.policy_rule, self.check_key):
             if extra is not None:
                 parts.append(str(extra))
         return "sec_" + hashlib.sha256(json.dumps(parts).encode()).hexdigest()[:16]
@@ -285,6 +291,7 @@ class SecurityFinding:
             "threat": self.threat.value if self.threat is not None else None,
             "requirement_id": self.requirement_id,
             "policy_rule": self.policy_rule,
+            "check_key": self.check_key,
         }
 
     @classmethod
@@ -309,6 +316,7 @@ class SecurityFinding:
                 threat=StrideCategory(threat) if threat is not None else None,
                 requirement_id=data.get("requirement_id"),
                 policy_rule=data.get("policy_rule"),
+                check_key=data.get("check_key"),
             )
         except (KeyError, ValueError, TypeError) as error:
             raise InvalidSecurityResult(details={"fields": [type(error).__name__]}) from None

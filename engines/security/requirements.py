@@ -43,7 +43,7 @@ from .engine import AnalyzerMeta, AnalyzerOutput, Progress
 
 ANY = frozenset({"encryption", "authentication", "authorization", "pii", "secrets"})
 SENSITIVE = re.compile(r"\b(sensitive|personal|pii|confidential|restricted|customer)\b", re.IGNORECASE)
-ENCRYPT = re.compile(r"\bencrypt", re.IGNORECASE)
+ENCRYPT = re.compile(r"encrypt", re.IGNORECASE)  # anywhere in a word: "encrypted", "unencrypted"
 ENCRYPTION = frozenset({Condition.ENCRYPTION_AT_REST, Condition.ENCRYPTION_IN_TRANSIT})
 
 

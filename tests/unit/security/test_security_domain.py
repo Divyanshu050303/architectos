@@ -247,6 +247,19 @@ def test_secret_looking_values_are_never_shown_but_closed_properties_are() -> No
     assert not shows_a_secret([Evidence("configuration.extra.api_key", REDACTED)])
 
 
+def test_a_dotted_key_is_a_secret_when_any_part_of_it_looks_like_one() -> None:
+    for path in (
+        "configuration.extra.password.hash",
+        "api.configuration.extra.token.value",
+        "api.metadata.api_key.live_value",
+    ):
+        assert redacted(path, "s3cr3t").value == REDACTED, path
+    assert (
+        redacted("token-svc.configuration.exposure", "public").value == "public"
+    )  # an element id is not a key
+    assert shows_a_secret([Evidence("api.configuration.extra.secret.id", "abc")])
+
+
 def test_a_finding_or_check_that_would_show_a_secret_is_refused() -> None:
     leak = (Evidence("api.configuration.extra.db_password", "hunter2"),)
     with pytest.raises(InvalidSecurityResult) as error:
@@ -279,12 +292,20 @@ def test_finding_ids_are_stable_and_include_threat_requirement_and_policy() -> N
     spoof = finding(type=FindingType.THREAT_CANDIDATE, threat=StrideCategory.SPOOFING)
     tamper = finding(type=FindingType.THREAT_CANDIDATE, threat=StrideCategory.TAMPERING)
     assert spoof.id != tamper.id
-    a = finding(type=FindingType.REQUIREMENT_VIOLATED, requirement_id=str(uuid.UUID(int=1)))
-    b = finding(type=FindingType.REQUIREMENT_VIOLATED, requirement_id=str(uuid.UUID(int=2)))
+    a = finding(type=FindingType.REQUIREMENT_VIOLATED, requirement_id=str(uuid.UUID(int=1)), check_key="r.1")
+    b = finding(type=FindingType.REQUIREMENT_VIOLATED, requirement_id=str(uuid.UUID(int=2)), check_key="r.2")
     assert a.id != b.id
-    assert (
-        finding(type=FindingType.POLICY_VIOLATED, policy_rule="require_tls").to_dict()["policy_rule"]
-        == "require_tls"
+    # one requirement checked as two conditions on the same elements: two findings (review finding)
+    twice = finding(
+        type=FindingType.REQUIREMENT_VIOLATED, requirement_id=str(uuid.UUID(int=1)), check_key="r.1.x"
+    )
+    assert twice.id != a.id
+    policy = finding(
+        type=FindingType.POLICY_VIOLATED, policy_rule="require_tls", check_key="policy.require_tls"
+    )
+    assert (policy.to_dict()["policy_rule"], policy.to_dict()["check_key"]) == (
+        "require_tls",
+        "policy.require_tls",
     )
 
 
@@ -297,6 +318,8 @@ def test_finding_ids_are_stable_and_include_threat_requirement_and_policy() -> N
         ({"type": FindingType.THREAT_CANDIDATE}, "threat"),  # a threat has its STRIDE category
         ({"threat": StrideCategory.SPOOFING}, "threat"),  # and only threats have one
         ({"type": FindingType.REQUIREMENT_VIOLATED}, "requirement_id"),
+        ({"type": FindingType.REQUIREMENT_VIOLATED, "requirement_id": "r"}, "check_key"),  # its check
+        ({"check_key": "policy.x"}, "check_key"),  # only requirement and policy findings report a check
         ({"requirement_id": "r"}, "requirement_id"),
         ({"type": FindingType.POLICY_NOT_EVALUABLE}, "policy_rule"),
         ({"severity": "urgent"}, "severity"),

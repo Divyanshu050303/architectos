@@ -30,7 +30,8 @@ management interface or secrets are not declared is unknown for the conditions t
 - ``data_classification``: components declare a data classification (its absence is the
   violation: the condition is that it is modeled).
 
-Third parties (external components) are concerned only by the data-classification condition.
+Third parties (external components) are concerned only by the data-classification condition and,
+when they declare one, by the no-public-management-interface condition.
 """
 
 from collections.abc import Callable, Iterable, Sequence
@@ -389,4 +390,5 @@ def report(
         missing=judged.missing,
         requirement_id=subject.requirement_id,
         policy_rule=subject.policy_rule,
+        check_key=subject.key,
     )
