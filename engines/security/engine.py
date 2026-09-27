@@ -229,12 +229,10 @@ def _checked(
 def _in_scope(finding: SecurityFinding, context: SecurityContext) -> bool:
     if not context.request.scope:
         return True
-    connections = {c.id for c in context.connections}
-    zones = {z for n in context.component_ids for z in context.zones_of.get(n, ())}
     return bool(
-        context.component_ids & set(finding.node_ids)
-        or connections & set(finding.connection_ids)
-        or zones & set(finding.boundary_ids)
+        context.component_ids.intersection(finding.node_ids)
+        or context.connection_ids.intersection(finding.connection_ids)
+        or context.scope_zone_ids.intersection(finding.boundary_ids)
     )
 
 

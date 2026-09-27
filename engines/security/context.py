@@ -66,6 +66,15 @@ class SecurityContext:
         return tuple(c for c in self.ir.connections if not scoped or c.source_id in ids or c.target_id in ids)
 
     @cached_property
+    def connection_ids(self) -> frozenset[str]:
+        return frozenset(c.id for c in self.connections)
+
+    @cached_property
+    def scope_zone_ids(self) -> frozenset[str]:
+        """The trust zones containing a component in scope."""
+        return frozenset(z for n in self.component_ids for z in self.zones_of.get(n, ()))
+
+    @cached_property
     def facts(self) -> Mapping[str, ComponentSecurity]:
         """Every non-boundary node's declared security facts, by node id (clients included: what
         they declare can matter to the components they call)."""

@@ -2,7 +2,8 @@
 them). Each phase of the milestone adds its analyzers here."""
 
 from .engine import Registry
+from .trust_boundaries import TrustBoundaries
 
 
 def default_registry() -> Registry:
-    return Registry(())
+    return Registry([TrustBoundaries()])

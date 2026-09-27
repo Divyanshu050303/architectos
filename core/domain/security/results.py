@@ -116,6 +116,7 @@ class StrideCategory(StrEnum):
 class FindingType(StrEnum):
     # trust boundaries
     UNPROTECTED_BOUNDARY_CROSSING = "unprotected_boundary_crossing"
+    CROSSING_CONTROLS_NOT_MODELED = "crossing_controls_not_modeled"
     SENSITIVE_DATA_CROSSES_BOUNDARY = "sensitive_data_crosses_boundary"
     TRUST_LEVEL_NOT_MODELED = "trust_level_not_modeled"
     INCONSISTENT_TRUST_BOUNDARY = "inconsistent_trust_boundary"
@@ -153,6 +154,7 @@ _B, _C, _T = FindingBasis, FindingCategory, FindingType
 # Each type's category and basis: fixed, so the four kinds of finding are never mixed up.
 TYPES: dict[FindingType, tuple[FindingCategory, FindingBasis]] = {
     _T.UNPROTECTED_BOUNDARY_CROSSING: (_C.TRUST_BOUNDARY, _B.CONTROL_GAP),
+    _T.CROSSING_CONTROLS_NOT_MODELED: (_C.TRUST_BOUNDARY, _B.NOT_EVALUABLE),
     _T.SENSITIVE_DATA_CROSSES_BOUNDARY: (_C.TRUST_BOUNDARY, _B.POTENTIAL_RISK),
     _T.TRUST_LEVEL_NOT_MODELED: (_C.TRUST_BOUNDARY, _B.NOT_EVALUABLE),
     _T.INCONSISTENT_TRUST_BOUNDARY: (_C.TRUST_BOUNDARY, _B.NOT_EVALUABLE),

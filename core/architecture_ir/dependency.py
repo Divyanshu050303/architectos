@@ -33,3 +33,6 @@ class Interaction(StrEnum):
 
 # "https", "grpc", "postgresql", "redis", "kafka", "amqp", "s3", "tcp": identifiers, not a closed list.
 PROTOCOL = re.compile(r"^[a-z0-9][a-z0-9+._-]{0,31}$")
+# Protocols that are encrypted by definition (the protocol name says so), so tls need not be stated
+# (read by the validation and security engines; any other protocol says nothing either way).
+ENCRYPTED_PROTOCOLS = frozenset({"https", "wss", "amqps", "mqtts", "rediss", "ldaps", "ftps", "smtps"})
