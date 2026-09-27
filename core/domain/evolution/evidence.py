@@ -36,7 +36,7 @@ from core.domain.requirements.value_objects import decimal_to_str
 from core.domain.security.reports import SecurityReport
 from core.domain.security.results import SecurityFinding
 from core.domain.validation.results import Finding as ValidationFinding
-from core.domain.validation.runs import ValidationRun
+from core.domain.validation.runs import RunReport
 
 from .candidates import EvidenceRef
 from .triggers import TriggerKind
@@ -316,7 +316,8 @@ def from_observability(
     )
 
 
-def from_validation(run: ValidationRun, findings: Iterable[ValidationFinding]) -> StoredAnalysis:
+def from_validation(report: RunReport, findings: Iterable[ValidationFinding]) -> StoredAnalysis:
+    run = report.run
     items = tuple(
         EvidenceItem(
             TriggerKind.FINDING,
@@ -329,12 +330,16 @@ def from_validation(run: ValidationRun, findings: Iterable[ValidationFinding]) -
         )
         for f in findings
     )
+    checks = tuple(
+        RequirementCheck(r.requirement_id, r.verdict.value, r.reference) for r in report.requirement_results
+    )
     return StoredAnalysis(
         S.VALIDATION,
         run.id,
         run.revision_number,
         run.revision_content_hash,
-        run.result.rule_set.version if run.result is not None else None,
+        report.rule_set.version if report.rule_set is not None else None,
         run.status.value,
         items,
+        checks,
     )

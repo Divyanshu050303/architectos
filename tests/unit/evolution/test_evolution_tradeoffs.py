@@ -15,6 +15,7 @@ from core.domain.engine_results import Evidence
 from core.domain.evolution.candidates import BaselineRef, Candidate, Consequence, EvidenceRef, RuleRef
 from core.domain.evolution.errors import InvalidEvolutionResult
 from core.domain.evolution.goals import EvolutionGoal, FindingRef
+from core.domain.evolution.ports import ImpactInputs
 from core.domain.evolution.tradeoffs import alternatives, consequences, with_tradeoffs
 from core.domain.evolution.values import (
     Basis,
@@ -28,7 +29,7 @@ from core.domain.evolution.values import (
 from core.domain.observability.values import Dimension as Coverage
 from core.domain.simulations.scenarios import ConfigurationChange
 from core.domain.validation.options import RevisionInfo
-from engines.evolution.impact import Assessor, ImpactInputs
+from engines.evolution.impact import Assessor
 from engines.evolution.rulebook import default_registry
 from tests.unit.cost.test_cost_capacity import IR as PRICED_IR
 from tests.unit.cost.test_cost_capacity import workload as priced_workload

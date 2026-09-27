@@ -13,6 +13,7 @@ from core.domain.capacity.units import Quantity
 from core.domain.capacity.workload import WorkloadProfile, WorkloadType
 from core.domain.evolution.candidates import BaselineRef, Candidate, EvidenceRef, Impact, RuleRef
 from core.domain.evolution.goals import EvolutionGoal, FindingRef
+from core.domain.evolution.ports import ImpactInputs
 from core.domain.evolution.values import (
     CandidateCategory,
     EvidenceSource,
@@ -23,7 +24,7 @@ from core.domain.evolution.values import (
 from core.domain.observability.values import Dimension as Coverage
 from core.domain.simulations.scenarios import ConfigurationChange
 from core.domain.validation.options import RevisionInfo
-from engines.evolution.impact import Assessor, ImpactEngines, ImpactInputs
+from engines.evolution.impact import Assessor, ImpactEngines
 from engines.evolution.rulebook import default_registry
 from engines.evolution.rules import RuleContext, generate
 from engines.evolution.trigger_engine import evaluate

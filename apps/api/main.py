@@ -21,6 +21,8 @@ from apps.api.routes import (
     auth,
     capacity,
     cost,
+    decisions,
+    evolution,
     invitations,
     observability,
     organizations,
@@ -37,6 +39,7 @@ from apps.api.routes import (
 )
 from engines.capacity.service import DeterministicCapacityEngine
 from engines.cost.service import DeterministicCostEngine
+from engines.evolution.service import DeterministicEvolutionEngine
 from engines.observability.service import DeterministicObservabilityEngine
 from engines.reliability.service import DeterministicReliabilityEngine
 from engines.requirements.factory import build_engine
@@ -85,6 +88,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.security_engine = DeterministicSecurityEngine()
     app.state.observability_engine = DeterministicObservabilityEngine()
     app.state.simulation_engine = DeterministicSimulationEngine()
+    app.state.evolution_engine = DeterministicEvolutionEngine()
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -136,4 +140,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(security.router, prefix=API_PREFIX)
     app.include_router(observability.router, prefix=API_PREFIX)
     app.include_router(simulations.router, prefix=API_PREFIX)
+    app.include_router(evolution.router, prefix=API_PREFIX)
+    app.include_router(decisions.router, prefix=API_PREFIX)
     return app

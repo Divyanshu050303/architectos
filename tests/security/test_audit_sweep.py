@@ -16,7 +16,9 @@ from fastapi import FastAPI
 from httpx import AsyncClient
 
 from apps.api.email.transport import InMemoryTransport
+from core.architecture_ir.serialization import to_dict
 from core.domain.audit.entities import AuditAction
+from tests.unit.evolution.test_evolution_triggers import shop as evolving_shop
 
 from .support import inventory, signed_in
 
@@ -45,6 +47,7 @@ ARCHITECTURE = {
 }
 # The shared middle of architecture operation ids.
 _ARCH = "_api_v1_projects__project_id__architectures__architecture_id__"
+_DECISION = "_api_v1_projects__project_id__decisions__decision_id__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 READ_ONLY = {"validate_requirement_api_v1_projects__project_id__requirements__requirement_id__validate_post"}
@@ -65,6 +68,10 @@ class Target:
     candidate_key: str
     architecture_id: str = ""  # set by with_architecture
     snapshot_id: str = ""  # set by with_prices
+    evolution_id: str = ""  # set by with_evolution
+    decision_id: str = ""  # set by with_proposal
+    candidate_id: str = ""  # an option of that decision
+    successor_id: str = ""  # set by with_accepted_pair
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -124,6 +131,75 @@ async def with_two_revisions(client: AsyncClient, auth: dict[str, str], target: 
     edited = await client.post(
         f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/commands",
         json={"baseVersion": 1, "commands": [{"type": "change_replicas", "nodeId": "api", "replicas": 4}]},
+        headers=auth,
+    )
+    assert edited.status_code == 201, edited.text
+
+
+# An architecture the engines find something in (a single database replica, a flow without tls): its
+# evolution analysis proposes candidates, so decisions have options to act on.
+EVOLVING = to_dict(evolving_shop())
+AVAILABILITY_GOAL = {"type": "availability_objective", "target": {"value": "0.999", "unit": "ratio"}}
+
+
+async def with_evolution(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An architecture with a reliability analysis and an evolution analysis that has candidates."""
+    created = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures",
+        json={"name": "Evolving", "ir": EVOLVING},
+        headers=auth,
+    )
+    assert created.status_code == 201, created.text
+    target.architecture_id = created.json()["id"]
+    base = f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}"
+    reliability = await client.post(f"{base}/reliability-analyses", json={}, headers=auth)
+    assert reliability.status_code == 201, reliability.text
+    evolution = await client.post(
+        f"{base}/evolution-analyses", json={"goals": [AVAILABILITY_GOAL]}, headers=auth
+    )
+    assert evolution.status_code == 201, evolution.text
+    target.evolution_id = evolution.json()["id"]
+
+
+async def _draft(client: AsyncClient, auth: dict[str, str], target: Target) -> str:
+    drafted = await client.post(
+        f"/api/v1/projects/{target.project_id}/decisions",
+        json={"architectureId": target.architecture_id, "analysisId": target.evolution_id},
+        headers=auth,
+    )
+    assert drafted.status_code == 201, drafted.text
+    target.candidate_id = drafted.json()["options"][0]["candidateId"]
+    return str(drafted.json()["id"])
+
+
+async def _accept(client: AsyncClient, auth: dict[str, str], target: Target, decision_id: str) -> None:
+    accepted = await client.post(
+        f"/api/v1/projects/{target.project_id}/decisions/{decision_id}/accept",
+        json={"candidateId": target.candidate_id, "rationale": "Fits."},
+        headers=auth,
+    )
+    assert accepted.status_code == 200, accepted.text
+
+
+async def with_proposal(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    await with_evolution(client, auth, target)
+    target.decision_id = await _draft(client, auth, target)
+
+
+async def with_accepted_pair(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    await with_proposal(client, auth, target)
+    await _accept(client, auth, target, target.decision_id)
+    target.successor_id = await _draft(client, auth, target)
+    await _accept(client, auth, target, target.successor_id)
+
+
+async def with_accepted_and_revision(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An accepted decision, then a separate architecture change (revision 2) a person may link."""
+    await with_proposal(client, auth, target)
+    await _accept(client, auth, target, target.decision_id)
+    edited = await client.post(
+        f"/api/v1/projects/{target.project_id}/architectures/{target.architecture_id}/commands",
+        json={"baseVersion": 1, "commands": [{"type": "change_replicas", "nodeId": "db", "replicas": 2}]},
         headers=auth,
     )
     assert edited.status_code == 201, edited.text
@@ -250,6 +326,36 @@ PLANS: dict[str, Plan] = {
         },
         with_architecture,
     ),
+    f"run_evolution_analysis{_ARCH}evolution_analyses_post": Plan(
+        {"architecture.evolution_analyzed"},
+        "architecture",
+        {"goals": [AVAILABILITY_GOAL], "label": "Audited"},
+        with_architecture,
+    ),
+    "draft_decision_api_v1_projects__project_id__decisions_post": Plan(
+        {"decision.proposed"},
+        "created",
+        lambda target: {"architectureId": target.architecture_id, "analysisId": target.evolution_id},
+        with_evolution,
+    ),
+    f"accept_decision{_DECISION}accept_post": Plan(
+        {"decision.accepted"},
+        "decision",
+        lambda target: {"candidateId": target.candidate_id, "rationale": CANARY_REASON},
+        with_proposal,
+    ),
+    f"reject_decision{_DECISION}reject_post": Plan(
+        {"decision.rejected"}, "decision", {"rationale": CANARY_REASON}, with_proposal
+    ),
+    f"supersede_decision{_DECISION}supersede_post": Plan(
+        {"decision.superseded"},
+        "decision",
+        lambda target: {"byDecisionId": target.successor_id},
+        with_accepted_pair,
+    ),
+    f"link_decision_revision{_DECISION}resulting_revision_post": Plan(
+        {"decision.revision_linked"}, "decision", {"revision": 2}, with_accepted_and_revision
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -270,7 +376,7 @@ def test_every_mutating_project_endpoint_is_classified(app: FastAPI) -> None:
 
 def test_every_project_scoped_audit_action_is_exercised() -> None:
     """No action is declared and then never written."""
-    scoped = {"project", "requirement", "requirement_set", "requirement_analysis", "architecture"}
+    scoped = {"project", "requirement", "requirement_set", "requirement_analysis", "architecture", "decision"}
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
 
@@ -285,6 +391,8 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
             return str(response.json()["promotions"][0]["requirement"]["id"])
         case "architecture":
             return target.architecture_id
+        case "decision":
+            return target.decision_id
         case _:  # "created"
             return str(response.json()["id"]) if response.content else None
 
@@ -347,6 +455,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             requirement_id=target.requirement_id,
             analysis_id=target.analysis_id,
             architecture_id=target.architecture_id,
+            decision_id=target.decision_id,
         )
         body = plan.body(target) if callable(plan.body) else plan.body
         response = await client.request(op.method, url, json=body, headers=auth)
@@ -414,6 +523,10 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     assert simulation.status_code == 201, simulation.text
+    decided = Target(
+        org_id, target.project_id, target.requirement_id, target.analysis_id, target.candidate_key
+    )
+    await with_proposal(client, auth, decided)  # its own architecture: an analysis with candidates
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -439,8 +552,17 @@ async def test_read_only_endpoints_write_nothing(
         "simulation_id": simulation.json()["id"],
         "other_simulation_id": simulation.json()["id"],
     }
+    evolving = ids | {
+        "architecture_id": decided.architecture_id,
+        "evolution_analysis_id": decided.evolution_id,
+        "candidate_id": decided.candidate_id,
+        "decision_id": decided.decision_id,
+    }
     for op in reads:
-        response = await client.request(op.method, op.url(**ids), headers=auth)
+        uses = ("{evolution_analysis_id}", "{decision_id}", "/decisions")
+        response = await client.request(
+            op.method, op.url(**(evolving if any(u in op.path for u in uses) else ids)), headers=auth
+        )
         assert response.is_success, (op.operation_id, response.text)
 
     assert await audit_entries(client, auth, org_id) == before

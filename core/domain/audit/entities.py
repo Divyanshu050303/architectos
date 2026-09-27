@@ -58,6 +58,12 @@ class AuditAction(StrEnum):
         "architecture.observability_analyzed"  # an observability analysis was stored
     )
     ARCHITECTURE_SIMULATED = "architecture.simulated"  # a simulation was stored
+    ARCHITECTURE_EVOLUTION_ANALYZED = "architecture.evolution_analyzed"  # an evolution analysis was stored
+    DECISION_PROPOSED = "decision.proposed"  # a decision record was drafted
+    DECISION_ACCEPTED = "decision.accepted"  # a person accepted one of its options
+    DECISION_REJECTED = "decision.rejected"  # a person rejected its options
+    DECISION_SUPERSEDED = "decision.superseded"  # replaced by a later decision
+    DECISION_REVISION_LINKED = "decision.revision_linked"  # a person linked the implementing revision
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

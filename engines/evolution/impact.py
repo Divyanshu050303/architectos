@@ -19,26 +19,23 @@ stored analyses whose inputs it reused. Dimensions are never combined into one f
 import uuid
 from collections import Counter
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from decimal import Decimal
 
 from core.architecture_ir.model import ArchitectureIR
-from core.domain.capacity.workload import WorkloadProfile
-from core.domain.cost.pricing import PricingSnapshot
 from core.domain.engine_results import Unsupported
 from core.domain.evolution.candidates import Candidate, EvidenceRef, Impact, ImpactChange, ImpactDelta
 from core.domain.evolution.overlays import CandidateOverlay, apply_candidate
+from core.domain.evolution.ports import ImpactInputs
 from core.domain.evolution.values import EvidenceSource, ValidationState
 from core.domain.observability.analyses import ObservabilityAnalysisRequest
 from core.domain.observability.ports import ObservabilityEngine
 from core.domain.observability.results import ObservabilityFinding, ObservabilityResult
-from core.domain.projects.policies import ArchitecturePolicy
-from core.domain.requirements.entities import Requirement
 from core.domain.requirements.value_objects import decimal_to_str
 from core.domain.security.analyses import SecurityAnalysisRequest
 from core.domain.security.ports import SecurityEngine
 from core.domain.security.results import SecurityFinding, SecurityResult
-from core.domain.simulations.entities import PricingInputs, SimulationRequest
+from core.domain.simulations.entities import SimulationRequest
 from core.domain.simulations.errors import InvalidSimulationRequest
 from core.domain.simulations.ports import SimulationEngine
 from core.domain.simulations.results import Delta, SimulationResult
@@ -55,22 +52,6 @@ SIMULATED = {
 }
 NOT_ASSESSED = frozenset({ValidationState.INVALID, ValidationState.UNSUPPORTED})
 type Findings = SecurityFinding | ObservabilityFinding
-
-
-@dataclass(frozen=True, slots=True)
-class ImpactInputs:
-    """What the engines need beyond the architecture, the same for baseline and candidate."""
-
-    requirements: tuple[Requirement, ...] = ()
-    policy: ArchitecturePolicy = field(default_factory=ArchitecturePolicy)
-    workload: WorkloadProfile | None = None  # the current capacity analysis's
-    entries: tuple[str, ...] | None = None
-    pricing: PricingInputs | None = None  # the current cost analysis's snapshot, date and hours
-    snapshot: PricingSnapshot | None = None
-    provider: str | None = None
-    currency: str | None = None
-    capacity: EvidenceRef | None = None  # the analysis whose workload is reused
-    cost: EvidenceRef | None = None  # the analysis whose pricing is reused
 
 
 @dataclass(frozen=True, slots=True)
