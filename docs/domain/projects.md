@@ -63,7 +63,16 @@ encryption at rest on data stores (`require_encryption_at_rest`), authentication
 (`require_authorization_on_sensitive`), no public management interface
 (`prohibit_public_management_interfaces`), approved secret sources (`approved_secret_sources`),
 secret rotation (`require_secret_rotation`), audit logging (`require_audit_logging`) and data
-classification (`require_data_classification`), and reports `require_tls` too. A rule is satisfied
+classification (`require_data_classification`), and reports `require_tls` too. The
+[observability engine](../architecture/observability-engine.md) checks that critical components
+declare logs, metrics of the listed kinds, traces, health checks, alert rules and an owner
+(`require_logs_on_critical`, `required_metric_kinds_on_critical`, `require_traces_on_critical`,
+`require_health_checks_on_critical`, `require_alerting_on_critical`, `require_ownership`), that
+request flows through them propagate the trace context (`require_trace_propagation`), that their
+telemetry reaches an observability component (`require_telemetry_collection`), that components which
+log declare structured logs and correlation ids (`require_structured_logs`,
+`require_correlation_ids`) and that observability components retain telemetry long enough
+(`min_telemetry_retention_seconds`). A rule is satisfied
 only by what the architecture declares, never by what it leaves out. Empty lists, `null` and `false`
 constrain nothing; the empty policy is the default. The policy is replaced as a whole by owners and admins
 (`project.policy_update`), is read-only while the project is archived, and every change is audited

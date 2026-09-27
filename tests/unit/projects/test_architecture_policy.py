@@ -19,6 +19,9 @@ STRICT = ArchitecturePolicy(
     allowed_regions=frozenset({"eu-west-1"}),
     require_tls=True,
     max_components=20,
+    required_metric_kinds_on_critical=frozenset({"errors", "latency"}),
+    require_ownership=True,
+    min_telemetry_retention_seconds=86_400,
 )
 
 
@@ -47,6 +50,17 @@ def test_names_are_normalized_and_the_dict_is_canonical() -> None:
         "require_secret_rotation": False,
         "require_audit_logging": False,
         "require_data_classification": False,
+        "required_metric_kinds_on_critical": [],
+        "min_telemetry_retention_seconds": None,
+        "require_logs_on_critical": False,
+        "require_traces_on_critical": False,
+        "require_trace_propagation": False,
+        "require_health_checks_on_critical": False,
+        "require_alerting_on_critical": False,
+        "require_structured_logs": False,
+        "require_correlation_ids": False,
+        "require_ownership": False,
+        "require_telemetry_collection": False,
     }
     assert ArchitecturePolicy.from_dict(STRICT.to_dict()) == STRICT
 
@@ -73,6 +87,14 @@ def test_names_are_normalized_and_the_dict_is_canonical() -> None:
         ({"max_components": 0}, "max_components", "out_of_range"),
         ({"max_components": 1001}, "max_components", "out_of_range"),
         ({"max_components": True}, "max_components", "out_of_range"),
+        (
+            {"required_metric_kinds_on_critical": ["p99"]},
+            "required_metric_kinds_on_critical",
+            "invalid_value",
+        ),
+        ({"require_ownership": 1}, "require_ownership", "not_a_boolean"),
+        ({"min_telemetry_retention_seconds": 0}, "min_telemetry_retention_seconds", "out_of_range"),
+        ({"min_telemetry_retention_seconds": True}, "min_telemetry_retention_seconds", "out_of_range"),
     ],
 )
 def test_invalid_policies_are_refused(raw: dict[str, Any], field: str, reason: str) -> None:

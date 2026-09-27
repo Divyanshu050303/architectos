@@ -132,17 +132,13 @@ class Traces:
             )
         ]
 
-    def _traced(self, context: ObservabilityContext, node_id: str) -> bool:
-        facts = context.facts.get(node_id)
-        return facts is not None and facts.known("traces") is True
-
     def _propagation(self, context: ObservabilityContext) -> list[ObservabilityFinding]:
         flows = [
             c
             for c in context.connections
             if c.kind in REQUEST_FLOWS
-            and self._traced(context, c.source_id)
-            and self._traced(context, c.target_id)
+            and context.declares_signal(c.source_id, "traces")
+            and context.declares_signal(c.target_id, "traces")
         ]
         findings = [f for c in flows if (f := self._flow(context, c))]
         findings += self._terminators(context, flows)

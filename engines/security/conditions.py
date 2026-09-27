@@ -36,64 +36,24 @@ when they declare one, by the no-public-management-interface condition.
 
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
-from enum import StrEnum
-from typing import Any
 
 from core.architecture_ir.component import NodeKind
 from core.architecture_ir.dependency import ConnectionKind
 from core.architecture_ir.edge import Connection
 from core.architecture_ir.node import Node
 from core.domain.capacity.results import Certainty
-from core.domain.engine_results import Evidence
+from core.domain.checks import Checked, Judged, State, Subject, check_of, conclude, outcome, state_of
 from core.domain.facts import ElementFacts
 from core.domain.security.inputs import STORES, ComponentSecurity
-from core.domain.security.results import (
-    MAX_ELEMENTS,
-    CheckResult,
-    CheckSource,
-    Condition,
-    FindingType,
-    SecurityFinding,
-)
-from core.domain.validation.results import Severity, Verdict
+from core.domain.security.results import CheckResult, Condition, FindingType, SecurityFinding
 
 from .context import SecurityContext
-from .engine import AnalyzerMeta, names
+from .engine import AnalyzerMeta
 from .support import authenticated, evidence, finding, protocol_evidence, transport_protected
 
-SHOWN = 100  # evidence items shown on a verdict (every element concerned is listed in its ids)
 DATA_FLOWS = frozenset(
     {ConnectionKind.DATA_ACCESS, ConnectionKind.REPLICATION, ConnectionKind.PUBLISH, ConnectionKind.CONSUME}
 )
-
-
-class State(StrEnum):
-    OK = "ok"
-    BAD = "bad"
-    UNKNOWN = "unknown"
-
-
-@dataclass(frozen=True, slots=True)
-class Checked:
-    """One concerned element: its state, the declared facts it was judged on, what is missing."""
-
-    element_id: str
-    connection: bool
-    state: State
-    evidence: tuple[Evidence, ...] = ()
-    missing: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class Judged:
-    verdict: Verdict
-    explanation: str
-    node_ids: tuple[str, ...] = ()  # every concerned element
-    connection_ids: tuple[str, ...] = ()
-    actual: tuple[Evidence, ...] = ()  # the facts of the elements that decide the verdict
-    missing: tuple[str, ...] = ()
-    offending_nodes: tuple[str, ...] = ()  # bad (violated) or unknown (not verifiable)
-    offending_connections: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,10 +80,6 @@ WHAT: dict[Condition, tuple[str, str]] = {  # (what is concerned, what they must
 }
 
 
-def _state(value: bool | None) -> State:
-    return State.UNKNOWN if value is None else State.OK if value else State.BAD
-
-
 def _node(facts: ElementFacts, state: State, shown: Sequence[str], missing: Iterable[str] = ()) -> Checked:
     return Checked(
         facts.element_id,
@@ -138,7 +94,7 @@ def _flag(facts: ElementFacts, name: str, shown: Sequence[str]) -> Checked:
     """A component judged on one boolean it must declare true."""
     value = facts.known(name)
     return _node(
-        facts, _state(None if value is None else value is True), shown, [name] if value is None else []
+        facts, state_of(None if value is None else value is True), shown, [name] if value is None else []
     )
 
 
@@ -168,7 +124,7 @@ def _public(facts: ComponentSecurity) -> Checked | None:
     if exposure != "public":
         return None
     auth = authenticated(facts)
-    return _node(facts, _state(auth), shown, ["authentication"] if auth is None else [])
+    return _node(facts, state_of(auth), shown, ["authentication"] if auth is None else [])
 
 
 def _authorized(facts: ComponentSecurity) -> Checked | None:
@@ -207,7 +163,7 @@ def _secrets(facts: ComponentSecurity, ask: Ask) -> Checked | None:
     value = facts.known(name)
     if value is None:
         return _node(facts, State.UNKNOWN, shown, [name])
-    return _node(facts, _state(value is True if rotation else value in ask.approved), shown)
+    return _node(facts, state_of(value is True if rotation else value in ask.approved), shown)
 
 
 def _audit(facts: ComponentSecurity, ask: Ask) -> Checked | None:
@@ -224,7 +180,7 @@ def _audit(facts: ComponentSecurity, ask: Ask) -> Checked | None:
 def _classified(facts: ComponentSecurity) -> Checked:
     declared = facts.known("data_classification") is not None
     return _node(
-        facts, _state(declared), ("data_classification",), [] if declared else ["data_classification"]
+        facts, state_of(declared), ("data_classification",), [] if declared else ["data_classification"]
     )
 
 
@@ -287,7 +243,7 @@ def _connections(context: SecurityContext, ask: Ask) -> list[Checked]:
                 continue
         protected = transport_protected(connection, link)
         missing = (f"{connection.id}.configuration.tls",) if protected is None else ()
-        checked.append(Checked(connection.id, True, _state(protected), shown, missing))
+        checked.append(Checked(connection.id, True, state_of(protected), shown, missing))
     return checked
 
 
@@ -299,91 +255,25 @@ def judge(context: SecurityContext, ask: Ask) -> Judged:
         nodes = context.components if ask.nodes is None else ask.nodes
         checked = [c for n in nodes if (c := _component(n, context.facts[n.id], ask)) is not None]
     concerned, must = WHAT[ask.condition]
-    if not checked:
-        return Judged(Verdict.NOT_APPLICABLE, f"No {concerned} in scope.")
-    bad = [c for c in checked if c.state is State.BAD]
-    unknown = [c for c in checked if c.state is State.UNKNOWN]
-    deciding = bad or unknown
-    fields: dict[str, Any] = {
-        "node_ids": tuple(c.element_id for c in checked if not c.connection)[:MAX_ELEMENTS],
-        "connection_ids": tuple(c.element_id for c in checked if c.connection)[:MAX_ELEMENTS],
-        "actual": tuple(e for c in (deciding or checked) for e in c.evidence)[:SHOWN],
-        "missing": tuple(m for c in unknown for m in c.missing)[:MAX_ELEMENTS],
-        "offending_nodes": tuple(c.element_id for c in deciding if not c.connection),
-        "offending_connections": tuple(c.element_id for c in deciding if c.connection),
-    }
-    if bad:
-        ids = [c.element_id for c in bad]
-        verb = "does" if len(ids) == 1 else "do"
-        return Judged(Verdict.VIOLATED, f"{names(ids)} {verb} not declare {must}.", **fields)
-    if unknown:
-        ids = [c.element_id for c in unknown]
-        verb = "does" if len(ids) == 1 else "do"
-        return Judged(
-            Verdict.NOT_VERIFIABLE,
-            f"{names(ids)} {verb} not declare enough to decide (missing evidence is never success).",
-            **fields,
-        )
-    return Judged(Verdict.SATISFIED, f"All {len(checked)} {concerned} concerned declare {must}.", **fields)
-
-
-@dataclass(frozen=True, slots=True)
-class Subject:
-    """What a verdict is about: its check key, how it is named, and its requirement (with the words
-    that mapped it) or its policy rule."""
-
-    key: str
-    title: str
-    severity: Severity  # of a violation
-    requirement_id: str | None = None
-    policy_rule: str | None = None
-    mapping: str | None = None
+    return conclude(checked, concerned, must)
 
 
 def report(
     meta: AnalyzerMeta, judged: Judged, condition: Condition, subject: Subject
 ) -> tuple[CheckResult, SecurityFinding | None]:
-    """The check for one verdict, and a finding when it needs a look: a violation (at the subject's
-    severity) or a verdict that cannot be reached (one step lower, at least low)."""
-    requirement = subject.requirement_id is not None
-    source = CheckSource.REQUIREMENT if requirement else CheckSource.POLICY
-    check = CheckResult(
-        subject.key,
-        source,
-        condition,
-        judged.verdict,
-        judged.explanation,
-        judged.node_ids,
-        judged.connection_ids,
-        judged.actual,
-        judged.missing,
-        subject.requirement_id,
-        subject.policy_rule,
-        subject.mapping,
-    )
-    if judged.verdict not in {Verdict.VIOLATED, Verdict.NOT_VERIFIABLE}:
+    """The check for one verdict, and a finding when it needs a look (``core.domain.checks.outcome``)."""
+    check = check_of(CheckResult, judged, condition, subject)
+    found = outcome(judged, subject, WHAT[condition][1])
+    if found is None:
         return check, None
-    violated = judged.verdict is Verdict.VIOLATED
-    types = {
-        (True, True): FindingType.REQUIREMENT_VIOLATED,
-        (True, False): FindingType.REQUIREMENT_NOT_EVALUABLE,
-        (False, True): FindingType.POLICY_VIOLATED,
-        (False, False): FindingType.POLICY_NOT_EVALUABLE,
-    }
-    order = list(Severity)
-    lower = order[min(order.index(subject.severity) + 1, order.index(Severity.LOW))]
-    what = WHAT[condition][1]
     return check, finding(
         meta,
-        types[(requirement, violated)],
-        subject.severity if violated else lower,
+        FindingType[found.type_name],
+        found.severity,
         Certainty.MODELED,
-        title=f"{subject.title} is {'violated' if violated else 'not verifiable'}: {what}",
-        explanation=judged.explanation
-        + ("" if violated else " It is not reported as met: what it needs is not declared."),
-        recommendation=f"Review the elements named against it ({what})."
-        if violated
-        else f"Declare {what} (or what decides whether it applies) where it is missing.",
+        title=found.title,
+        explanation=found.explanation,
+        recommendation=found.recommendation,
         node_ids=judged.offending_nodes,
         connection_ids=judged.offending_connections,
         evidence=judged.actual,

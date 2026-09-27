@@ -24,6 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from core.architecture_ir.node import Node
+from core.domain.checks import Subject
 from core.domain.requirements.entities import Requirement
 from core.domain.requirements.enums import RequirementScope, RequirementType
 from core.domain.security.results import (
@@ -37,7 +38,7 @@ from core.domain.security.results import (
 from core.domain.validation.results import Verdict
 from engines.validation.rules.requirements import SCOPE_KINDS, SEVERITY_BY_PRIORITY
 
-from .conditions import Ask, Subject, judge, report
+from .conditions import Ask, judge, report
 from .context import SecurityContext
 from .engine import AnalyzerMeta, AnalyzerOutput, Progress
 

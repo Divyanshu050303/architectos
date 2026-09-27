@@ -55,6 +55,17 @@ async def test_a_new_project_has_the_empty_policy(
         "requireSecretRotation": False,
         "requireAuditLogging": False,
         "requireDataClassification": False,
+        "requiredMetricKindsOnCritical": [],
+        "minTelemetryRetentionSeconds": None,
+        "requireLogsOnCritical": False,
+        "requireTracesOnCritical": False,
+        "requireTracePropagation": False,
+        "requireHealthChecksOnCritical": False,
+        "requireAlertingOnCritical": False,
+        "requireStructuredLogs": False,
+        "requireCorrelationIds": False,
+        "requireOwnership": False,
+        "requireTelemetryCollection": False,
     }
 
 

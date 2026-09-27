@@ -185,6 +185,15 @@ class ObservabilityContext:
         watched = facts.alert_signals or ()
         return all(self.emits(node, s) for s in watched) and bool(self.alert_delivery(node.id))
 
+    def declares_signal(self, node_id: str, signal: str) -> bool:
+        """Whether the node declares it emits a telemetry signal: logs or traces true, or a metric."""
+        facts = self.facts.get(node_id)
+        if facts is None:
+            return False
+        if signal == "metrics":
+            return bool(facts.metric_kinds)
+        return facts.known(signal) is True
+
     def emits(self, node: Node, signal: str) -> bool:
         """Whether the node declares the signal an alert rule watches (a metric kind, health or logs)."""
         facts = self.facts[node.id]
