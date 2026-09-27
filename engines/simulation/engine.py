@@ -28,8 +28,10 @@ from typing import Protocol
 from core.domain.engine_results import Evidence, Limitation, ModelSet, Unsupported
 from core.domain.errors import DomainError
 from core.domain.simulations.errors import InvalidSimulationRequest, InvalidSimulationResult
+from core.domain.simulations.limits import DEFAULT_LIMITS, SimulationLimits
 from core.domain.simulations.overlay import Overlay, apply_scenario
 from core.domain.simulations.results import (
+    SYSTEM,
     AnalysisRun,
     ComponentOutcome,
     Delta,
@@ -215,11 +217,29 @@ def _undetermined(overlay: Overlay) -> tuple[Unsupported, ...]:
     )
 
 
-def analyze(context: SimulationContext, registry: Registry) -> SimulationResult:
+def _bounded(
+    deltas: list[Delta], limits: SimulationLimits
+) -> tuple[tuple[Delta, ...], tuple[Unsupported, ...]]:
+    """The deltas within the limit, cut in their canonical order; the cut is reported."""
+    if len(deltas) <= limits.max_deltas:
+        return tuple(deltas), ()
+    ordered = sorted(deltas, key=lambda d: d.key)
+    cut = len(ordered) - limits.max_deltas
+    message = f"{cut} comparisons beyond the limit of {limits.max_deltas} are not listed."
+    return tuple(ordered[: limits.max_deltas]), (Unsupported(SYSTEM, "deltas_truncated", message),)
+
+
+def analyze(
+    context: SimulationContext, registry: Registry, limits: SimulationLimits = DEFAULT_LIMITS
+) -> SimulationResult:
     """The simulation's result. InvalidSimulationRequest for a scenario that does not fit the
-    revision (nothing has run then)."""
+    revision or the limits (nothing has run then)."""
+    limits.check(context.request.scenario)
     plan = check_scenario(context.ir, context.request)
     overlay = apply_scenario(context.ir, context.revision, context.request.scenario)
+    limits.check_affected(
+        len({*overlay.unavailable_nodes, *overlay.undetermined_nodes, *(n for n, _ in overlay.zone_losses)})
+    )
     evaluations: dict[AnalysisKind, Evaluation] = {}
     versions: list[tuple[str, int]] = [ENGINE, *plan.types.models]
     for analysis in _requested(context, plan):
@@ -237,6 +257,7 @@ def analyze(context: SimulationContext, registry: Registry) -> SimulationResult:
     ran = [e for e in evaluations.values() if e.run.model_set is not None]
     stated = tuple(Evidence(f"assumption.{a.key}", a.statement) for a in context.request.assumptions)
     planned = tuple(Evidence(f"plan.{p.key}", f"{p.type.id} v{p.type.version}") for p in plan.parts)
+    deltas, cut = _bounded([d for e in evaluations.values() for d in e.deltas], limits)
     return SimulationResult(
         engine_set=ModelSet.of(versions),
         scenario_fingerprint=context.request.scenario.fingerprint,
@@ -244,9 +265,11 @@ def analyze(context: SimulationContext, registry: Registry) -> SimulationResult:
         runs=tuple(e.run for e in evaluations.values()),
         components=_components(overlay, evaluations.values()),
         entries=tuple(i for e in evaluations.values() for i in e.entries),
-        deltas=tuple(d for e in evaluations.values() for d in e.deltas),
+        deltas=deltas,
         assumptions=stated + tuple(x for e in ran for x in e.assumptions),
         trace=overlay.trace() + planned + tuple(x for e in evaluations.values() for x in e.trace),
-        unsupported=_undetermined(overlay) + tuple(u for e in evaluations.values() for u in e.unsupported),
+        unsupported=_undetermined(overlay)
+        + cut
+        + tuple(u for e in evaluations.values() for u in e.unsupported),
         limitations=(MODEL_BASED, NO_DEFAULTS),
     )

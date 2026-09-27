@@ -47,7 +47,8 @@ SYSTEM = "system"  # the element id of what concerns the whole architecture
 CODE = re.compile(r"^[a-z][a-z0-9_.]{0,63}$")
 UNIT = re.compile(r"^[A-Za-z0-9%/._ -]{1,32}$")
 FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
-MAX_ITEMS = 5000  # components, entries and deltas of one simulation (bounded by the IR's size)
+MAX_ITEMS = 5000  # components, entries, unsupported and evidence of one simulation (bounded by the IR)
+MAX_DELTAS = 20_000  # the hard cap of limits.SimulationLimits.max_deltas
 
 
 def _check(problems: list[str | None]) -> None:
@@ -373,9 +374,10 @@ class SimulationResult:
             if isinstance(items, tuple) and all(hasattr(i, "__hash__") for i in items):
                 unique = tuple(set(items)) if name in {"unsupported", "limitations"} else items
                 object.__setattr__(self, name, tuple(sorted(unique, key=key)))
-        sized = ("runs", "components", "entries", "deltas", "unsupported", "limitations")
+        sized = ("runs", "components", "entries", "unsupported", "limitations")
         _check(
             [
+                None if len(self.deltas) <= MAX_DELTAS else "deltas",
                 None if isinstance(self.engine_set, ModelSet) else "engine_set",
                 _fingerprint_problem(self.scenario_fingerprint, "scenario_fingerprint"),
                 _fingerprint_problem(self.context_fingerprint, "context_fingerprint"),
