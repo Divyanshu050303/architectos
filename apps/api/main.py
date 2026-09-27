@@ -29,6 +29,7 @@ from apps.api.routes import (
     requirement_analyses,
     requirement_sets,
     requirements,
+    security,
     users,
     validations,
 )
@@ -36,6 +37,7 @@ from engines.capacity.service import DeterministicCapacityEngine
 from engines.cost.service import DeterministicCostEngine
 from engines.reliability.service import DeterministicReliabilityEngine
 from engines.requirements.factory import build_engine
+from engines.security.service import DeterministicSecurityEngine
 from engines.validation.service import DeterministicValidationEngine
 
 API_PREFIX = "/api/v1"
@@ -76,6 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.capacity_engine = DeterministicCapacityEngine()
     app.state.cost_engine = DeterministicCostEngine(capacity=app.state.capacity_engine)
     app.state.reliability_engine = DeterministicReliabilityEngine()
+    app.state.security_engine = DeterministicSecurityEngine()
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -124,4 +127,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pricing.router, prefix=API_PREFIX)
     app.include_router(cost.router, prefix=API_PREFIX)
     app.include_router(reliability.router, prefix=API_PREFIX)
+    app.include_router(security.router, prefix=API_PREFIX)
     return app

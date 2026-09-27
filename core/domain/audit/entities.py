@@ -53,6 +53,7 @@ class AuditAction(StrEnum):
     ARCHITECTURE_RELIABILITY_ANALYZED = (
         "architecture.reliability_analyzed"  # a reliability analysis was stored
     )
+    ARCHITECTURE_SECURITY_ANALYZED = "architecture.security_analyzed"  # a security analysis was stored
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

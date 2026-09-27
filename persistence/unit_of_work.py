@@ -20,6 +20,7 @@ from persistence.repositories.reliability import SqlAlchemyReliabilityAnalysisRe
 from persistence.repositories.requirement_analyses import SqlAlchemyRequirementAnalysisRepository
 from persistence.repositories.requirement_sets import SqlAlchemyRequirementSetRepository
 from persistence.repositories.requirements import SqlAlchemyRequirementRepository
+from persistence.repositories.security import SqlAlchemySecurityAnalysisRepository
 from persistence.repositories.sessions import SqlAlchemySessionRepository
 from persistence.repositories.single_use_tokens import SqlAlchemySingleUseTokenRepository
 from persistence.repositories.users import SqlAlchemyUserRepository
@@ -55,6 +56,7 @@ class SqlAlchemyUnitOfWork:
         self.pricing = SqlAlchemyPricingSnapshotRepository(session)
         self.cost = SqlAlchemyCostAnalysisRepository(session)
         self.reliability = SqlAlchemyReliabilityAnalysisRepository(session)
+        self.security = SqlAlchemySecurityAnalysisRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

@@ -74,6 +74,10 @@ from core.domain.requirements.enums import RequirementStatus
 from core.domain.requirements.errors import CandidateAlreadyPromoted
 from core.domain.requirements.queries import RequirementQuery
 from core.domain.requirements.requirement_sets import NewRequirementSet, RequirementSet
+from core.domain.security.queries import SecurityAnalysisQuery, SecurityComponentQuery, SecurityFindingQuery
+from core.domain.security.reports import SecurityReport
+from core.domain.security.results import ComponentResult as SecurityComponent
+from core.domain.security.results import SecurityFinding
 from core.domain.validation.queries import FindingQuery, RunQuery
 from core.domain.validation.results import Finding
 from core.domain.validation.runs import RunInputs, RunReport, ValidationRun
@@ -1104,6 +1108,82 @@ class FakeReliabilityAnalysisRepository:
         ][: query.limit]
 
 
+class FakeSecurityAnalysisRepository:
+    """Keeps each analysis's report, components and findings, like the append-only tables."""
+
+    def __init__(self) -> None:
+        self.reports: dict[uuid.UUID, SecurityReport] = {}
+        self.components: dict[uuid.UUID, tuple[SecurityComponent, ...]] = {}
+        self.findings: dict[uuid.UUID, tuple[SecurityFinding, ...]] = {}
+
+    async def add(
+        self,
+        report: SecurityReport,
+        components: tuple[SecurityComponent, ...],
+        findings: tuple[SecurityFinding, ...],
+    ) -> SecurityReport:
+        self.reports[report.analysis.id] = report
+        self.components[report.analysis.id] = components
+        self.findings[report.analysis.id] = findings
+        return report
+
+    async def get(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, analysis_id: uuid.UUID
+    ) -> SecurityReport | None:
+        report = self.reports.get(analysis_id)
+        if report is None or (report.analysis.project_id, report.analysis.architecture_id) != (
+            project_id,
+            architecture_id,
+        ):
+            return None
+        return report
+
+    async def list_for_architecture(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: SecurityAnalysisQuery
+    ) -> list[SecurityReport]:
+        found = [
+            r
+            for r in self.reports.values()
+            if (r.analysis.project_id, r.analysis.architecture_id) == (project_id, architecture_id)
+            and (query.revision is None or r.analysis.revision_number == query.revision)
+            and (query.after is None or (r.analysis.requested_at, r.analysis.id) < query.after)
+        ]
+        return sorted(found, key=lambda r: (r.analysis.requested_at, r.analysis.id), reverse=True)[
+            : query.limit
+        ]
+
+    async def list_components(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: SecurityComponentQuery
+    ) -> list[SecurityComponent]:
+        report = self.reports.get(analysis_id)
+        if report is None or report.analysis.project_id != project_id:
+            return []
+        return [
+            c
+            for c in sorted(self.components[analysis_id], key=lambda c: c.node_id)
+            if (query.coverage is None or c.coverage is query.coverage)
+            and (query.after is None or c.node_id > query.after)
+        ][: query.limit]
+
+    async def list_findings(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: SecurityFindingQuery
+    ) -> list[tuple[int, SecurityFinding]]:
+        report = self.reports.get(analysis_id)
+        if report is None or report.analysis.project_id != project_id:
+            return []
+        return [
+            (position, f)
+            for position, f in enumerate(self.findings[analysis_id])
+            if (query.severity is None or f.severity is query.severity)
+            and (query.type is None or f.type is query.type)
+            and (query.category is None or f.category is query.category)
+            and (query.basis is None or f.basis is query.basis)
+            and (query.certainty is None or f.certainty is query.certainty)
+            and (query.threat is None or f.threat is query.threat)
+            and (query.after is None or position > query.after)
+        ][: query.limit]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1124,6 +1204,7 @@ class FakeUnitOfWork:
         self._pricing = FakePricingSnapshotRepository()
         self._cost = FakeCostAnalysisRepository()
         self._reliability = FakeReliabilityAnalysisRepository()
+        self._security = FakeSecurityAnalysisRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1198,6 +1279,10 @@ class FakeUnitOfWork:
     @property
     def reliability(self) -> FakeReliabilityAnalysisRepository:
         return self._reliability
+
+    @property
+    def security(self) -> FakeSecurityAnalysisRepository:
+        return self._security
 
     async def __aenter__(self) -> Self:
         return self
