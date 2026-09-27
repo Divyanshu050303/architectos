@@ -37,3 +37,12 @@ class InvalidEvolutionTransition(DomainError):
 
     code = "invalid_evolution_transition"
     message = "The evolution analysis cannot move to that status from its current status."
+
+
+class InvalidCandidate(DomainError):
+    """A candidate that cannot be applied to its baseline as an overlay. ``details`` = {"candidate_id",
+    "reason"} and, when there is one, the ``element_id`` and ``property`` concerned — enough to act on
+    (e.g. ``unknown_element``, ``not_applicable``, ``baseline_mismatch``, an IR rule broken)."""
+
+    code = "invalid_evolution_candidate"
+    message = "The candidate cannot be applied to its baseline."

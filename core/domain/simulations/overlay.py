@@ -149,11 +149,36 @@ def _commands(ir: ArchitectureIR, changes: tuple[ConfigurationChange, ...]) -> l
     return commands
 
 
-def _configured(ir: ArchitectureIR, scenario: Scenario) -> ArchitectureIR:
-    if not scenario.changes:
+def configure(
+    ir: ArchitectureIR, changes: tuple[ConfigurationChange, ...], provenance: Provenance
+) -> ArchitectureIR:
+    """``changes`` applied to an in-memory copy of ``ir`` with the IR's own edit commands (all or
+    nothing, ids preserved, the result a valid architecture), each value stamped with ``provenance``.
+    Raises the IR's own errors (``InvalidArchitectureCommand``, ``InvalidArchitecture``): each caller
+    says them in its own terms. Shared by simulation scenarios and evolution candidates."""
+    if not changes:
         return ir
+    return apply_commands(ir, _commands(ir, changes), provenance=provenance)
+
+
+def applied(
+    ir: ArchitectureIR, architecture: ArchitectureIR, changes: tuple[ConfigurationChange, ...]
+) -> tuple[AppliedChange, ...]:
+    """Each changed property as ``ir`` declares it and as ``architecture`` sets it."""
+    return tuple(
+        AppliedChange(
+            c.element_id,
+            c.property,
+            _configuration(ir, c.element_id).get(c.property),
+            _configuration(architecture, c.element_id).get(c.property),
+        )
+        for c in changes
+    )
+
+
+def _configured(ir: ArchitectureIR, scenario: Scenario) -> ArchitectureIR:
     try:
-        return apply_commands(ir, _commands(ir, scenario.changes), provenance=provenance_of(scenario))
+        return configure(ir, scenario.changes, provenance_of(scenario))
     except InvalidArchitectureCommand as error:
         raise InvalidSimulationRequest(
             details={
@@ -195,15 +220,7 @@ def _declared(value: ConfigValue | None) -> tuple[str, ...]:
 def apply_scenario(ir: ArchitectureIR, revision: RevisionInfo, scenario: Scenario) -> Overlay:
     """``scenario`` applied to an in-memory copy of ``ir`` (the exact ``revision``)."""
     architecture = _configured(ir, scenario)
-    changes = tuple(
-        AppliedChange(
-            c.element_id,
-            c.property,
-            _configuration(ir, c.element_id).get(c.property),
-            _configuration(architecture, c.element_id).get(c.property),
-        )
-        for c in scenario.changes
-    )
+    changes = applied(ir, architecture, scenario.changes)
     nodes: set[str] = set()
     connections: set[str] = set()
     undetermined: set[str] = set()
