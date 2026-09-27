@@ -71,7 +71,7 @@ class ConnectionSecurity(_Classified):
         return cls.read(connection, CONNECTION_PROPERTIES)
 
 
-_STORES = frozenset(
+STORES = frozenset(
     {NodeKind.DATABASE, NodeKind.CACHE, NodeKind.STORAGE, NodeKind.QUEUE, NodeKind.OBSERVABILITY}
 )
 
@@ -86,7 +86,7 @@ def expected(kind: NodeKind, facts: ComponentSecurity) -> tuple[str, ...]:
         names = ["data_classification"]
     else:
         names = ["exposure", "data_classification", "authentication", "secrets_required"]
-    if kind in _STORES:
+    if kind in STORES:
         names.append("encryption_at_rest")
     if facts.known("sensitive_operations") is True:
         names.append("authorization")
