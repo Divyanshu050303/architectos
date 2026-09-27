@@ -46,6 +46,7 @@ from .support import (
     authenticated,
     certainty,
     evidence,
+    finding,
     protocol_evidence,
     transport_protected,
 )
@@ -174,18 +175,6 @@ class TrustBoundaries:
                 findings += self._crossing(context, connection, crossing)
         return AnalyzerOutput(tuple(findings))
 
-    def _finding(
-        self, type_: FindingType, severity: Severity, certainty_: Certainty, **fields: Any
-    ) -> SecurityFinding:
-        return SecurityFinding(
-            type=type_,
-            severity=severity,
-            certainty=certainty_,
-            analyzer_id=self.meta.id,
-            analyzer_version=self.meta.version,
-            **fields,
-        )
-
     def _zones(self, context: SecurityContext) -> list[SecurityFinding]:
         if not context.trust_zones:
             return []
@@ -195,7 +184,8 @@ class TrustBoundaries:
                 continue
             facts = context.boundary_facts[zone.boundary_id]
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.TRUST_LEVEL_NOT_MODELED,
                     Severity.LOW,
                     certainty((facts, ["boundary_type"])),
@@ -212,7 +202,8 @@ class TrustBoundaries:
         outside = sorted(node_id for node_id, zones in context.zones_of.items() if not zones)
         if outside:
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.TRUST_LEVEL_NOT_MODELED,
                     Severity.LOW,
                     Certainty.MODELED,
@@ -236,7 +227,8 @@ class TrustBoundaries:
             if facts.trust_zone or facts.known("trust_level") is None:
                 continue
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.INCONSISTENT_TRUST_BOUNDARY,
                     Severity.LOW,
                     certainty((facts, ["boundary_type", "trust_level"])),
@@ -269,7 +261,8 @@ class TrustBoundaries:
         crosses = (Evidence(f"{connection.id}.crosses", where),)
         if connection.kind is ConnectionKind.DEPENDENCY:
             return [
-                self._finding(
+                finding(
+                    self.meta,
                     T.INSUFFICIENT_FLOW_SEMANTICS,
                     Severity.LOW,
                     certainty(*placed),
@@ -303,7 +296,8 @@ class TrustBoundaries:
                 if present
             ]
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.UNPROTECTED_BOUNDARY_CROSSING,
                     Severity.HIGH if sensitive else Severity.MEDIUM,
                     certainty(controls, *placed),
@@ -321,7 +315,8 @@ class TrustBoundaries:
         elif missing:
             unstated = " and ".join(m.rsplit(".", 1)[1] for m in missing)
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.CROSSING_CONTROLS_NOT_MODELED,
                     Severity.MEDIUM if sensitive else Severity.LOW,
                     certainty(controls, *placed),
@@ -337,7 +332,8 @@ class TrustBoundaries:
             )
         if connection.bidirectional and auth is True:
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.INSUFFICIENT_FLOW_SEMANTICS,
                     Severity.LOW,
                     certainty(controls, *placed),
@@ -357,7 +353,8 @@ class TrustBoundaries:
             data = tuple(e for facts, props in classified for e in evidence(facts, props))
             safe = protected is True and auth is True
             findings.append(
-                self._finding(
+                finding(
+                    self.meta,
                     T.SENSITIVE_DATA_CROSSES_BOUNDARY,
                     Severity.LOW if safe else Severity.MEDIUM,
                     certainty(*classified, *placed),

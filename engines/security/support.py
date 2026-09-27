@@ -2,6 +2,7 @@
 architecture may not say: True, False, or None (not modeled). Nothing here assumes a default."""
 
 from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any
 
 from core.architecture_ir.dependency import ENCRYPTED_PROTOCOLS
 from core.architecture_ir.edge import Connection
@@ -9,7 +10,12 @@ from core.domain.capacity.results import Certainty
 from core.domain.engine_results import Evidence
 from core.domain.facts import ElementFacts
 from core.domain.security.inputs import ConnectionSecurity
+from core.domain.security.results import FindingType, SecurityFinding
 from core.domain.security.values import redacted
+from core.domain.validation.results import Severity
+
+if TYPE_CHECKING:
+    from .engine import AnalyzerMeta
 
 MECHANISM_NOT_VERIFIED = (
     "A declared control is taken as the architecture names it; whether it is implemented and "
@@ -50,3 +56,17 @@ def authenticated(facts: ElementFacts) -> bool | None:
 
 def protocol_evidence(connection: Connection) -> tuple[Evidence, ...]:
     return (Evidence(f"{connection.id}.protocol", connection.protocol),) if connection.protocol else ()
+
+
+def finding(
+    meta: AnalyzerMeta, type_: FindingType, severity: Severity, certainty_: Certainty, **fields: Any
+) -> SecurityFinding:
+    """A finding of the analyzer ``meta`` describes (its id and version recorded)."""
+    return SecurityFinding(
+        type=type_,
+        severity=severity,
+        certainty=certainty_,
+        analyzer_id=meta.id,
+        analyzer_version=meta.version,
+        **fields,
+    )
