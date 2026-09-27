@@ -59,7 +59,12 @@ class CandidateOverlay:
     baseline: ArchitectureIR  # the exact revision, unchanged
     architecture: ArchitectureIR  # the candidate's in-memory copy
     changes: tuple[AppliedChange, ...]
-    diff: ArchitectureDiff
+
+    @property
+    def diff(self) -> ArchitectureDiff:
+        """The IR's structural diff from the baseline (computed when asked: only a candidate's detail
+        needs it)."""
+        return diff(self.baseline, self.architecture)
 
     @property
     def content_hash(self) -> str:
@@ -114,9 +119,7 @@ def apply_candidate(ir: ArchitectureIR, candidate: Candidate) -> CandidateOverla
     ] == [c.id for c in architecture.connections]
     if not same:  # configuration commands never add, remove or rename: an IR bug if they did
         raise _refused(candidate, "elements_changed")
-    return CandidateOverlay(
-        candidate, ir, architecture, applied(ir, architecture, candidate.changes), diff(ir, architecture)
-    )
+    return CandidateOverlay(candidate, ir, architecture, applied(ir, architecture, candidate.changes))
 
 
 def reconstruct(ir: ArchitectureIR, candidate: Candidate, stored: Mapping[str, Any]) -> CandidateOverlay:

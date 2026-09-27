@@ -14,9 +14,11 @@ from core.architecture_ir.model import ArchitectureIR
 from core.domain.engine_results import Limitation
 from core.domain.evolution.candidates import BaselineRef
 from core.domain.evolution.entities import EvolutionRequest
+from core.domain.evolution.errors import InvalidCandidate
 from core.domain.evolution.evidence import StoredAnalysis
+from core.domain.evolution.overlays import CandidateOverlay, apply_candidate
 from core.domain.evolution.ports import ImpactInputs
-from core.domain.evolution.results import MAX_CANDIDATES, MAX_FINDINGS, EvolutionResult
+from core.domain.evolution.results import MAX_FINDINGS, EvolutionResult
 from core.domain.evolution.tradeoffs import with_tradeoffs
 from core.domain.evolution.validation import validate_candidate
 from core.domain.evolution.values import CandidateCategory, EvidenceSource, GoalType
@@ -26,14 +28,22 @@ from core.domain.simulations.ports import SimulationEngine
 from core.domain.validation.options import RevisionInfo, ValidationConfig
 from core.domain.validation.ports import ValidationEngine
 from engines.observability.service import DeterministicObservabilityEngine
+from engines.reliability.service import DeterministicReliabilityEngine
 from engines.security.service import DeterministicSecurityEngine
+from engines.simulation.registry import default_registry as simulation_registry
 from engines.simulation.service import DeterministicSimulationEngine
 from engines.validation.service import DeterministicValidationEngine
 
 from .impact import Assessor, ImpactEngines
+from .memo import MemoReliability
 from .rulebook import default_registry
 from .rules import Registry, RuleContext, generate
 from .trigger_engine import evaluate
+
+# Each candidate is validated and evaluated on the whole overlay (a full reliability, capacity or
+# security analysis each): at most this many per analysis, in canonical order, keep one synchronous
+# analysis bounded; narrowing the goals or the scope evaluates the others.
+MAX_EVALUATED = 25
 
 LIMITATIONS = (
     Limitation(
@@ -66,12 +76,18 @@ class DeterministicEvolutionEngine:
         validation: ValidationEngine | None = None,
     ) -> None:
         self._registry = registry or default_registry()
-        self._engines = ImpactEngines(
-            simulation or DeterministicSimulationEngine(),
-            security or DeterministicSecurityEngine(),
-            observability or DeterministicObservabilityEngine(),
-        )
+        self._simulation = simulation  # None: a fresh one per analysis, with a per-analysis memo
+        self._security = security or DeterministicSecurityEngine()
+        self._observability = observability or DeterministicObservabilityEngine()
         self._validation = validation or DeterministicValidationEngine()
+
+    def _engines(self) -> ImpactEngines:
+        """The engines of one analysis: every candidate's impact re-evaluates the unchanged baseline,
+        so the reliability baseline is computed once per analysis (the engines are pure)."""
+        simulation = self._simulation or DeterministicSimulationEngine(
+            simulation_registry(reliability=MemoReliability(DeterministicReliabilityEngine()))
+        )
+        return ImpactEngines(simulation, self._security, self._observability)
 
     def analyze(
         self,
@@ -90,10 +106,14 @@ class DeterministicEvolutionEngine:
         validated_baseline = self._validation.validate(
             ir, revision, requirements=inputs.requirements, policy=inputs.policy, config=config
         )
-        assessor = Assessor(ir, revision, request.architecture_id, inputs, self._engines, self._registry)
+        assessor = Assessor(ir, revision, request.architecture_id, inputs, self._engines(), self._registry)
         ordered = sorted(generation.candidates, key=lambda c: (c.category.value, c.id))
         candidates = []
-        for candidate in ordered[:MAX_CANDIDATES]:
+        for candidate in ordered[:MAX_EVALUATED]:
+            try:  # built once, shared by validation and impact
+                overlay: CandidateOverlay | None = apply_candidate(ir, candidate)
+            except InvalidCandidate:
+                overlay = None  # validation says why
             validated = validate_candidate(
                 ir,
                 revision,
@@ -103,15 +123,16 @@ class DeterministicEvolutionEngine:
                 policy=inputs.policy,
                 config=config,
                 baseline=validated_baseline,
+                overlay=overlay,
             )
-            candidates.append(with_tradeoffs(assessor.assess(validated), request.goals))
+            candidates.append(with_tradeoffs(assessor.assess(validated, overlay), request.goals))
         findings = sorted(set((*evaluation.findings, *generation.findings)), key=lambda f: f.sort_key)
         limitations = list(LIMITATIONS)
-        if len(ordered) > MAX_CANDIDATES:
+        if len(ordered) > MAX_EVALUATED:
             limitations.append(
                 Limitation(
                     "candidates_truncated",
-                    f"{len(ordered)} candidates were generated; the first {MAX_CANDIDATES} in canonical "
+                    f"{len(ordered)} candidates were generated; the first {MAX_EVALUATED} in canonical "
                     "order are evaluated. Narrow the scope or the goals to see the others.",
                 )
             )
@@ -140,5 +161,5 @@ class DeterministicEvolutionEngine:
             "goal_types": [t.value for t in GoalType],
             "categories": [c.value for c in CandidateCategory],
             "rules": [r.meta.to_dict() for r in self._registry.rules()],
-            "limits": {"max_candidates": MAX_CANDIDATES, "max_findings": MAX_FINDINGS},
+            "limits": {"max_candidates": MAX_EVALUATED, "max_findings": MAX_FINDINGS},
         }

@@ -30,7 +30,7 @@ from core.domain.validation.results import ValidationResult, Verdict
 
 from .candidates import Candidate, ValidationNote
 from .errors import InvalidCandidate
-from .overlays import apply_candidate
+from .overlays import CandidateOverlay, apply_candidate
 from .values import ValidationState
 
 UNSUPPORTED_REASONS = frozenset({"not_applicable"})
@@ -52,7 +52,7 @@ def _refused(candidate: Candidate, error: InvalidCandidate) -> Candidate:
     return replace(candidate, validation=state, validation_notes=(note,))
 
 
-def validate_candidate(
+def validate_candidate(  # noqa: PLR0913 -- the candidate, its baseline, and what validation reads
     ir: ArchitectureIR,
     revision: RevisionInfo,
     candidate: Candidate,
@@ -62,13 +62,15 @@ def validate_candidate(
     policy: ArchitecturePolicy | None = None,
     config: ValidationConfig | None = None,
     baseline: ValidationResult | None = None,
+    overlay: CandidateOverlay | None = None,
 ) -> Candidate:
     """``candidate`` with its validation state and notes. ``baseline`` is the same engine's result
     for ``ir`` with the same inputs (computed here when not given)."""
-    try:
-        overlay = apply_candidate(ir, candidate)
-    except InvalidCandidate as error:
-        return _refused(candidate, error)
+    if overlay is None:  # built here unless the caller already has it
+        try:
+            overlay = apply_candidate(ir, candidate)
+        except InvalidCandidate as error:
+            return _refused(candidate, error)
     config = config or ValidationConfig()
     if baseline is None:
         baseline = engine.validate(ir, revision, requirements=requirements, policy=policy, config=config)

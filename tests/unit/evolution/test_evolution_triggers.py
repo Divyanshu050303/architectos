@@ -261,8 +261,9 @@ def test_fixture_4_reliability_findings_with_explicit_redundancy_semantics() -> 
     triggered = {(t.code, t.element_id) for t in evaluation.triggers}
     assert ("single_point_of_failure", "db") in triggered
     assert all(t.source is S.RELIABILITY for t in evaluation.triggers)
-    [unknown] = [f for f in evaluation.findings if f.type is F.MISSING_EVIDENCE]  # not modeled: not a trigger
-    assert {"api", "db"} <= set(unknown.element_ids)
+    unknown = [f for f in evaluation.findings if f.type is F.MISSING_EVIDENCE]  # not modeled: not a trigger
+    assert all(len(f.element_ids) == 1 for f in unknown)  # one finding per element, each exact
+    assert {"api", "db"} <= {e for f in unknown for e in f.element_ids}
     context = RuleContext(IR, BASELINE, {goal.key: goal})
     generation = generate(context, evaluation.triggers, default_registry())
     assert [c.rule.id for c in generation.candidates] == ["add-replica"]

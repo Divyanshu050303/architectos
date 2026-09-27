@@ -79,7 +79,9 @@ missing, or a goal not evaluable), `insufficient_evidence` (no goal could be eva
   revision number, content hash and model version.
 - `summary`: counts only (goals, candidates by category and by goal, findings by type, evidence by
   state) — no score. `limitations`: `proposals_only`, `configuration_only`, `model_based`, and
-  `candidates_truncated` / `findings_truncated` when a limit applied (200 candidates, 1000 findings).
+  `candidates_truncated` / `findings_truncated` when a limit applied: at most 25 candidates are
+  validated and evaluated per analysis (the first in canonical order; narrow the scope or the goals
+  to see others) and 1000 findings are kept; a finding lists at most 200 elements ("… and N more").
 - `inputs`: the request as stored, the requirements read, the policy, provider and currency, and the
   stored analyses whose inputs were reused for impacts (`impactInputs`).
 

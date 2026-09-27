@@ -112,7 +112,7 @@ class Assessor:
         self._security: SecurityResult | None = None
         self._observability: ObservabilityResult | None = None
 
-    def assess(self, candidate: Candidate) -> Candidate:
+    def assess(self, candidate: Candidate, overlay: CandidateOverlay | None = None) -> Candidate:
         meta = self._rules.get(candidate.rule.id)
         dimensions = tuple(sorted(set(meta.analyses), key=lambda d: d.value)) if meta else ()
         if candidate.validation in NOT_ASSESSED:
@@ -120,7 +120,7 @@ class Assessor:
             return replace(
                 candidate, impacts=tuple(Impact(d, "not_evaluated", d, reason) for d in dimensions)
             )
-        overlay = apply_candidate(self._ir, candidate)
+        overlay = overlay or apply_candidate(self._ir, candidate)
         impacts: list[Impact] = []
         simulated = [d for d in dimensions if d in SIMULATED]
         if simulated:

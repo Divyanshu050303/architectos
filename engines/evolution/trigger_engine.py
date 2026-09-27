@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 
 from core.architecture_ir.model import ArchitectureIR
-from core.domain.evolution.candidates import BaselineRef, EvidenceRef
+from core.domain.evolution.candidates import MAX_ITEMS, BaselineRef, EvidenceRef
 from core.domain.evolution.evidence import EvidenceItem, StoredAnalysis
 from core.domain.evolution.goals import EvolutionGoal
 from core.domain.evolution.results import EvolutionFinding, FindingType
@@ -87,8 +87,11 @@ class _Goal:
         missing: Iterable[str] = (),
         elements: Iterable[str] = (),
     ) -> None:
+        """One finding, its lists bounded: past ``MAX_ITEMS`` a canonical prefix is kept and the rest
+        is counted, never dropped silently (large architectures stay analyzable)."""
+        refs = sorted(set(evidence), key=lambda e: e.key)[:MAX_ITEMS]
         self.findings.append(
-            EvolutionFinding(kind, message, self.goal.key, tuple(elements), tuple(evidence), tuple(missing))
+            EvolutionFinding(kind, message, self.goal.key, _bounded(elements), tuple(refs), _bounded(missing))
         )
 
     def in_scope(self, element_id: str) -> bool:
@@ -118,17 +121,20 @@ class _Goal:
         return True
 
     def unknowns(self, analysis: StoredAnalysis, items: Iterable[EvidenceItem], what: str) -> None:
-        """Items that only say something is not modeled: what would decide the goal."""
-        scoped = [i for i in items if self.in_scope(i.element_id)]
-        if scoped:
+        """Items that only say something is not modeled: what would decide the goal, one finding per
+        element concerned."""
+        by_element: dict[str, list[EvidenceItem]] = {}
+        for item in items:
+            if self.in_scope(item.element_id):
+                by_element.setdefault(item.element_id, []).append(item)
+        for element, found in sorted(by_element.items()):
             self.finding(
                 F.MISSING_EVIDENCE,
-                f"The {analysis.source.value} analysis cannot establish {what} for "
-                f"{', '.join(sorted({i.element_id for i in scoped}))}: the architecture does not "
-                "declare enough.",
-                [analysis.ref(EvidenceState.CURRENT, i.item) for i in scoped],
-                [m for i in scoped for m in i.missing] or [f"{i.element_id}: {i.code}" for i in scoped],
-                [i.element_id for i in scoped],
+                f"The {analysis.source.value} analysis cannot establish {what} for {element}: the "
+                "architecture does not declare enough.",
+                [analysis.ref(EvidenceState.CURRENT, i.item) for i in found],
+                [m for i in found for m in i.missing] or [f"{element}: {i.code}" for i in found],
+                (element,),
             )
 
 
@@ -207,6 +213,13 @@ def _current(
         evidence[ref.key] = ref
         found[source] = analysis
     return found
+
+
+def _bounded(values: Iterable[str]) -> tuple[str, ...]:
+    ordered = sorted(set(values))
+    if len(ordered) <= MAX_ITEMS:
+        return tuple(ordered)
+    return (*ordered[: MAX_ITEMS - 1], f"… and {len(ordered) - MAX_ITEMS + 1} more")
 
 
 def _number(raw: str | None) -> Decimal | None:
