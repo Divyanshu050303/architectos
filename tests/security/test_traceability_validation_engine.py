@@ -263,6 +263,9 @@ def test_there_is_one_validation_framework() -> None:
         "engines/cost/calculator.py: Registry",
         # And the reliability engine's registry of reliability models and steps (Milestone 9).
         "engines/reliability/engine.py: Registry",
+        # And the security engine's registry of security analyzers (Milestone 10): architecture-level
+        # security findings with their own basis and evidence rules, not architecture validation.
+        "engines/security/engine.py: Registry",
     }
     assert set(found) - allowed == set()
 

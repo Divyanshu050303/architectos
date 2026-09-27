@@ -19,6 +19,7 @@ their provenance (``core/domain/facts.py``).
 from dataclasses import dataclass
 from typing import Self
 
+from core.architecture_ir.component import NodeKind
 from core.architecture_ir.edge import Connection
 from core.architecture_ir.node import Node
 from core.domain.facts import ElementFacts
@@ -68,6 +69,30 @@ class ConnectionSecurity(_Classified):
     @classmethod
     def of(cls, connection: Connection) -> Self:
         return cls.read(connection, CONNECTION_PROPERTIES)
+
+
+_STORES = frozenset(
+    {NodeKind.DATABASE, NodeKind.CACHE, NodeKind.STORAGE, NodeKind.QUEUE, NodeKind.OBSERVABILITY}
+)
+
+
+def expected(kind: NodeKind, facts: ComponentSecurity) -> tuple[str, ...]:
+    """The security properties a component of ``kind`` should model for its controls to be
+    evaluable (what its coverage is judged on). A third party's own controls are not ours to model,
+    only what it is trusted with; authorization and a secret source matter once the component says
+    it performs sensitive operations or needs secrets. Policies may require more (audit logging,
+    rotation), checked by their own rules."""
+    if kind is NodeKind.EXTERNAL:
+        names = ["data_classification"]
+    else:
+        names = ["exposure", "data_classification", "authentication", "secrets_required"]
+    if kind in _STORES:
+        names.append("encryption_at_rest")
+    if facts.known("sensitive_operations") is True:
+        names.append("authorization")
+    if facts.known("secrets_required") is True:
+        names.append("secret_source")
+    return tuple(names)
 
 
 @dataclass(frozen=True, slots=True)
