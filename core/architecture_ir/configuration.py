@@ -53,6 +53,13 @@ AUTHENTICATION_MECHANISMS = frozenset(
 DATA_CLASSIFICATIONS = frozenset({"public", "internal", "confidential", "restricted"})
 SECRET_SOURCES = frozenset({"secret_manager", "environment", "file", "configuration", "hardcoded"})
 TRUST_LEVELS = frozenset({"untrusted", "partner", "internal", "restricted"})
+# Observability vocabulary (read by the observability engine).
+METRIC_KINDS = ("errors", "latency", "throughput", "saturation", "resources", "availability")
+TELEMETRY_SIGNALS = ("logs", "metrics", "traces")
+METRIC_KIND = re.compile("^(" + "|".join(METRIC_KINDS) + ")$")
+ALERT_SIGNAL = re.compile("^(" + "|".join((*METRIC_KINDS, "health", "logs")) + ")$")
+TELEMETRY_SIGNAL = re.compile("^(" + "|".join(TELEMETRY_SIGNALS) + ")$")
+OWNER = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")  # a team or rotation, e.g. "payments-oncall"
 CONNECTION = "connection"
 
 
@@ -472,6 +479,70 @@ NODE_PROPERTIES: dict[str, PropertySpec] = {
             _DEPLOYED - {K.EXTERNAL},
             "Security-relevant actions on it are recorded in an audit log.",
         ),
+        # observability (read by the observability engine: what the architecture models about its own
+        # instrumentation; never proof that telemetry is emitted, collected or acted on in production,
+        # and never assumed when absent)
+        _spec(
+            "criticality",
+            _C,
+            _DEPLOYED,
+            "How much the system depends on it being observable: critical or standard.",
+            choices={"critical", "standard"},
+        ),
+        _spec("logs", _B, _DEPLOYED - {K.EXTERNAL}, "It emits logs."),
+        _spec("structured_logs", _B, _DEPLOYED - {K.EXTERNAL}, "Its logs are structured (e.g. JSON)."),
+        _spec(
+            "correlation_ids",
+            _B,
+            _DEPLOYED - {K.EXTERNAL},
+            "Its logs carry the request's correlation identifier.",
+        ),
+        _spec(
+            "metrics",
+            _L,
+            _DEPLOYED - {K.EXTERNAL},
+            "The kinds of metrics it exposes: errors, latency, throughput, saturation, resources or "
+            "availability.",
+            pattern=METRIC_KIND,
+        ),
+        _spec("traces", _B, _DEPLOYED - {K.EXTERNAL}, "It emits trace spans."),
+        _spec(
+            "trace_context",
+            _C,
+            _DEPLOYED - {K.EXTERNAL},
+            "What it does with an incoming trace context: propagate it downstream, or terminate it.",
+            choices={"propagate", "terminate"},
+        ),
+        _spec(
+            "trace_sampling_ratio",
+            _D,
+            _DEPLOYED - {K.EXTERNAL},
+            "Share of its traces kept, as configured (0.1 = 10 %).",
+            minimum="0",
+            maximum="1",
+        ),
+        _spec("health_check", _B, _DEPLOYED - {K.EXTERNAL}, "It exposes a health check."),
+        _spec(
+            "alerts",
+            _L,
+            _DEPLOYED - {K.EXTERNAL},
+            "The signals alert rules watch for it: a metric kind, health or logs.",
+            pattern=ALERT_SIGNAL,
+        ),
+        _spec(
+            "owner",
+            _T,
+            _DEPLOYED,
+            "The team or rotation responsible for it, e.g. payments-oncall.",
+            pattern=OWNER,
+        ),
+        _spec(
+            "alert_delivery",
+            _C,
+            {K.OBSERVABILITY},
+            "How the observability system delivers alerts: none, email, chat, paging or other.",
+            choices={"none", "email", "chat", "paging", "other"},
+        ),
         # boundaries
         _spec(
             "boundary_type",
@@ -512,6 +583,20 @@ CONNECTION_PROPERTIES: dict[str, PropertySpec] = {
             choices=DATA_CLASSIFICATIONS,
         ),
         _spec("personal_data", _B, {CONNECTION}, "The connection carries personal data."),
+        # observability (read by the observability engine; nothing is assumed when they are absent)
+        _spec(
+            "telemetry",
+            _L,
+            {CONNECTION},
+            "The telemetry signals this connection carries from its source: logs, metrics, traces.",
+            pattern=TELEMETRY_SIGNAL,
+        ),
+        _spec(
+            "trace_propagation", _B, {CONNECTION}, "The trace context is propagated across this connection."
+        ),
+        _spec(
+            "health_check", _B, {CONNECTION}, "The source checks the target's health over this connection."
+        ),
         _spec("dead_letter", _B, {CONNECTION}, "Messages that keep failing go to a dead-letter queue."),
         _spec("port", _I, {CONNECTION}, "Target port.", minimum="1", maximum="65535"),
         # traffic (read by the capacity engine; nothing is assumed when they are absent)

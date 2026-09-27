@@ -14,11 +14,12 @@ analysis states every security rule of the policy.
 
 from collections.abc import Callable
 
+from core.domain.checks import Subject
 from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.security.results import CheckResult, Condition, FindingCategory, FindingType, SecurityFinding
 from core.domain.validation.results import Severity
 
-from .conditions import Ask, Subject, judge, report
+from .conditions import Ask, judge, report
 from .context import SecurityContext
 from .engine import AnalyzerMeta, AnalyzerOutput, Progress
 

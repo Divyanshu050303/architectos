@@ -132,6 +132,37 @@ class ArchitecturePolicyModel(ApiModel):
     require_data_classification: bool = Field(
         default=False, description="Every component declares a data classification."
     )
+    require_logs_on_critical: bool = Field(default=False, description="Critical components declare logs.")
+    required_metric_kinds_on_critical: PolicyNames = Field(
+        default_factory=list,
+        description="When not empty, critical components declare these metric kinds (errors, latency, "
+        "throughput, saturation, resources, availability).",
+        examples=[["errors", "latency"]],
+    )
+    require_traces_on_critical: bool = Field(default=False, description="Critical components declare traces.")
+    require_trace_propagation: bool = Field(
+        default=False, description="Request flows touching critical traced components declare propagation."
+    )
+    require_health_checks_on_critical: bool = Field(
+        default=False, description="Critical components declare a health check."
+    )
+    require_alerting_on_critical: bool = Field(
+        default=False, description="Critical components declare alert rules."
+    )
+    require_structured_logs: bool = Field(
+        default=False, description="Components that log declare structured logs."
+    )
+    require_correlation_ids: bool = Field(
+        default=False, description="Components that log declare correlation ids."
+    )
+    require_ownership: bool = Field(default=False, description="Critical components declare an owner.")
+    require_telemetry_collection: bool = Field(
+        default=False,
+        description="The telemetry critical components declare reaches an observability component.",
+    )
+    min_telemetry_retention_seconds: Annotated[int | None, Field(ge=1, le=316_224_000)] = Field(
+        default=None, description="Observability components declare at least this retention, in seconds."
+    )
 
     def to_domain(self) -> ArchitecturePolicy:
         return ArchitecturePolicy.from_dict(self.model_dump(by_alias=False))

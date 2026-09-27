@@ -13,11 +13,8 @@ typed properties with a closed set of values, like ``authorization`` or ``secret
 hold a secret and are shown).
 """
 
-from collections.abc import Iterable
-
 from core.architecture_ir.configuration import DATA_CLASSIFICATIONS, ConfigValue
-from core.architecture_ir.diff import REDACTED, is_secret_path
-from core.domain.engine_results import Evidence
+from core.domain.redaction import REDACTED, is_secret_path, redacted, shows_a_secret
 
 CLASSIFICATIONS = ("public", "internal", "confidential", "restricted")  # least to most sensitive
 SENSITIVE_CLASSIFICATIONS = frozenset({"confidential", "restricted"})
@@ -33,13 +30,3 @@ def sensitivity(classification: ConfigValue | None, personal_data: ConfigValue |
     if classification in {"public", "internal"}:
         return False
     return None
-
-
-def redacted(label: str, value: str) -> Evidence:
-    """Evidence for ``label``, its value replaced when the label names a secret."""
-    return Evidence(label, REDACTED if is_secret_path(label) else value)
-
-
-def shows_a_secret(evidence: Iterable[Evidence]) -> bool:
-    """Whether any evidence would show the value of a secret-looking setting."""
-    return any(is_secret_path(e.label) and e.value != REDACTED for e in evidence)

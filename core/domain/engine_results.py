@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any, Self
 
 from core.domain.errors import DomainError
@@ -15,6 +16,15 @@ CODE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 MAX_TEXT = 2000
 MAX_ID = 256
 MAX_ITEMS = 200
+
+
+class FindingBasis(StrEnum):
+    """What a finding rests on (security, observability): kept apart, never collapsed."""
+
+    CONTROL_GAP = "control_gap"  # the model states a control is absent where it matters
+    POTENTIAL_RISK = "potential_risk"  # the modeled structure could allow harm
+    VIOLATION = "violation"  # an explicit requirement or policy is contradicted by modeled evidence
+    NOT_EVALUABLE = "not_evaluable"  # the model does not say enough to decide
 
 
 class InvalidEngineResult(DomainError):

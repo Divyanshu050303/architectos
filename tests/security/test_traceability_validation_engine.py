@@ -266,6 +266,8 @@ def test_there_is_one_validation_framework() -> None:
         # And the security engine's registry of security analyzers (Milestone 10): architecture-level
         # security findings with their own basis and evidence rules, not architecture validation.
         "engines/security/engine.py: Registry",
+        # And the observability engine's registry of observability analyzers (Milestone 11).
+        "engines/observability/engine.py: Registry",
     }
     assert set(found) - allowed == set()
 

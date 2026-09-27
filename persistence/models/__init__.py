@@ -7,6 +7,11 @@ from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, Capacity
 from .cost import CostAnalysisRecord, CostLineItemRecord
 from .email_verification_token import EmailVerificationTokenRecord
 from .invitation import InvitationRecord
+from .observability import (
+    ObservabilityAnalysisRecord,
+    ObservabilityComponentRecord,
+    ObservabilityFindingRecord,
+)
 from .organization import OrganizationRecord
 from .organization_member import OrganizationMemberRecord
 from .password_reset_token import PasswordResetTokenRecord
@@ -34,6 +39,9 @@ __all__ = [
     "CostLineItemRecord",
     "EmailVerificationTokenRecord",
     "InvitationRecord",
+    "ObservabilityAnalysisRecord",
+    "ObservabilityComponentRecord",
+    "ObservabilityFindingRecord",
     "OrganizationMemberRecord",
     "OrganizationRecord",
     "PasswordResetTokenRecord",

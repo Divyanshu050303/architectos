@@ -24,6 +24,21 @@ Security (what the architecture must model; see the security engine):
 - ``require_secret_rotation``: every component needing secrets declares their rotation;
 - ``require_audit_logging``: every component (third parties aside) declares audit logging;
 - ``require_data_classification``: every component declares a data classification.
+
+Observability (what the architecture must model; see the observability engine):
+
+- ``require_logs_on_critical``, ``require_traces_on_critical``, ``require_health_checks_on_critical``,
+  ``require_alerting_on_critical``: every component declared critical declares that capability;
+- ``required_metric_kinds_on_critical``: when not empty, every critical component declares these
+  metric kinds (``errors``, ``latency``, ``throughput``, ``saturation``, ``resources``,
+  ``availability``);
+- ``require_trace_propagation``: request flows touching a critical component, between traced
+  components, declare the trace context propagated;
+- ``require_structured_logs``, ``require_correlation_ids``: every component emitting logs declares them;
+- ``require_ownership``: every critical component declares an owner;
+- ``require_telemetry_collection``: the logs, metrics and traces critical components declare reach an
+  observability component;
+- ``min_telemetry_retention_seconds``: every observability component declares at least this retention.
 """
 
 import re
@@ -32,7 +47,7 @@ from dataclasses import dataclass
 from typing import Any, Self
 
 from core.architecture_ir.component import TECHNOLOGY_NAME
-from core.architecture_ir.configuration import REGION, SECRET_SOURCES
+from core.architecture_ir.configuration import METRIC_KIND, REGION, SECRET_SOURCES
 from core.architecture_ir.model import MAX_NODES
 
 from .errors import InvalidArchitecturePolicy
@@ -47,6 +62,18 @@ SECURITY_FLAGS = (
     "require_audit_logging",
     "require_data_classification",
 )
+OBSERVABILITY_FLAGS = (
+    "require_logs_on_critical",
+    "require_traces_on_critical",
+    "require_trace_propagation",
+    "require_health_checks_on_critical",
+    "require_alerting_on_critical",
+    "require_structured_logs",
+    "require_correlation_ids",
+    "require_ownership",
+    "require_telemetry_collection",
+)
+MAX_RETENTION_SECONDS = 10 * 366 * 86_400  # ten years
 FIELDS = frozenset(
     {
         "allowed_technologies",
@@ -56,6 +83,9 @@ FIELDS = frozenset(
         "max_components",
         "approved_secret_sources",
         *SECURITY_FLAGS,
+        "required_metric_kinds_on_critical",
+        "min_telemetry_retention_seconds",
+        *OBSERVABILITY_FLAGS,
     }
 )
 _SECRET_SOURCE = re.compile("^(" + "|".join(sorted(SECRET_SOURCES)) + ")$")
@@ -93,6 +123,17 @@ class ArchitecturePolicy:
     require_secret_rotation: bool = False
     require_audit_logging: bool = False
     require_data_classification: bool = False
+    require_logs_on_critical: bool = False
+    required_metric_kinds_on_critical: frozenset[str] = frozenset()
+    require_traces_on_critical: bool = False
+    require_trace_propagation: bool = False
+    require_health_checks_on_critical: bool = False
+    require_alerting_on_critical: bool = False
+    require_structured_logs: bool = False
+    require_correlation_ids: bool = False
+    require_ownership: bool = False
+    require_telemetry_collection: bool = False
+    min_telemetry_retention_seconds: int | None = None
 
     def __post_init__(self) -> None:
         tech = TECHNOLOGY_NAME
@@ -101,15 +142,25 @@ class ArchitecturePolicy:
             ("prohibited_technologies", tech),
             ("allowed_regions", REGION),
             ("approved_secret_sources", _SECRET_SOURCE),
+            ("required_metric_kinds_on_critical", METRIC_KIND),
         ):
             object.__setattr__(self, field, _names(getattr(self, field), field, pattern))
         if self.allowed_technologies & self.prohibited_technologies:
             raise InvalidArchitecturePolicy(
                 details={"field": "prohibited_technologies", "reason": "also_allowed"}
             )
-        for flag in ("require_tls", *SECURITY_FLAGS):
+        for flag in ("require_tls", *SECURITY_FLAGS, *OBSERVABILITY_FLAGS):
             if not isinstance(getattr(self, flag), bool):
                 raise InvalidArchitecturePolicy(details={"field": flag, "reason": "not_a_boolean"})
+        retention = self.min_telemetry_retention_seconds
+        if retention is not None and (
+            isinstance(retention, bool)
+            or not isinstance(retention, int)
+            or not 1 <= retention <= MAX_RETENTION_SECONDS
+        ):
+            raise InvalidArchitecturePolicy(
+                details={"field": "min_telemetry_retention_seconds", "reason": "out_of_range"}
+            )
         limit = self.max_components
         if limit is not None and (
             isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= MAX_NODES
@@ -136,6 +187,9 @@ class ArchitecturePolicy:
             max_components=raw.get("max_components"),
             approved_secret_sources=raw.get("approved_secret_sources", ()),
             **{flag: raw.get(flag, False) for flag in SECURITY_FLAGS},
+            required_metric_kinds_on_critical=raw.get("required_metric_kinds_on_critical", ()),
+            min_telemetry_retention_seconds=raw.get("min_telemetry_retention_seconds"),
+            **{flag: raw.get(flag, False) for flag in OBSERVABILITY_FLAGS},
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -148,4 +202,7 @@ class ArchitecturePolicy:
             "max_components": self.max_components,
             "approved_secret_sources": sorted(self.approved_secret_sources),
             **{flag: getattr(self, flag) for flag in SECURITY_FLAGS},
+            "required_metric_kinds_on_critical": sorted(self.required_metric_kinds_on_critical),
+            "min_telemetry_retention_seconds": self.min_telemetry_retention_seconds,
+            **{flag: getattr(self, flag) for flag in OBSERVABILITY_FLAGS},
         }

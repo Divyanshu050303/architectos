@@ -29,6 +29,10 @@ from typing import Any, Self
 
 from core.architecture_ir.model import MAX_CONNECTIONS, MAX_NODES
 from core.domain.capacity.results import Certainty
+from core.domain.checks import Check
+from core.domain.checks import (
+    CheckSource as CheckSource,  # noqa: PLC0414 -- re-exported: the security contract
+)
 from core.domain.engine_results import (
     MAX_ID,
     Evidence,
@@ -38,6 +42,7 @@ from core.domain.engine_results import (
     read_evidence,
     text_problem,
 )
+from core.domain.engine_results import FindingBasis as FindingBasis  # noqa: PLC0414 -- re-exported, shared
 from core.domain.validation.results import Severity, Verdict
 
 from .errors import InvalidSecurityResult
@@ -82,13 +87,6 @@ class SecurityStatus(StrEnum):
     INSUFFICIENT_INPUT = "insufficient_input"  # components exist, none models any security property
     UNSUPPORTED = "unsupported"  # nothing in scope to analyze
     FAILED = "failed"  # the engine could not produce a result
-
-
-class FindingBasis(StrEnum):
-    CONTROL_GAP = "control_gap"
-    POTENTIAL_RISK = "potential_risk"
-    VIOLATION = "violation"
-    NOT_EVALUABLE = "not_evaluable"
 
 
 class FindingCategory(StrEnum):
@@ -337,96 +335,12 @@ class Condition(StrEnum):
     UNSUPPORTED = "unsupported"  # no supported condition: never satisfied (results only)
 
 
-class CheckSource(StrEnum):
-    REQUIREMENT = "requirement"
-    POLICY = "policy"
-
-
 @dataclass(frozen=True, slots=True)
-class CheckResult:
-    """The verdict for one requirement or policy rule, from modeled evidence only."""
+class CheckResult(Check):
+    """The verdict for one requirement or policy rule as a security condition (``core/domain/checks.py``)."""
 
-    key: str  # "requirement.<id>" or "policy.<field>"
-    source: CheckSource
-    condition: Condition
-    verdict: Verdict
-    explanation: str
-    node_ids: tuple[str, ...] = ()  # what it was checked on
-    connection_ids: tuple[str, ...] = ()
-    actual: tuple[Evidence, ...] = ()  # the modeled values it was judged on
-    missing: tuple[str, ...] = ()
-    requirement_id: str | None = None
-    policy_rule: str | None = None
-    mapping: str | None = (
-        None  # how a requirement's words became the condition, e.g. "encryption + 'at rest'"
-    )
-
-    def __post_init__(self) -> None:
-        for name in ("node_ids", "connection_ids", "missing"):
-            _sorted(self, name)
-        requirement = self.source is CheckSource.REQUIREMENT
-        _check(
-            [
-                text_problem(self.key, "key"),
-                None if isinstance(self.source, CheckSource) else "source",
-                None if isinstance(self.condition, Condition) else "condition",
-                None if isinstance(self.verdict, Verdict) else "verdict",
-                text_problem(self.explanation, "explanation"),
-                _ids(self.node_ids, "node_ids"),
-                _ids(self.connection_ids, "connection_ids"),
-                _evidence(self.actual),
-                _ids(self.missing, "missing"),
-                # missing evidence, or an unsupported condition, is never success
-                None
-                if self.verdict is not Verdict.SATISFIED
-                or not (self.missing or self.condition is Condition.UNSUPPORTED)
-                else "verdict",
-                None
-                if self.condition is not Condition.UNSUPPORTED or self.verdict is Verdict.NOT_VERIFIABLE
-                else "verdict",
-                None if (self.requirement_id is not None) == requirement else "requirement_id",
-                None if (self.policy_rule is not None) == (not requirement) else "policy_rule",
-                text_problem(self.requirement_id, "requirement_id", required=False),
-                text_problem(self.policy_rule, "policy_rule", required=False),
-                text_problem(self.mapping, "mapping", required=False),
-            ]
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "key": self.key,
-            "source": self.source.value,
-            "condition": self.condition.value,
-            "verdict": self.verdict.value,
-            "explanation": self.explanation,
-            "node_ids": list(self.node_ids),
-            "connection_ids": list(self.connection_ids),
-            "actual": [e.to_dict() for e in self.actual],
-            "missing": list(self.missing),
-            "requirement_id": self.requirement_id,
-            "policy_rule": self.policy_rule,
-            "mapping": self.mapping,
-        }
-
-    @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> Self:
-        try:
-            return cls(
-                data["key"],
-                CheckSource(data["source"]),
-                Condition(data["condition"]),
-                Verdict(data["verdict"]),
-                data["explanation"],
-                tuple(data.get("node_ids") or ()),
-                tuple(data.get("connection_ids") or ()),
-                read_evidence(data.get("actual")),
-                tuple(data.get("missing") or ()),
-                data.get("requirement_id"),
-                data.get("policy_rule"),
-                data.get("mapping"),
-            )
-        except (KeyError, ValueError, TypeError) as error:
-            raise InvalidSecurityResult(details={"fields": [type(error).__name__]}) from None
+    CONDITIONS = Condition
+    ERROR = InvalidSecurityResult
 
 
 @dataclass(frozen=True, slots=True)

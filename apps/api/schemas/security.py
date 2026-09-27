@@ -13,7 +13,6 @@ from core.domain.capacity.results import Certainty
 from core.domain.security.analyses import MAX_ANALYZERS, MAX_ASSUMPTIONS, MAX_SCOPE, SecurityAssumption
 from core.domain.security.reports import SecurityReport
 from core.domain.security.results import (
-    CheckSource,
     Condition,
     Coverage,
     FindingBasis,
@@ -21,7 +20,7 @@ from core.domain.security.results import (
     FindingType,
     StrideCategory,
 )
-from core.domain.validation.results import Severity, Verdict
+from core.domain.validation.results import Severity
 
 from .capacity import (
     AnalysisErrorModel,
@@ -31,6 +30,7 @@ from .capacity import (
     ModelSetModel,
     UnsupportedModel,
 )
+from .checks import CheckBaseModel
 from .common import ApiModel, RequestModel
 
 type NodeId = Annotated[str, Field(min_length=1, max_length=128)]
@@ -126,22 +126,8 @@ class TrustZoneModel(ApiModel):
     node_ids: list[str]
 
 
-class CheckModel(ApiModel):
-    key: str
-    source: CheckSource
+class CheckModel(CheckBaseModel):
     condition: Condition
-    verdict: Verdict = Field(
-        description="satisfied or violated by modeled evidence only; not_verifiable when it cannot be "
-        "decided or the requirement is unsupported (never a pass); not_applicable when nothing is concerned."
-    )
-    explanation: str
-    node_ids: list[str]
-    connection_ids: list[str]
-    actual: list[EvidenceModel]
-    missing: list[str]
-    requirement_id: str | None
-    policy_rule: str | None
-    mapping: str | None = Field(description="How a requirement's words became the condition.")
 
 
 class SecuritySummaryModel(ApiModel):
