@@ -16,7 +16,7 @@ Domain rules: [docs/domain/projects.md](../domain/projects.md).
 | `POST /projects/{projectId}/restore` | `project.archive` | | `200 Project` (idempotent) | |
 | `DELETE /projects/{projectId}` | `project.delete` | | `204` | `409 project_not_archived` |
 | `GET /projects/{projectId}/architecture-policy` | `project.read` | | `200 {projectId, policy, updatedAt}` | |
-| `PUT /projects/{projectId}/architecture-policy` | `project.policy_update` | `{allowedTechnologies?, prohibitedTechnologies?, allowedRegions?, requireTls?, maxComponents?}` | `200 {projectId, policy, updatedAt}` | `409 project_archived`, `422 invalid_architecture_policy, validation_error` |
+| `PUT /projects/{projectId}/architecture-policy` | `project.policy_update` | `{allowedTechnologies?, prohibitedTechnologies?, allowedRegions?, requireTls?, maxComponents?, requireEncryptionAtRest?, requireAuthenticationOnPublic?, requireAuthorizationOnSensitive?, prohibitPublicManagementInterfaces?, approvedSecretSources?, requireSecretRotation?, requireAuditLogging?, requireDataClassification?}` | `200 {projectId, policy, updatedAt}` | `409 project_archived`, `422 invalid_architecture_policy, validation_error` |
 
 On every endpoint: **`404 project_not_found`** (or `organization_not_found` on the organization
 routes) when the project does not exist, was deleted, or you are not a member of its organization:
@@ -28,7 +28,8 @@ delete and set the architecture policy.
 The architecture policy is replaced as a whole (fields left out constrain nothing). Technology
 names and regions are lower-case identifiers (at most 100 of each); a technology cannot be both
 allowed and prohibited (`invalid_architecture_policy`, `details.reason = also_allowed`);
-`maxComponents` is 1 to 1000. What each field enforces: see
+`maxComponents` is 1 to 1000; `approvedSecretSources` are among `secret_manager`, `environment`,
+`file`, `configuration`, `hardcoded`. What each field enforces: see
 [validation](../domain/projects.md#architecture-policy).
 
 ## Project

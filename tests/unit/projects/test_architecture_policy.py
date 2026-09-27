@@ -39,6 +39,14 @@ def test_names_are_normalized_and_the_dict_is_canonical() -> None:
         "allowed_regions": ["eu-west-1"],
         "require_tls": False,
         "max_components": None,
+        "approved_secret_sources": [],
+        "require_encryption_at_rest": False,
+        "require_authentication_on_public": False,
+        "require_authorization_on_sensitive": False,
+        "prohibit_public_management_interfaces": False,
+        "require_secret_rotation": False,
+        "require_audit_logging": False,
+        "require_data_classification": False,
     }
     assert ArchitecturePolicy.from_dict(STRICT.to_dict()) == STRICT
 
@@ -111,7 +119,9 @@ async def test_admins_set_the_policy_and_it_is_audited_by_field(
     assert stored.policy == STRICT
     event = uow.audit.events[-1]
     assert (event.action.value, event.resource_id) == ("project.policy_updated", project.id)
-    assert event.metadata == {"fields": sorted(STRICT.to_dict())}  # names only, never values
+    empty = ArchitecturePolicy().to_dict()
+    changed = sorted(k for k, v in STRICT.to_dict().items() if v != empty[k])
+    assert event.metadata == {"fields": changed}  # names only, never values
 
     recorded = len(uow.audit.events)
     await projects.update_policy(project_id=project.id, user_id=ada.id, policy=STRICT)

@@ -7,6 +7,8 @@ from .encryption import Encryption
 from .engine import Registry
 from .exposure import Exposure
 from .pii import DataProtection
+from .policy import Policy
+from .requirements import Requirements
 from .secrets import Secrets
 from .threat_model import ThreatModel
 from .trust_boundaries import TrustBoundaries
@@ -23,5 +25,7 @@ def default_registry() -> Registry:
             Secrets(),
             Exposure(),
             ThreatModel(),  # builds on the findings of those before it
+            Policy(),
+            Requirements(),
         ]
     )
