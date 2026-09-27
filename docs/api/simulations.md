@@ -81,6 +81,9 @@ failed and nothing else ran; `error.code` `engine_error`).
 - `entries[]`: per entry point its failure impact `interrupted`, `degraded`, `tolerated`, `unknown`
   or `unaffected` (the Reliability Engine's semantics), with `through` (the unavailable elements it
   requires) and `missing` (what would decide an unknown impact).
+- `unsupported[]`: what could not be evaluated, `{elementId, code, message, missing}`, e.g.
+  `capacity_insufficient_input` for a component capacity could not calculate under the scenario
+  (with the properties to declare), `failure_not_modeled`, `capacity_cannot_clear`.
 - `summary` (counts only, no score): `runs` by state, `entries` by impact, `components`,
   `unavailable`, `deltas` (`comparable`, `not_comparable`, `changed`), `unsupported`.
 - `overlay`: what the scenario changed, as evaluated (`changes` before → after, unavailable nodes
