@@ -47,6 +47,14 @@ async def test_a_new_project_has_the_empty_policy(
         "allowedRegions": [],
         "requireTls": False,
         "maxComponents": None,
+        "requireEncryptionAtRest": False,
+        "requireAuthenticationOnPublic": False,
+        "requireAuthorizationOnSensitive": False,
+        "prohibitPublicManagementInterfaces": False,
+        "approvedSecretSources": [],
+        "requireSecretRotation": False,
+        "requireAuditLogging": False,
+        "requireDataClassification": False,
     }
 
 

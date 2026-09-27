@@ -54,10 +54,18 @@ a deleted project and a deleted organization are all `404`.
 
 ## Architecture policy
 
-A project has one typed **architecture policy** (`core/domain/projects/policies.py`), enforced by
-the validation engine's `policy.*` rules: allowed and prohibited technologies, allowed regions, TLS
-required on communicating connections, a maximum component count. Empty lists and `null` constrain
-nothing; the empty policy is the default. The policy is replaced as a whole by owners and admins
+A project has one typed **architecture policy** (`core/domain/projects/policies.py`). The
+validation engine's `policy.*` rules enforce allowed and prohibited technologies, allowed regions, TLS
+required on communicating connections and a maximum component count. The
+[security engine](../architecture/security-engine.md) checks what the architecture must model:
+encryption at rest on data stores (`require_encryption_at_rest`), authentication on public components
+(`require_authentication_on_public`), authorization on sensitive operations
+(`require_authorization_on_sensitive`), no public management interface
+(`prohibit_public_management_interfaces`), approved secret sources (`approved_secret_sources`),
+secret rotation (`require_secret_rotation`), audit logging (`require_audit_logging`) and data
+classification (`require_data_classification`), and reports `require_tls` too. A rule is satisfied
+only by what the architecture declares, never by what it leaves out. Empty lists, `null` and `false`
+constrain nothing; the empty policy is the default. The policy is replaced as a whole by owners and admins
 (`project.policy_update`), is read-only while the project is archived, and every change is audited
 as `project.policy_updated` with the names of the changed fields.
 

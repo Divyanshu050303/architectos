@@ -95,7 +95,8 @@ type PolicyNames = Annotated[list[Annotated[str, Field(max_length=64)]], Field(m
 
 
 class ArchitecturePolicyModel(ApiModel):
-    """What validation enforces for this project. Empty lists and null constrain nothing."""
+    """What the validation and security engines enforce for this project. Empty lists, null and
+    false constrain nothing."""
 
     allowed_technologies: PolicyNames = Field(
         default_factory=list, description="When not empty, every stated technology must be one of these."
@@ -106,6 +107,31 @@ class ArchitecturePolicyModel(ApiModel):
     )
     require_tls: bool = Field(default=False, description="Every communicating connection is encrypted.")
     max_components: Annotated[int | None, Field(ge=1, le=1000)] = None
+    require_encryption_at_rest: bool = Field(
+        default=False, description="Every data store declares encryption at rest."
+    )
+    require_authentication_on_public: bool = Field(
+        default=False, description="Every public component declares an authentication mechanism."
+    )
+    require_authorization_on_sensitive: bool = Field(
+        default=False, description="Every component performing sensitive operations declares authorization."
+    )
+    prohibit_public_management_interfaces: bool = Field(
+        default=False, description="No management interface is declared public."
+    )
+    approved_secret_sources: PolicyNames = Field(
+        default_factory=list,
+        description="When not empty, every component needing secrets gets them from one of these "
+        "(secret_manager, environment, file, configuration, hardcoded).",
+        examples=[["secret_manager"]],
+    )
+    require_secret_rotation: bool = Field(
+        default=False, description="Every component needing secrets declares their rotation."
+    )
+    require_audit_logging: bool = Field(default=False, description="Every component declares audit logging.")
+    require_data_classification: bool = Field(
+        default=False, description="Every component declares a data classification."
+    )
 
     def to_domain(self) -> ArchitecturePolicy:
         return ArchitecturePolicy.from_dict(self.model_dump(by_alias=False))

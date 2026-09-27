@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.architecture_ir.component import NodeKind
+from core.architecture_ir.dependency import ENCRYPTED_PROTOCOLS
 from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.validation.results import Category, Finding, Severity
 
@@ -16,8 +17,6 @@ from ..engine import Input, Outcome, RuleMeta
 from ..findings import finding
 from .consistency import ALL_PROFILES
 
-# Protocols that are encrypted by definition (the protocol name says so), so tls need not be stated.
-ENCRYPTED_PROTOCOLS = frozenset({"https", "wss", "amqps", "mqtts", "rediss", "ldaps", "ftps", "smtps"})
 # Nodes that need not state a technology: they are not ours to choose, or not components.
 _TECHNOLOGY_OPTIONAL = frozenset({NodeKind.CLIENT, NodeKind.EXTERNAL, NodeKind.BOUNDARY})
 

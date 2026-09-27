@@ -201,6 +201,54 @@ def test_secret_looking_values_are_redacted_but_the_change_is_reported() -> None
     assert "hunter2" not in str(change.to_dict())
 
 
+def test_closed_security_properties_are_shown_even_when_their_name_looks_secret() -> None:
+    """``authorization`` and ``secret_source`` are choices: they cannot hold a secret. The same
+    names among preserved settings (``extra``) or metadata are still redacted."""
+    before = Node(
+        "api",
+        NodeKind.SERVICE,
+        "API",
+        configuration=Configuration(
+            {"authorization": "none", "secret_source": "environment"},
+            extra={"authorization_header": "Bearer x"},
+        ),
+    )
+    after = dataclasses.replace(
+        before,
+        configuration=Configuration(
+            {"authorization": "rbac", "secret_source": "secret_manager"},
+            extra={"authorization_header": "Bearer y"},
+        ),
+    )
+    [change] = diff(ArchitectureIR("x", nodes=(before,)), ArchitectureIR("x", nodes=(after,))).nodes
+    fields = {f.field: (f.before, f.after) for f in change.fields}
+    assert fields == {
+        "configuration.authorization": ("none", "rbac"),
+        "configuration.secret_source": ("environment", "secret_manager"),
+        "configuration.extra.authorization_header": ("[redacted]", "[redacted]"),
+    }
+
+
+def test_a_key_containing_a_dot_is_judged_whole() -> None:
+    """Review finding (Milestone 10): a preserved key may contain dots; the secret-looking word
+    before a dot (``password.hash``) was missed and the value shown."""
+    before = Node(
+        "api", NodeKind.SERVICE, "API", configuration=Configuration(extra={"password.hash": "s3cr3t"})
+    )
+    after = dataclasses.replace(
+        before,
+        configuration=Configuration(extra={"password.hash": "n3w-s3cr3t"}),
+        metadata={"api_key.live_value": "k"},
+    )
+    [change] = diff(ArchitectureIR("x", nodes=(before,)), ArchitectureIR("x", nodes=(after,))).nodes
+    fields = {f.field: (f.before, f.after) for f in change.fields}
+    assert fields == {
+        "configuration.extra.password.hash": ("[redacted]", "[redacted]"),
+        "metadata.api_key.live_value": (None, "[redacted]"),
+    }
+    assert "s3cr3t" not in str(change.to_dict())
+
+
 def test_secrets_nested_in_lists_and_objects_are_redacted() -> None:
     """Found in review: a list is compared as one value, so a secret inside it must be scrubbed."""
     before = Node("db", NodeKind.DATABASE, "DB")

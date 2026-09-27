@@ -34,6 +34,7 @@ from core.domain.reliability.reliability_service import ReliabilityService
 from core.domain.requirements.analysis_service import RequirementAnalysisService
 from core.domain.requirements.requirement_service import RequirementService
 from core.domain.requirements.requirement_set_service import RequirementSetService
+from core.domain.security.security_service import SecurityService
 from core.domain.validation.validation_service import ValidationService
 from persistence.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -312,6 +313,16 @@ def get_reliability_service(
 
 
 ReliabilityServiceDep = Annotated[ReliabilityService, Depends(get_reliability_service)]
+
+
+def get_security_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> SecurityService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return SecurityService(SqlAlchemyUnitOfWork(db, client), request.app.state.security_engine, clock=clock)
+
+
+SecurityServiceDep = Annotated[SecurityService, Depends(get_security_service)]
 
 
 def get_requirement_analysis_service(

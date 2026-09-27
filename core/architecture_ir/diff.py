@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from .configuration import CONNECTION_PROPERTIES, NODE_PROPERTIES, ValueType
 from .errors import ElementType
 from .model import ArchitectureIR
 from .serialization import to_dict
@@ -52,6 +53,39 @@ SECRET_FIELD = re.compile(
     re.IGNORECASE,
 )
 REDACTED = "[redacted]"
+# Typed properties whose values are a closed set (a choice or a boolean) cannot hold a secret, even
+# when their name looks like one (``authorization``, ``secret_source``): their values are shown.
+_CLOSED = frozenset(
+    spec.name
+    for spec in (*NODE_PROPERTIES.values(), *CONNECTION_PROPERTIES.values())
+    if spec.type in {ValueType.CHOICE, ValueType.BOOLEAN}
+)
+
+
+def _key_after(path: str, marker: str) -> str | None:
+    """The key under ``marker`` (``configuration.extra.`` or ``metadata.``), whole — dots included —
+    whether ``path`` starts with the marker or has it after an element id; None without it."""
+    if path.startswith(marker):
+        return path[len(marker) :]
+    index = path.find("." + marker)
+    return None if index < 0 else path[index + 1 + len(marker) :]
+
+
+def is_secret_path(path: str) -> bool:
+    """Whether the value at ``path`` (``configuration.x``, ``configuration.extra.x``,
+    ``metadata.x``, possibly after an element id: ``api.configuration.x``) must never be shown.
+
+    A preserved setting's or metadata entry's key is tested whole: a key may itself contain dots
+    (``password.hash``), so the secret-looking word can be anywhere in it. A typed property directly
+    under ``configuration`` is tested by its name, and shown when its values are a closed set. When
+    a path is ambiguous, it is judged a secret: redacting too much is safe, showing too much is not."""
+    for marker in ("configuration.extra.", "metadata."):
+        key = _key_after(path, marker)
+        if key is not None:
+            return bool(SECRET_FIELD.search(key))
+    head, _, name = path.rpartition(".")
+    typed = name in _CLOSED and (head == "configuration" or head.endswith(".configuration"))
+    return bool(SECRET_FIELD.search(name)) and not typed
 
 
 def _scrubbed(value: Any) -> Any:
@@ -72,7 +106,7 @@ def _redacted(path: str, value: Any) -> Any:
     any secret nested inside it (e.g. in a list of connection settings) redacted."""
     if value is None or not path.startswith(("configuration.", "metadata.")):
         return value
-    if SECRET_FIELD.search(path.rsplit(".", 1)[-1]):
+    if is_secret_path(path):
         return REDACTED
     return _scrubbed(value)
 

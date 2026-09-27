@@ -161,7 +161,8 @@ must name nodes of the current revision (`422 invalid_architecture_layout`,
 architecture** (either direction; a revision number of another architecture is not found here).
 Elements are matched by id, so a rename is a modification, never a removal and an addition.
 Values of settings that look like secrets (`password`, `token`, `api_key`, …) are `"[redacted]"`:
-the change is reported, the values are not.
+the change is reported, the values are not. Typed properties with a closed set of values
+(`authorization`, `secret_source`, …) cannot hold a secret and are shown.
 
 ```json
 {

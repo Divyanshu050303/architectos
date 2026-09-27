@@ -122,10 +122,18 @@ async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing
             headers=ada,
         )
     ).json()
+    security = (
+        await client.post(
+            f"/api/v1/projects/{project['id']}/architectures/{architecture['id']}/security-analyses",
+            json={},
+            headers=ada,
+        )
+    ).json()
     ids = {
         "capacity_analysis_id": analysis["id"],
         "cost_analysis_id": cost["id"],
         "reliability_analysis_id": reliability["id"],
+        "security_analysis_id": security["id"],
         "project_id": project["id"],
         "requirement_id": requirement["id"],
         "architecture_id": architecture["id"],

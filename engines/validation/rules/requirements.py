@@ -31,6 +31,7 @@ from decimal import Decimal
 from typing import Any
 
 from core.architecture_ir.component import NodeKind
+from core.architecture_ir.dependency import ENCRYPTED_PROTOCOLS
 from core.architecture_ir.node import Node
 from core.domain.requirements.entities import Requirement
 from core.domain.requirements.enums import RequirementPriority, RequirementScope, RequirementType
@@ -48,7 +49,6 @@ from ..context import ValidationContext
 from ..engine import Input, Outcome, RuleMeta
 from ..findings import finding, verdict
 from .consistency import ALL_PROFILES, capped
-from .policy import ENCRYPTED_PROTOCOLS
 
 K = NodeKind
 _DEPLOYED = frozenset(NodeKind) - {K.CLIENT, K.EXTERNAL, K.BOUNDARY}

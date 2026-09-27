@@ -134,6 +134,9 @@ def test_connection_configuration() -> None:
         "cache_hit_ratio",
         "access",
         "pool_size",
+        "authentication",
+        "data_classification",
+        "personal_data",
     }
 
 
