@@ -5,7 +5,8 @@ from .criticality import Criticality
 from .engine import Registry
 from .logs import Logs
 from .metrics import Metrics
+from .traces import Traces
 
 
 def default_registry() -> Registry:
-    return Registry([Criticality(), Logs(), Metrics()])
+    return Registry([Criticality(), Logs(), Metrics(), Traces()])
