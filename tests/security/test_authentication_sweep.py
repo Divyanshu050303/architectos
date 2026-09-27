@@ -164,6 +164,22 @@ SPECIFIED = PUBLIC | {
         "/api/v1/projects/{project_id}/architectures/{architecture_id}/security-analyses/{security_analysis_id}/findings",
     ),
     ("GET", "/api/v1/security/analyzers"),
+    # Milestone 11: observability analyses of an architecture.
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/observability-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/observability-analyses"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/observability-analyses/{observability_analysis_id}",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/observability-analyses/{observability_analysis_id}/components",
+    ),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architectures/{architecture_id}/observability-analyses/{observability_analysis_id}/findings",
+    ),
+    ("GET", "/api/v1/observability/analyzers"),
 }
 
 

@@ -70,6 +70,7 @@ from core.domain.identity.errors import (
     TokenExpired,
     WeakPassword,
 )
+from core.domain.observability.errors import InvalidObservabilityRequest, ObservabilityAnalysisNotFound
 from core.domain.organizations.errors import (
     AlreadyMember,
     CannotChangeOwnRole,
@@ -216,6 +217,8 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     ReliabilityAnalysisNotFound: 404,
     InvalidSecurityRequest: 422,
     SecurityAnalysisNotFound: 404,
+    InvalidObservabilityRequest: 422,
+    ObservabilityAnalysisNotFound: 404,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

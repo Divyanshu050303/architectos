@@ -1,7 +1,8 @@
-"""Security analyses over HTTP: the request (revision, scope, analyzers, assumptions) and the stored
-analysis, typed field by field. Findings are architecture-level observations for engineering
-review: never a score, never a claim that the architecture is secure or compliant; an unknown
-control is reported as not modeled, never as present or absent. No secret value is ever returned."""
+"""Observability analyses over HTTP: the request (revision, scope, analyzers, requirement ids,
+assumptions) and the stored analysis, typed field by field. Everything is architecture-level: what
+the architecture declares about logs, metrics, traces, health checks and alerting, never telemetry.
+A modeled capability is not proof it works in production; a satisfied objective check is a traceable
+indicator, never an attained objective. Counts only: no score, no percentage."""
 
 import uuid
 from datetime import datetime
@@ -10,16 +11,16 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from core.domain.capacity.results import Certainty
-from core.domain.security.analyses import MAX_ANALYZERS, MAX_ASSUMPTIONS, MAX_SCOPE, SecurityAssumption
-from core.domain.security.reports import SecurityReport
-from core.domain.security.results import (
-    Condition,
-    Coverage,
-    FindingBasis,
-    FindingCategory,
-    FindingType,
-    StrideCategory,
+from core.domain.observability.analyses import (
+    MAX_ANALYZERS,
+    MAX_ASSUMPTIONS,
+    MAX_REQUIREMENTS,
+    MAX_SCOPE,
+    ObservabilityAssumption,
 )
+from core.domain.observability.reports import ObservabilityReport
+from core.domain.observability.results import Condition, FindingBasis, FindingCategory, FindingType
+from core.domain.observability.values import CoverageState, Dimension
 from core.domain.validation.results import Severity
 
 from .capacity import (
@@ -32,33 +33,34 @@ from .capacity import (
 )
 from .checks import CheckBaseModel
 from .common import ApiModel, RequestModel
-
-type NodeId = Annotated[str, Field(min_length=1, max_length=128)]
-type AnalyzerId = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[a-z][a-z0-9-]{0,63}$")]
+from .security import AnalyzerId, NodeId
 
 # --- request -------------------------------------------------------------------------------------
 
 
-class SecurityAssumptionInput(RequestModel):
-    key: Annotated[str, Field(min_length=1, max_length=64, examples=["waf"])]
+class ObservabilityAssumptionInput(RequestModel):
+    key: Annotated[str, Field(min_length=1, max_length=64, examples=["collector-ha"])]
     statement: Annotated[str, Field(min_length=1, max_length=500)]
 
-    def to_domain(self) -> SecurityAssumption:
-        return SecurityAssumption(self.key, self.statement)
+    def to_domain(self) -> ObservabilityAssumption:
+        return ObservabilityAssumption(self.key, self.statement)
 
 
-class RunSecurityAnalysisRequest(RequestModel):
-    """Everything is optional: the security inputs are the architecture's own properties, and the
-    policy and requirements are the project's."""
+class RunObservabilityAnalysisRequest(RequestModel):
+    """Everything is optional: the observability inputs are the architecture's own properties, and
+    the policy and requirements are the project's."""
 
     revision: Annotated[int | None, Field(ge=1, description="Default: the current revision.")] = None
     scope: Annotated[list[NodeId], Field(max_length=MAX_SCOPE)] = Field(
         default_factory=list, description="Components to analyze (with what touches them); default: all."
     )
     analyzers: Annotated[list[AnalyzerId] | None, Field(max_length=MAX_ANALYZERS)] = Field(
-        default=None, description="Analyzers to run (GET /security/analyzers); default: all."
+        default=None, description="Analyzers to run (GET /observability/analyzers); default: all."
     )
-    assumptions: Annotated[list[SecurityAssumptionInput], Field(max_length=MAX_ASSUMPTIONS)] = Field(
+    requirement_ids: Annotated[list[uuid.UUID] | None, Field(max_length=MAX_REQUIREMENTS)] = Field(
+        default=None, description="In-force requirements to evaluate; default: all in force."
+    )
+    assumptions: Annotated[list[ObservabilityAssumptionInput], Field(max_length=MAX_ASSUMPTIONS)] = Field(
         default_factory=list, description="Recorded with the analysis, never computed with."
     )
     label: Annotated[str | None, Field(min_length=1, max_length=100)] = None
@@ -67,13 +69,14 @@ class RunSecurityAnalysisRequest(RequestModel):
 # --- responses -----------------------------------------------------------------------------------
 
 
-class SecurityFindingModel(ApiModel):
+class ObservabilityFindingModel(ApiModel):
     id: str = Field(description="Stable: the same finding has the same id in every analysis.")
     type: FindingType
     category: FindingCategory
     basis: FindingBasis = Field(
-        description="control_gap: a control declared absent; potential_risk: the model could allow harm; "
-        "violation: a requirement or policy contradicted; not_evaluable: not modeled enough to decide."
+        description="control_gap: a capability declared off where it matters; potential_risk: the model "
+        "could hide or leak something; violation: a requirement or policy contradicted; not_evaluable: "
+        "not modeled enough to decide."
     )
     severity: Severity
     certainty: Certainty = Field(
@@ -84,7 +87,6 @@ class SecurityFindingModel(ApiModel):
     recommendation: str = Field(description="For engineering review, never an automatic change.")
     node_ids: list[str]
     connection_ids: list[str]
-    boundary_ids: list[str] = Field(description="The trust zones it concerns.")
     evidence: list[EvidenceModel] = Field(
         description="Declared facts with provenance; secrets are '[redacted]'."
     )
@@ -92,58 +94,63 @@ class SecurityFindingModel(ApiModel):
     missing: list[str] = Field(description="What the architecture would need to declare to decide.")
     analyzer_id: str | None
     analyzer_version: int | None
-    threat: StrideCategory | None = Field(description="STRIDE category of a threat candidate.")
+    dimension: Dimension | None = Field(description="The signal it is about, if one.")
     requirement_id: str | None
     policy_rule: str | None
     check_key: str | None = Field(description="The check a requirement or policy finding reports.")
 
 
-class SecurityFindingPage(ApiModel):
-    findings: list[SecurityFindingModel]
+class ObservabilityFindingPage(ApiModel):
+    findings: list[ObservabilityFindingModel]
     next_cursor: str | None
 
 
-class SecurityComponentModel(ApiModel):
+class ObservabilityComponentModel(ApiModel):
     node_id: str
-    coverage: Coverage = Field(description="Whether the security properties that matter for it are modeled.")
-    exposure: str | None = Field(description="As declared; null when not modeled.")
-    sensitive: bool | None = Field(
-        description="By declared classification or personal data; null: not established."
+    criticality: str | None = Field(description="critical or standard, as declared; null: not modeled.")
+    coverage: dict[Dimension, CoverageState] = Field(
+        description="Per dimension: modeled, partial, absent, unknown (not declared) or unsupported."
     )
-    trust_zone_ids: list[str]
-    inputs: list[EvidenceModel] = Field(description="The security facts it declares, with provenance.")
+    inputs: list[EvidenceModel] = Field(description="The observability facts it declares, with provenance.")
     missing: list[str]
 
 
-class SecurityComponentPage(ApiModel):
-    components: list[SecurityComponentModel]
+class ObservabilityComponentPage(ApiModel):
+    components: list[ObservabilityComponentModel]
     next_cursor: str | None
 
 
-class TrustZoneModel(ApiModel):
-    boundary_id: str
-    trust_level: str | None = Field(description="null when the zone's trust level is not modeled.")
-    node_ids: list[str]
-
-
-class CheckModel(CheckBaseModel):
+class ObservabilityCheckModel(CheckBaseModel):
     condition: Condition
 
 
-class SecuritySummaryModel(ApiModel):
-    """Counts and coverage; no score."""
+class ObjectivesModel(ApiModel):
+    measurable: dict[str, int] = Field(description="objective_measurable checks by verdict.")
+    alerted: dict[str, int] = Field(description="objective_alerted checks by verdict.")
+    unsupported_requirements: int = Field(description="Requirement checks with no supported condition.")
 
-    components: dict[str, int] = Field(description="By coverage.")
+
+class ObservabilitySummaryModel(ApiModel):
+    """Counts only, reproducible from the components, findings and checks; no score, no percentage."""
+
+    scope: dict[str, int] = Field(description="components, eligible, unsupported (third parties).")
+    components: int
+    criticality: dict[str, int] = Field(description="critical, standard, not_modeled.")
+    coverage: dict[str, dict[str, int]] = Field(description="Per dimension, components by coverage state.")
+    critical_coverage: dict[str, dict[str, int]] = Field(description="The same, for critical components.")
     findings: dict[str, int] = Field(description="By severity.")
     bases: dict[str, int]
     categories: dict[str, int]
-    threats: dict[str, int] = Field(description="Threat candidates by STRIDE category.")
     checks: dict[str, int] = Field(description="By verdict.")
-    trust_zones: int
+    collection: dict[str, dict[str, int]] = Field(
+        description="Per signal: components declaring it, with and without a modeled collection path."
+    )
+    objectives: ObjectivesModel
+    priorities: list[str] = Field(description="The first finding ids in priority order.")
     unsupported: int
 
 
-class SecurityAnalysisSummary(ApiModel):
+class ObservabilityAnalysisSummary(ApiModel):
     id: uuid.UUID
     project_id: uuid.UUID
     architecture_id: uuid.UUID
@@ -156,11 +163,11 @@ class SecurityAnalysisSummary(ApiModel):
     started_at: datetime | None
     completed_at: datetime | None
     result_fingerprint: str | None
-    summary: SecuritySummaryModel | None
+    summary: ObservabilitySummaryModel | None
     error: AnalysisErrorModel | None
 
     @classmethod
-    def fields_for(cls, report: SecurityReport) -> dict[str, Any]:
+    def fields_for(cls, report: ObservabilityReport) -> dict[str, Any]:
         a = report.analysis
         return {
             "id": a.id,
@@ -175,18 +182,18 @@ class SecurityAnalysisSummary(ApiModel):
             "started_at": a.started_at,
             "completed_at": a.completed_at,
             "result_fingerprint": report.result_fingerprint,
-            "summary": SecuritySummaryModel.model_validate(report.summary)
+            "summary": ObservabilitySummaryModel.model_validate(report.summary)
             if report.summary is not None
             else None,
             "error": AnalysisErrorModel(code=a.error.code, message=a.error.message) if a.error else None,
         }
 
     @classmethod
-    def of(cls, report: SecurityReport) -> SecurityAnalysisSummary:
+    def of(cls, report: ObservabilityReport) -> ObservabilityAnalysisSummary:
         return cls(**cls.fields_for(report))
 
 
-class SecurityAnalysisResponse(SecurityAnalysisSummary):
+class ObservabilityAnalysisResponse(ObservabilityAnalysisSummary):
     """The analysis without its components and findings (GET …/components, …/findings)."""
 
     inputs: dict[str, Any] = Field(
@@ -194,13 +201,12 @@ class SecurityAnalysisResponse(SecurityAnalysisSummary):
     )
     analyzer_set: ModelSetModel | None
     context_fingerprint: str | None
-    trust_zones: list[TrustZoneModel]
-    checks: list[CheckModel]
+    checks: list[ObservabilityCheckModel]
     unsupported: list[UnsupportedModel]
     limitations: list[LimitationModel]
 
     @classmethod
-    def of(cls, report: SecurityReport) -> SecurityAnalysisResponse:
+    def of(cls, report: ObservabilityReport) -> ObservabilityAnalysisResponse:
         analyzer_set = report.analyzer_set
         return cls(
             **cls.fields_for(report),
@@ -212,19 +218,18 @@ class SecurityAnalysisResponse(SecurityAnalysisSummary):
             if analyzer_set
             else None,
             context_fingerprint=report.context_fingerprint,
-            trust_zones=[TrustZoneModel.model_validate(z.to_dict()) for z in report.trust_zones],
-            checks=[CheckModel.model_validate(c.to_dict()) for c in report.checks],
+            checks=[ObservabilityCheckModel.model_validate(c.to_dict()) for c in report.checks],
             unsupported=[UnsupportedModel.model_validate(u.to_dict()) for u in report.unsupported],
             limitations=[LimitationModel.model_validate(x.to_dict()) for x in report.limitations],
         )
 
 
-class SecurityAnalysisPage(ApiModel):
-    analyses: list[SecurityAnalysisSummary]
+class ObservabilityAnalysisPage(ApiModel):
+    analyses: list[ObservabilityAnalysisSummary]
     next_cursor: str | None
 
 
-class SecurityAnalyzerModel(ApiModel):
+class ObservabilityAnalyzerModel(ApiModel):
     """An analyzer, in run order: what it reads, its rules in words, what it cannot evaluate."""
 
     id: str
@@ -242,5 +247,5 @@ class SecurityAnalyzerModel(ApiModel):
     limitations: list[str]
 
 
-class SecurityAnalyzerCatalog(ApiModel):
-    analyzers: list[SecurityAnalyzerModel]
+class ObservabilityAnalyzerCatalog(ApiModel):
+    analyzers: list[ObservabilityAnalyzerModel]

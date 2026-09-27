@@ -26,6 +26,7 @@ from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
 from core.domain.notifications import Mailer
+from core.domain.observability.observability_service import ObservabilityService
 from core.domain.organizations.invitation_service import InvitationService, InvitationSettings
 from core.domain.organizations.membership_service import MembershipService
 from core.domain.organizations.organization_service import OrganizationService
@@ -340,3 +341,15 @@ def get_requirement_analysis_service(
 RequirementAnalysisServiceDep = Annotated[
     RequirementAnalysisService, Depends(get_requirement_analysis_service)
 ]
+
+
+def get_observability_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> ObservabilityService:
+    # One engine per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return ObservabilityService(
+        SqlAlchemyUnitOfWork(db, client), request.app.state.observability_engine, clock=clock
+    )
+
+
+ObservabilityServiceDep = Annotated[ObservabilityService, Depends(get_observability_service)]

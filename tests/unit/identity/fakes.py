@@ -46,6 +46,14 @@ from core.domain.identity.entities import (
 )
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
+from core.domain.observability.queries import (
+    ObservabilityAnalysisQuery,
+    ObservabilityComponentQuery,
+    ObservabilityFindingQuery,
+)
+from core.domain.observability.reports import ObservabilityReport
+from core.domain.observability.results import ComponentResult as ObservabilityComponent
+from core.domain.observability.results import ObservabilityFinding
 from core.domain.organizations.entities import (
     Invitation,
     Membership,
@@ -1108,20 +1116,18 @@ class FakeReliabilityAnalysisRepository:
         ][: query.limit]
 
 
-class FakeSecurityAnalysisRepository:
-    """Keeps each analysis's report, components and findings, like the append-only tables."""
+class _FakeAnalysisRows[Report: (SecurityReport, ObservabilityReport), Component, Finding]:
+    """Keeps each analysis's report, components and findings, like the append-only tables of the
+    security and observability analyses."""
 
     def __init__(self) -> None:
-        self.reports: dict[uuid.UUID, SecurityReport] = {}
-        self.components: dict[uuid.UUID, tuple[SecurityComponent, ...]] = {}
-        self.findings: dict[uuid.UUID, tuple[SecurityFinding, ...]] = {}
+        self.reports: dict[uuid.UUID, Report] = {}
+        self.components: dict[uuid.UUID, tuple[Component, ...]] = {}
+        self.findings: dict[uuid.UUID, tuple[Finding, ...]] = {}
 
     async def add(
-        self,
-        report: SecurityReport,
-        components: tuple[SecurityComponent, ...],
-        findings: tuple[SecurityFinding, ...],
-    ) -> SecurityReport:
+        self, report: Report, components: tuple[Component, ...], findings: tuple[Finding, ...]
+    ) -> Report:
         self.reports[report.analysis.id] = report
         self.components[report.analysis.id] = components
         self.findings[report.analysis.id] = findings
@@ -1129,7 +1135,7 @@ class FakeSecurityAnalysisRepository:
 
     async def get(
         self, project_id: uuid.UUID, architecture_id: uuid.UUID, analysis_id: uuid.UUID
-    ) -> SecurityReport | None:
+    ) -> Report | None:
         report = self.reports.get(analysis_id)
         if report is None or (report.analysis.project_id, report.analysis.architecture_id) != (
             project_id,
@@ -1139,8 +1145,11 @@ class FakeSecurityAnalysisRepository:
         return report
 
     async def list_for_architecture(
-        self, project_id: uuid.UUID, architecture_id: uuid.UUID, query: SecurityAnalysisQuery
-    ) -> list[SecurityReport]:
+        self,
+        project_id: uuid.UUID,
+        architecture_id: uuid.UUID,
+        query: SecurityAnalysisQuery | ObservabilityAnalysisQuery,
+    ) -> list[Report]:
         found = [
             r
             for r in self.reports.values()
@@ -1152,11 +1161,16 @@ class FakeSecurityAnalysisRepository:
             : query.limit
         ]
 
+    def _of(self, project_id: uuid.UUID, analysis_id: uuid.UUID) -> bool:
+        report = self.reports.get(analysis_id)
+        return report is not None and report.analysis.project_id == project_id
+
+
+class FakeSecurityAnalysisRepository(_FakeAnalysisRows[SecurityReport, SecurityComponent, SecurityFinding]):
     async def list_components(
         self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: SecurityComponentQuery
     ) -> list[SecurityComponent]:
-        report = self.reports.get(analysis_id)
-        if report is None or report.analysis.project_id != project_id:
+        if not self._of(project_id, analysis_id):
             return []
         return [
             c
@@ -1168,8 +1182,7 @@ class FakeSecurityAnalysisRepository:
     async def list_findings(
         self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: SecurityFindingQuery
     ) -> list[tuple[int, SecurityFinding]]:
-        report = self.reports.get(analysis_id)
-        if report is None or report.analysis.project_id != project_id:
+        if not self._of(project_id, analysis_id):
             return []
         return [
             (position, f)
@@ -1180,6 +1193,41 @@ class FakeSecurityAnalysisRepository:
             and (query.basis is None or f.basis is query.basis)
             and (query.certainty is None or f.certainty is query.certainty)
             and (query.threat is None or f.threat is query.threat)
+            and (query.after is None or position > query.after)
+        ][: query.limit]
+
+
+class FakeObservabilityAnalysisRepository(
+    _FakeAnalysisRows[ObservabilityReport, ObservabilityComponent, ObservabilityFinding]
+):
+    async def list_components(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: ObservabilityComponentQuery
+    ) -> list[ObservabilityComponent]:
+        if not self._of(project_id, analysis_id):
+            return []
+        criticality = None if query.criticality == "not_modeled" else query.criticality
+        return [
+            c
+            for c in sorted(self.components[analysis_id], key=lambda c: c.node_id)
+            if (query.criticality is None or c.criticality == criticality)
+            and (query.dimension is None or c.coverage[query.dimension] is query.state)
+            and (query.after is None or c.node_id > query.after)
+        ][: query.limit]
+
+    async def list_findings(
+        self, project_id: uuid.UUID, analysis_id: uuid.UUID, query: ObservabilityFindingQuery
+    ) -> list[tuple[int, ObservabilityFinding]]:
+        if not self._of(project_id, analysis_id):
+            return []
+        return [
+            (position, f)
+            for position, f in enumerate(self.findings[analysis_id])
+            if (query.severity is None or f.severity is query.severity)
+            and (query.type is None or f.type is query.type)
+            and (query.category is None or f.category is query.category)
+            and (query.basis is None or f.basis is query.basis)
+            and (query.certainty is None or f.certainty is query.certainty)
+            and (query.dimension is None or f.dimension is query.dimension)
             and (query.after is None or position > query.after)
         ][: query.limit]
 
@@ -1205,6 +1253,7 @@ class FakeUnitOfWork:
         self._cost = FakeCostAnalysisRepository()
         self._reliability = FakeReliabilityAnalysisRepository()
         self._security = FakeSecurityAnalysisRepository()
+        self._observability = FakeObservabilityAnalysisRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1283,6 +1332,10 @@ class FakeUnitOfWork:
     @property
     def security(self) -> FakeSecurityAnalysisRepository:
         return self._security
+
+    @property
+    def observability(self) -> FakeObservabilityAnalysisRepository:
+        return self._observability
 
     async def __aenter__(self) -> Self:
         return self

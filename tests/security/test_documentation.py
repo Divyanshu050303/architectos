@@ -13,6 +13,7 @@ from core.domain.audit.entities import AuditAction
 from core.domain.capacity import errors as capacity_errors
 from core.domain.cost import errors as cost_errors
 from core.domain.errors import DomainError
+from core.domain.observability import errors as observability_errors
 from core.domain.projects import errors as project_errors
 from core.domain.reliability import errors as reliability_errors
 from core.domain.requirements import errors as requirement_errors
@@ -36,6 +37,7 @@ API_DOCS = "".join(
         "cost.md",
         "reliability.md",
         "security.md",
+        "observability.md",
     )
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
@@ -57,10 +59,10 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     served = {(op.method, shape(op.path)) for op in inventory(app) if in_scope(op.path)}
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
-    # validation, 6 capacity, 4 cost, 5 reliability and 5 security endpoints (GET /validation/rules,
-    # /capacity/models, /cost/models, /reliability/models and /security/analyzers are not
-    # project-scoped)
-    assert len(served) == 63
+    # validation, 6 capacity, 4 cost, 5 reliability, 5 security and 5 observability endpoints
+    # (GET /validation/rules, /capacity/models, /cost/models, /reliability/models,
+    # /security/analyzers and /observability/analyzers are not project-scoped)
+    assert len(served) == 68
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -92,6 +94,8 @@ def test_every_error_code_is_documented() -> None:
             reliability_errors.ReliabilityAnalysisNotFound,
             security_errors.InvalidSecurityRequest,
             security_errors.SecurityAnalysisNotFound,
+            observability_errors.InvalidObservabilityRequest,
+            observability_errors.ObservabilityAnalysisNotFound,
         )
     }
     assert {code for code in codes if code not in API_DOCS} == set()

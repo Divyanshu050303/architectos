@@ -157,7 +157,7 @@ class SloMonitoring:
     def analyze(self, context: ObservabilityContext, progress: Progress) -> AnalyzerOutput:
         checks: list[CheckResult] = []
         findings: list[ObservabilityFinding] = []
-        for requirement in sorted(filter(_chosen, context.requirements), key=lambda r: r.reference):
+        for requirement in sorted(filter(_chosen, context.evaluated_requirements), key=lambda r: r.reference):
             found_checks, found = self._requirement(context, requirement)
             checks += found_checks
             findings += found

@@ -52,9 +52,16 @@ class ObservabilityContext:
     revision: RevisionInfo
     request: ObservabilityAnalysisRequest
     policy: ArchitecturePolicy = field(default_factory=ArchitecturePolicy)  # the project's, at the analysis
-    requirements: tuple[
-        Requirement, ...
-    ] = ()  # the project's in-force requirements (the request's, if named)
+    requirements: tuple[Requirement, ...] = ()  # the project's in-force requirements
+
+    @cached_property
+    def evaluated_requirements(self) -> tuple[Requirement, ...]:
+        """The in-force requirements to evaluate: the request's, if it names some, else all."""
+        named = self.request.requirement_ids
+        if named is None:
+            return self.requirements
+        wanted = set(named)
+        return tuple(r for r in self.requirements if r.id in wanted)
 
     @cached_property
     def topology(self) -> Topology:
