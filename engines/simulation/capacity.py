@@ -25,7 +25,7 @@ from decimal import Decimal
 
 from core.domain.capacity.analyses import AnalysisRequest
 from core.domain.capacity.ports import CapacityEngine, EngineOutput
-from core.domain.capacity.results import AnalysisStatus, CapacityResult, Utilization
+from core.domain.capacity.results import AnalysisStatus, CapacityResult, ComponentStatus, Utilization
 from core.domain.capacity.scenarios import ConfigurationChange as CapacityChange
 from core.domain.capacity.scenarios import Scenario as CapacityScenario
 from core.domain.capacity.scenarios import ScenarioResult
@@ -167,6 +167,20 @@ def _failures(overlay: Overlay) -> tuple[Unsupported, ...]:
     )
 
 
+def _uncalculated(result: CapacityResult) -> tuple[Unsupported, ...]:
+    """The components the Capacity Engine could not calculate under the scenario, with what is missing:
+    why a run is partial, never left implicit."""
+    return tuple(
+        Unsupported(
+            c.node_id,
+            f"capacity_{c.status.value}",
+            f"Capacity could not calculate {c.node_id} under the scenario ({c.status.value}).",
+            tuple(c.missing),
+        )
+        for c in result.components
+        if c.status is not ComponentStatus.ESTIMATED
+    )
+
 class CapacityEvaluator:
     meta = EvaluatorMeta(
         analysis=A.CAPACITY,
@@ -225,7 +239,7 @@ class CapacityEvaluator:
         return Evaluation(
             run,
             deltas=tuple(_deltas(baseline, projected)),
-            unsupported=gaps + tuple(projected.unsupported),
+            unsupported=gaps + tuple(projected.unsupported) + _uncalculated(projected),
             trace=_trace(outcome),
             assumptions=assumptions,
         )

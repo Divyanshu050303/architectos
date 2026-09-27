@@ -11,7 +11,11 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from apps.api.email.transport import InMemoryTransport
+from core.architecture_ir.serialization import to_dict
+from core.domain.simulations.limits import SimulationLimits
+from engines.simulation.service import DeterministicSimulationEngine
 from persistence.models import AuditLogRecord, SimulationDeltaRecord, SimulationRecord
+from tests.unit.cost.test_cost_capacity import IR
 
 from .requirement_support import World, member, signed_in
 from .test_cost import DAY, GHOST, WORKLOAD, prepared
@@ -242,3 +246,48 @@ async def test_simulations_are_append_only_and_reads_cost_the_same(
         return counts
 
     assert await cost(small["id"]) == await cost(large["id"])
+
+
+async def test_an_exact_revision_is_simulated(client: AsyncClient, world: World) -> None:
+    aid, _ = await prepared(client, world)
+    current = (
+        await client.get(f"/api/v1/projects/{world.project_id}/architectures/{aid}", headers=world.ada)
+    ).json()
+    saved = await client.put(
+        f"/api/v1/projects/{world.project_id}/architectures/{aid}/content",
+        json={"baseVersion": current["currentVersion"], "ir": to_dict(IR) | {"name": "Shop v2"}},
+        headers=world.ada,
+    )
+    assert saved.status_code == 201, saved.text
+    first = await run(client, world, aid, scenario=OUTAGE, revision=1)
+    latest = await run(client, world, aid, scenario=OUTAGE)
+    assert (first["revision"], latest["revision"]) == (1, 2)
+    assert first["revisionContentHash"] != latest["revisionContentHash"]
+    assert first["overlay"]["revision"]["content_hash"] == first["revisionContentHash"]
+    listed = (await client.get(base(world, aid), params={"revision": 1}, headers=world.ada)).json()
+    assert [s["id"] for s in listed["simulations"]] == [first["id"]]
+
+
+async def test_execution_limits_are_enforced_over_the_api(
+    app: FastAPI, client: AsyncClient, db: AsyncSession, world: World
+) -> None:
+    aid, _ = await prepared(client, world)
+    many = {"name": "Many", "failures": [{"kind": "component", "target": f"n{i}"} for i in range(51)]}
+    response = await client.post(base(world, aid), json={"scenario": many}, headers=world.ada)
+    assert (response.status_code, response.json()["error"]["code"]) == (422, "validation_error")
+
+    two = {"name": "Two", "failures": [{"kind": "component", "target": t} for t in ("api", "cdn")]}
+    for limits, reason in (
+        (SimulationLimits(max_failures=1), "too_many"),
+        (SimulationLimits(max_affected_components=1), "too_many_affected"),
+    ):
+        app.state.simulation_engine = DeterministicSimulationEngine(limits=limits)
+        response = await client.post(base(world, aid), json={"scenario": two}, headers=world.ada)
+        error = response.json()["error"]
+        assert (response.status_code, error["code"]) == (422, "invalid_simulation_request")
+        assert (error["details"]["field"], error["details"]["reason"], error["details"]["limit"]) == (
+            "scenario.failures",
+            reason,
+            1,
+        )
+    assert await db.scalar(select(func.count()).select_from(SimulationRecord)) == 0  # nothing ran or stored
