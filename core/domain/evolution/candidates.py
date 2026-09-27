@@ -226,41 +226,202 @@ class Effect:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class ImpactRef:
-    """An engine's evaluation of a candidate against the baseline: which engine, what it could
-    establish (its own state), and the fingerprint of its result."""
+MAX_DELTAS = 500  # per impact: bounded by the architecture's size, cut in canonical order
 
-    source: EvidenceSource
-    state: str
-    fingerprint: str | None = None
-    model_version: str | None = None
+
+def _fingerprint(value: object, name: str) -> str | None:
+    if value is None:
+        return None
+    return None if isinstance(value, str) and FINGERPRINT.fullmatch(value) else name
+
+
+@dataclass(frozen=True, slots=True)
+class ImpactDelta:
+    """One metric of one element (or ``system``), baseline versus candidate, in one unit: exact
+    decimal strings, ``None`` when unknown; a difference only when both are known."""
+
+    element_id: str
+    metric: str
+    unit: str
+    baseline: str | None
+    candidate: str | None
+    difference: str | None = None
+    percentage: str | None = None
+    comparable: bool = True
+    note: str | None = None
 
     def __post_init__(self) -> None:
         _check(
             [
-                None if isinstance(self.source, EvidenceSource) else "impact.source",
-                _code(self.state, "impact.state"),
+                _text(self.element_id, "delta.element_id", MAX_REFERENCE),
+                _text(self.metric, "delta.metric", MAX_REFERENCE),
+                _text(self.unit, "delta.unit", 64),
                 None
-                if self.fingerprint is None
-                or (isinstance(self.fingerprint, str) and FINGERPRINT.fullmatch(self.fingerprint))
-                else "impact.fingerprint",
-                _text(self.model_version, "impact.model_version", 64, required=False),
+                if self.difference is None or (self.baseline is not None and self.candidate is not None)
+                else "delta.difference",
+                None if isinstance(self.comparable, bool) else "delta.comparable",
+                _text(self.note, "delta.note", MAX_REFERENCE, required=False),
             ]
         )
 
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.element_id, self.metric)
+
     def to_dict(self) -> dict[str, Any]:
         return {
-            "source": self.source.value,
-            "state": self.state,
-            "fingerprint": self.fingerprint,
-            "model_version": self.model_version,
+            "element_id": self.element_id,
+            "metric": self.metric,
+            "unit": self.unit,
+            "baseline": self.baseline,
+            "candidate": self.candidate,
+            "difference": self.difference,
+            "percentage": self.percentage,
+            "comparable": self.comparable,
+            "note": self.note,
         }
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> Self:
         return cls(
-            EvidenceSource(data["source"]), data["state"], data.get("fingerprint"), data.get("model_version")
+            data["element_id"],
+            data["metric"],
+            data["unit"],
+            data.get("baseline"),
+            data.get("candidate"),
+            data.get("difference"),
+            data.get("percentage"),
+            bool(data.get("comparable", True)),
+            data.get("note"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ImpactChange:
+    """A finding the candidate resolves or introduces, by the engine's stable finding id."""
+
+    kind: str  # resolved, introduced
+    reference: str
+    code: str  # the finding type
+    element_ids: tuple[str, ...] = ()
+    severity: str | None = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.element_ids, tuple) and all(isinstance(e, str) for e in self.element_ids):
+            object.__setattr__(self, "element_ids", tuple(sorted(set(self.element_ids))))
+        _check(
+            [
+                None if self.kind in ("resolved", "introduced") else "change.kind",
+                _text(self.reference, "change.reference", MAX_REFERENCE),
+                _code(self.code, "change.code"),
+                _strings(self.element_ids, "change.element_ids"),
+                _text(self.severity, "change.severity", 32, required=False),
+            ]
+        )
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.kind, self.reference)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "reference": self.reference,
+            "code": self.code,
+            "element_ids": list(self.element_ids),
+            "severity": self.severity,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        return cls(
+            data["kind"],
+            data["reference"],
+            data["code"],
+            tuple(data.get("element_ids") or ()),
+            data.get("severity"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Impact:
+    """One dimension of a candidate's impact, as the engine that evaluates it established it on the
+    baseline and on the candidate's overlay, with the same inputs: its state (the engine's own, or
+    ``unsupported`` / ``not_evaluated`` with the reason), the engine (``source``) and model version,
+    the baseline and candidate result fingerprints, the stored analyses whose inputs were reused,
+    what differs, the assumptions, and what is unknown. Dimensions are never combined."""
+
+    dimension: EvidenceSource
+    state: str
+    source: EvidenceSource
+    reason: str | None = None
+    baseline_fingerprint: str | None = None
+    candidate_fingerprint: str | None = None
+    model_version: str | None = None
+    inputs: tuple[EvidenceRef, ...] = ()
+    deltas: tuple[ImpactDelta, ...] = ()
+    changes: tuple[ImpactChange, ...] = ()
+    assumptions: tuple[Evidence, ...] = ()
+    missing: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        sort = object.__setattr__
+        if isinstance(self.deltas, tuple) and all(isinstance(d, ImpactDelta) for d in self.deltas):
+            sort(self, "deltas", tuple(sorted(set(self.deltas), key=lambda d: d.key)))
+        if isinstance(self.changes, tuple) and all(isinstance(c, ImpactChange) for c in self.changes):
+            sort(self, "changes", tuple(sorted(set(self.changes), key=lambda c: c.key)))
+        if isinstance(self.inputs, tuple) and all(isinstance(e, EvidenceRef) for e in self.inputs):
+            sort(self, "inputs", tuple(sorted(set(self.inputs), key=lambda e: e.key)))
+        if isinstance(self.missing, tuple) and all(isinstance(m, str) for m in self.missing):
+            sort(self, "missing", tuple(sorted(set(self.missing))))
+        _check(
+            [
+                None if isinstance(self.dimension, EvidenceSource) else "impact.dimension",
+                _code(self.state, "impact.state"),
+                None if isinstance(self.source, EvidenceSource) else "impact.source",
+                _code(self.reason, "impact.reason") if self.reason is not None else None,
+                _fingerprint(self.baseline_fingerprint, "impact.baseline_fingerprint"),
+                _fingerprint(self.candidate_fingerprint, "impact.candidate_fingerprint"),
+                _text(self.model_version, "impact.model_version", 64, required=False),
+                _items(self.inputs, EvidenceRef, "impact.inputs"),
+                _items(self.deltas, ImpactDelta, "impact.deltas", limit=MAX_DELTAS),
+                _items(self.changes, ImpactChange, "impact.changes"),
+                _items(self.assumptions, Evidence, "impact.assumptions"),
+                _strings(self.missing, "impact.missing"),
+            ]
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dimension": self.dimension.value,
+            "state": self.state,
+            "source": self.source.value,
+            "reason": self.reason,
+            "baseline_fingerprint": self.baseline_fingerprint,
+            "candidate_fingerprint": self.candidate_fingerprint,
+            "model_version": self.model_version,
+            "inputs": [e.to_dict() for e in self.inputs],
+            "deltas": [d.to_dict() for d in self.deltas],
+            "changes": [c.to_dict() for c in self.changes],
+            "assumptions": [e.to_dict() for e in self.assumptions],
+            "missing": list(self.missing),
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        return cls(
+            EvidenceSource(data["dimension"]),
+            data["state"],
+            EvidenceSource(data["source"]),
+            data.get("reason"),
+            data.get("baseline_fingerprint"),
+            data.get("candidate_fingerprint"),
+            data.get("model_version"),
+            tuple(EvidenceRef.from_dict(e) for e in data.get("inputs") or ()),
+            tuple(ImpactDelta.from_dict(d) for d in data.get("deltas") or ()),
+            tuple(ImpactChange.from_dict(c) for c in data.get("changes") or ()),
+            read_evidence(data.get("assumptions")),
+            tuple(data.get("missing") or ()),
         )
 
 
@@ -336,7 +497,7 @@ class Candidate:
     missing: tuple[str, ...] = ()  # what is unknown about it, and would decide it
     validation: ValidationState = ValidationState.NOT_VALIDATED
     validation_notes: tuple[ValidationNote, ...] = ()
-    impacts: tuple[ImpactRef, ...] = ()
+    impacts: tuple[Impact, ...] = ()
     status: ProposalStatus = ProposalStatus.PROPOSED
 
     def __post_init__(self) -> None:
@@ -365,7 +526,7 @@ class Candidate:
                 _strings(self.missing, "missing"),
                 None if isinstance(self.validation, ValidationState) else "validation",
                 _items(self.validation_notes, ValidationNote, "validation_notes"),
-                _items(self.impacts, ImpactRef, "impacts"),
+                _items(self.impacts, Impact, "impacts"),
                 None if self.status is ProposalStatus.PROPOSED else "status",
             ]
         )
@@ -387,8 +548,8 @@ class Candidate:
         notes = self.validation_notes
         if isinstance(notes, tuple) and all(isinstance(n, ValidationNote) for n in notes):
             sort(self, "validation_notes", tuple(sorted(set(notes), key=lambda n: n.key)))
-        if isinstance(self.impacts, tuple) and all(isinstance(i, ImpactRef) for i in self.impacts):
-            sort(self, "impacts", tuple(sorted(set(self.impacts), key=lambda i: i.source.value)))
+        if isinstance(self.impacts, tuple) and all(isinstance(i, Impact) for i in self.impacts):
+            sort(self, "impacts", tuple(sorted(self.impacts, key=lambda i: i.dimension.value)))
 
     @property
     def id(self) -> str:
@@ -445,7 +606,7 @@ class Candidate:
                 validation_notes=tuple(
                     ValidationNote.from_dict(n) for n in data.get("validation_notes") or ()
                 ),
-                impacts=tuple(ImpactRef.from_dict(i) for i in data.get("impacts") or ()),
+                impacts=tuple(Impact.from_dict(i) for i in data.get("impacts") or ()),
                 status=ProposalStatus(data.get("status", ProposalStatus.PROPOSED.value)),
             )
         except InvalidEvolutionResult:

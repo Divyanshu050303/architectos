@@ -18,7 +18,7 @@ from core.domain.evolution.candidates import (
     Candidate,
     Effect,
     EvidenceRef,
-    ImpactRef,
+    Impact,
     RuleRef,
 )
 from core.domain.evolution.entities import (
@@ -212,7 +212,7 @@ def test_effects_state_their_basis_and_candidates_round_trip() -> None:
     proposed = candidate(
         **effects,
         missing=("api.configuration.max_connections",),
-        impacts=(ImpactRef(S.SIMULATION, "completed", "c" * 64, "d1"),),
+        impacts=(Impact(S.CAPACITY, "completed", S.SIMULATION, None, "c" * 64, "d" * 64, "v1"),),
     )
     restored = Candidate.from_dict(json.loads(json.dumps(proposed.to_dict())))
     assert restored == proposed
