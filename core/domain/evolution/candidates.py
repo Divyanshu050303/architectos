@@ -28,7 +28,15 @@ from core.domain.errors import DomainError
 from core.domain.simulations.scenarios import MAX_CHANGES, ConfigurationChange
 
 from .errors import InvalidEvolutionResult
-from .values import Basis, CandidateCategory, EvidenceSource, EvidenceState, ProposalStatus, ValidationState
+from .values import (
+    Basis,
+    CandidateCategory,
+    Direction,
+    EvidenceSource,
+    EvidenceState,
+    ProposalStatus,
+    ValidationState,
+)
 
 CODE = re.compile(r"^[a-z][a-z0-9_.-]{0,63}$")
 FINGERPRINT = re.compile(r"^[0-9a-f]{64}$")
@@ -475,6 +483,59 @@ class ValidationNote:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Consequence:
+    """How a candidate moves one dimension (capacity, cost, reliability, security, observability,
+    operations, migration, dependencies, failure_modes, reversibility, expertise): its direction, what
+    that rests on (``modeled`` by an engine, stated by a ``rule``, or a ``consideration`` for human
+    review), a sentence, and the evidence. Consequences are never weighted or added up."""
+
+    dimension: str
+    direction: Direction
+    basis: Basis
+    statement: str
+    evidence: tuple[Evidence, ...] = ()
+
+    def __post_init__(self) -> None:
+        _check(
+            [
+                _code(self.dimension, "consequence.dimension"),
+                None if isinstance(self.direction, Direction) else "consequence.direction",
+                None if isinstance(self.basis, Basis) else "consequence.basis",
+                _text(self.statement, "consequence.statement"),
+                _items(self.evidence, Evidence, "consequence.evidence"),
+                self._basis_problem(),
+            ]
+        )
+
+    def _basis_problem(self) -> str | None:
+        """A model never yields a mere consideration; a consideration never decides a direction."""
+        if self.basis is Basis.MODELED and self.direction is Direction.CONSIDERATION:
+            return "consequence.basis"
+        if self.basis is Basis.CONSIDERATION and self.direction is not Direction.CONSIDERATION:
+            return "consequence.basis"
+        return None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "dimension": self.dimension,
+            "direction": self.direction.value,
+            "basis": self.basis.value,
+            "statement": self.statement,
+            "evidence": [e.to_dict() for e in self.evidence],
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> Self:
+        return cls(
+            data["dimension"],
+            Direction(data["direction"]),
+            Basis(data["basis"]),
+            data["statement"],
+            read_evidence(data.get("evidence")),
+        )
+
+
 _EFFECTS = ("benefits", "tradeoffs", "complexity", "migration", "risks")
 
 
@@ -498,6 +559,7 @@ class Candidate:
     validation: ValidationState = ValidationState.NOT_VALIDATED
     validation_notes: tuple[ValidationNote, ...] = ()
     impacts: tuple[Impact, ...] = ()
+    consequences: tuple[Consequence, ...] = ()  # the trade-off table, one row per dimension
     status: ProposalStatus = ProposalStatus.PROPOSED
 
     def __post_init__(self) -> None:
@@ -527,6 +589,10 @@ class Candidate:
                 None if isinstance(self.validation, ValidationState) else "validation",
                 _items(self.validation_notes, ValidationNote, "validation_notes"),
                 _items(self.impacts, Impact, "impacts"),
+                _items(self.consequences, Consequence, "consequences"),
+                None
+                if len({c.dimension for c in self.consequences}) == len(self.consequences)
+                else "consequences.duplicate",
                 None if self.status is ProposalStatus.PROPOSED else "status",
             ]
         )
@@ -548,6 +614,9 @@ class Candidate:
         notes = self.validation_notes
         if isinstance(notes, tuple) and all(isinstance(n, ValidationNote) for n in notes):
             sort(self, "validation_notes", tuple(sorted(set(notes), key=lambda n: n.key)))
+        consequences = self.consequences
+        if isinstance(consequences, tuple) and all(isinstance(c, Consequence) for c in consequences):
+            sort(self, "consequences", tuple(sorted(consequences, key=lambda c: c.dimension)))
         if isinstance(self.impacts, tuple) and all(isinstance(i, Impact) for i in self.impacts):
             sort(self, "impacts", tuple(sorted(self.impacts, key=lambda i: i.dimension.value)))
 
@@ -584,6 +653,7 @@ class Candidate:
             "validation": self.validation.value,
             "validation_notes": [n.to_dict() for n in self.validation_notes],
             "impacts": [i.to_dict() for i in self.impacts],
+            "consequences": [c.to_dict() for c in self.consequences],
         }
 
     @classmethod
@@ -607,6 +677,7 @@ class Candidate:
                     ValidationNote.from_dict(n) for n in data.get("validation_notes") or ()
                 ),
                 impacts=tuple(Impact.from_dict(i) for i in data.get("impacts") or ()),
+                consequences=tuple(Consequence.from_dict(c) for c in data.get("consequences") or ()),
                 status=ProposalStatus(data.get("status", ProposalStatus.PROPOSED.value)),
             )
         except InvalidEvolutionResult:

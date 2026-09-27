@@ -106,3 +106,15 @@ class EvolutionStatus(StrEnum):
     PARTIAL = "partial"  # some goal evaluated; some evidence stale or missing, or a goal unsupported
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"  # no goal could be evaluated on current evidence
     FAILED = "failed"  # the analysis could not run
+
+
+class Direction(StrEnum):
+    """Which way a candidate moves one dimension, as far as what establishes it goes — never a score."""
+
+    IMPROVES = "improves"
+    WORSENS = "worsens"
+    MIXED = "mixed"  # some of it better, some worse
+    UNCHANGED = "unchanged"
+    UNKNOWN = "unknown"  # the engine could not establish it (missing inputs, unsupported)
+    NOT_EVALUATED = "not_evaluated"  # the candidate was invalid or unsupported
+    CONSIDERATION = "consideration"  # qualitative: for human review, no model decides it
