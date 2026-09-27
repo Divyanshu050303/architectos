@@ -14,7 +14,7 @@ from core.architecture_ir.node import Node
 from core.domain.engine_results import Evidence, FindingBasis
 from core.domain.observability.analyses import ObservabilityAnalysisRequest
 from core.domain.observability.results import FindingType, ObservabilityFinding, ObservabilityResult
-from core.domain.observability.values import Dimension
+from core.domain.observability.values import CoverageState, Dimension
 from core.domain.validation.options import RevisionInfo
 from core.domain.validation.results import Severity
 from engines.observability.alerts import Alerts
@@ -138,6 +138,26 @@ def test_alerts_without_a_modeled_delivery_path() -> None:
     uncollected = component("api", criticality="standard", metrics=("errors",), alerts=("errors",))
     [lost] = run([uncollected]).findings
     assert lost.missing == ("api.collection",)
+
+
+def test_every_reached_backend_counts_for_delivery() -> None:
+    """Regression (phase 10 review): a node whose metrics reach two backends, only the second of which
+    delivers alerts, has a modeled delivery path — whichever backend a path search finds first — and
+    so does one whose collector forwards to a delivering backend."""
+    api = component("api", criticality="critical", metrics=("errors",), alerts=("errors",))
+    quiet = component("obs-a", NodeKind.OBSERVABILITY)
+    paging = component("obs-b", NodeKind.OBSERVABILITY, alert_delivery="paging")
+    both = [link("api", "obs-a", telemetry=("metrics",)), link("api", "obs-b", telemetry=("metrics",))]
+    result = run([api, quiet, paging], both)
+    assert not of(result, T.ALERT_DELIVERY_NOT_MODELED)
+    [components] = [c for c in result.components if c.node_id == "api"]
+    assert components.coverage[Dimension.ALERTING] is CoverageState.MODELED
+    forwarded = [link("api", "obs-a", telemetry=("metrics",)), link("obs-a", "obs-b", telemetry=("metrics",))]
+    assert not of(run([api, quiet, paging], forwarded), T.ALERT_DELIVERY_NOT_MODELED)
+    [undelivered] = of(
+        run([api, quiet, component("obs-b", NodeKind.OBSERVABILITY)], both), T.ALERT_DELIVERY_NOT_MODELED
+    )
+    assert undelivered.missing == ("obs-a.configuration.alert_delivery", "obs-b.configuration.alert_delivery")
 
 
 def test_no_threshold_or_firing_is_claimed_and_the_analysis_is_deterministic() -> None:

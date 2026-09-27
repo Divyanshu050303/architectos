@@ -107,17 +107,25 @@ class ObservabilityContext:
         """The observability components (collectors, backends) of the revision."""
         return frozenset(n.id for n in self.ir.nodes if n.kind is NodeKind.OBSERVABILITY)
 
-    def collected(self, signal: str) -> Mapping[str, tuple[str, ...]]:
-        """For ``signal`` (logs, metrics, traces): every node whose telemetry reaches an observability
-        component, with the connections of the path (the first found, breadth first in id order);
-        an observability component maps to ()."""
-        key = ("collected", signal)
+    def _incoming(self, signal: str) -> Mapping[str, tuple[Connection, ...]]:
+        """For ``signal``: the connections declaring it, by target, in id order."""
+        key = ("incoming", signal)
         if key not in self.memo:
             incoming: dict[str, list[Connection]] = {}
             for c in sorted(self.ir.connections, key=lambda c: c.id):
-                signals = self.connection_facts[c.id].signals or ()
-                if signal in signals:
+                if signal in (self.connection_facts[c.id].signals or ()):
                     incoming.setdefault(c.target_id, []).append(c)
+            self.memo[key] = {k: tuple(v) for k, v in incoming.items()}
+        result: Mapping[str, tuple[Connection, ...]] = self.memo[key]
+        return result
+
+    def collected(self, signal: str) -> Mapping[str, tuple[str, ...]]:
+        """For ``signal`` (logs, metrics, traces): every node whose telemetry reaches an observability
+        component, with the connections of one path (the first found, breadth first in id order; a
+        node may reach several — see ``backends``); an observability component maps to ()."""
+        key = ("collected", signal)
+        if key not in self.memo:
+            incoming = self._incoming(signal)
             paths: dict[str, tuple[str, ...]] = {o: () for o in sorted(self.observability_ids)}
             queue = deque(sorted(self.observability_ids))
             while queue:
@@ -130,6 +138,27 @@ class ObservabilityContext:
         result: Mapping[str, tuple[str, ...]] = self.memo[key]
         return result
 
+    def backends(self, signal: str) -> Mapping[str, tuple[str, ...]]:
+        """For ``signal``: every node whose telemetry reaches an observability component, with every
+        observability component it reaches (itself included, for one), in id order. One reverse search
+        per observability component (linear in the graph each), computed once per signal."""
+        key = ("backends", signal)
+        if key not in self.memo:
+            incoming = self._incoming(signal)
+            reached: dict[str, list[str]] = {}
+            for backend in sorted(self.observability_ids):
+                seen, queue = {backend}, deque([backend])
+                while queue:
+                    for c in incoming.get(queue.popleft(), ()):
+                        if c.source_id not in seen:
+                            seen.add(c.source_id)
+                            queue.append(c.source_id)
+                for node_id in seen:
+                    reached.setdefault(node_id, []).append(backend)
+            self.memo[key] = {k: tuple(v) for k, v in reached.items()}
+        result: Mapping[str, tuple[str, ...]] = self.memo[key]
+        return result
+
     @cached_property
     def health_consumers(self) -> Mapping[str, tuple[str, ...]]:
         """For each node, the connections over which a component checks its health."""
@@ -139,31 +168,19 @@ class ObservabilityContext:
                 consumers.setdefault(c.target_id, []).append(c.id)
         return {k: tuple(v) for k, v in consumers.items()}
 
+    def reached_backends(self, node_id: str) -> tuple[str, ...]:
+        """The observability components this node's metrics or logs reach (where its alert rules can
+        be evaluated), in id order."""
+        return tuple(sorted({b for s in ("metrics", "logs") for b in self.backends(s).get(node_id, ())}))
+
     def alert_delivery(self, node_id: str) -> tuple[str, ...]:
         """The observability components that receive this node's metrics or logs and declare an
         alert delivery other than none (where its alert rules can fire from)."""
-        found = []
-        for backend in sorted(self.observability_ids):
-            delivery = self.facts[backend].known("alert_delivery")
-            if delivery is None or delivery == "none":
-                continue
-            reached = any(
-                node_id in self.collected(s) and self._ends_at(node_id, s, backend)
-                for s in ("metrics", "logs")
-            )
-            if reached or node_id == backend:
-                found.append(backend)
-        return tuple(found)
-
-    def _ends_at(self, node_id: str, signal: str, backend: str) -> bool:
-        """Whether ``node_id``'s path for ``signal`` ends at ``backend``."""
-        path = self.collected(signal).get(node_id)
-        if path is None:
-            return False
-        if not path:
-            return node_id == backend
-        last = self.topology.connection(path[-1])
-        return last is not None and last.target_id == backend
+        return tuple(
+            b
+            for b in self.reached_backends(node_id)
+            if self.facts[b].known("alert_delivery") not in (None, "none")
+        )
 
     def coverage(self, node: Node) -> dict[Dimension, CoverageState]:
         """The node's coverage state per dimension, from what it declares (see the module doc)."""

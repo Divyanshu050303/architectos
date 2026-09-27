@@ -145,9 +145,7 @@ class Alerts:
                 )
             )
         if not context.alert_delivery(node.id):
-            backends = sorted(
-                {p for s in ("metrics", "logs") if (p := self._backend(context, node.id, s)) is not None}
-            )
+            backends = context.reached_backends(node.id)
             found.append(
                 finding(
                     self.meta,
@@ -169,13 +167,3 @@ class Alerts:
                 )
             )
         return found
-
-    def _backend(self, context: ObservabilityContext, node_id: str, signal: str) -> str | None:
-        """The observability component the node's ``signal`` reaches (None: not collected)."""
-        path = context.collected(signal).get(node_id)
-        if path is None:
-            return None
-        if not path:
-            return node_id
-        last = context.topology.connection(path[-1])
-        return last.target_id if last is not None else None
