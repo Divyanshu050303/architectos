@@ -1,14 +1,15 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
-id: databases/mysql
+id: databases/elasticsearch
 version: 1
-name: MySQL
+name: Elasticsearch
 category: database
-technology: mysql
+technology: elasticsearch
 node_kinds:
 - database
 support_status: planned
-description: 'A relational database. Planned: nothing is specified about it yet.'
+description: 'A search and analytics engine. Planned: nothing is specified about it
+  yet.'
 provider:
   name: community
-  service: MySQL
+  service: Elasticsearch
 hosting: null

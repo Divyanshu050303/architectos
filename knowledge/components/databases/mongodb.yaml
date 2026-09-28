@@ -1,0 +1,14 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: databases/mongodb
+version: 1
+name: MongoDB
+category: database
+technology: mongodb
+node_kinds:
+- database
+support_status: planned
+description: 'A document database. Planned: nothing is specified about it yet.'
+provider:
+  name: community
+  service: MongoDB
+hosting: null

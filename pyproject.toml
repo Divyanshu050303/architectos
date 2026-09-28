@@ -13,6 +13,7 @@ dependencies = [
     "fastapi>=0.141.1",
     "pydantic-settings>=2.10",
     "pyjwt>=2.15.0",
+    "pyyaml>=6.0.2",
     "redis>=5.2",
     "sqlalchemy[asyncio]>=2.0.43",
     "uvicorn>=0.53.0",
@@ -28,6 +29,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.13",
     "types-jsonschema>=4.26.0.20260518",
+    "types-pyyaml>=6.0.12.20260906",
 ]
 
 [tool.uv]

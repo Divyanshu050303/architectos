@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: storage/azure-blob-storage
+version: 1
+name: Azure Blob Storage
+category: storage
+technology: azure-blob-storage
+node_kinds:
+- storage
+support_status: planned
+description: 'Microsoft Azure''s object storage service. Planned: nothing is specified
+  about it yet.'
+provider:
+  name: azure
+  service: Azure Blob Storage
+hosting: managed

@@ -1,0 +1,14 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: networking/waf
+version: 1
+name: WAF
+category: networking
+technology: waf
+node_kinds:
+- gateway
+support_status: planned
+description: 'A web application firewall. Planned: nothing is specified about it yet.'
+provider:
+  name: generic
+  service: Web application firewall
+hosting: null

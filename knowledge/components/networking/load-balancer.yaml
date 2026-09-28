@@ -1,0 +1,14 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: networking/load-balancer
+version: 1
+name: Load Balancer
+category: networking
+technology: load-balancer
+node_kinds:
+- load_balancer
+support_status: planned
+description: 'A load balancer. Planned: nothing is specified about it yet.'
+provider:
+  name: generic
+  service: Load balancer
+hosting: null

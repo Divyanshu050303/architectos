@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: messaging/google-pubsub
+version: 1
+name: Google Pub/Sub
+category: messaging
+technology: google-pubsub
+node_kinds:
+- queue
+support_status: planned
+description: 'Google Cloud''s messaging service. Planned: nothing is specified about
+  it yet.'
+provider:
+  name: google
+  service: Pub/Sub
+hosting: managed

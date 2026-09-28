@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: messaging/aws-sns
+version: 1
+name: Amazon SNS
+category: messaging
+technology: aws-sns
+node_kinds:
+- queue
+support_status: planned
+description: 'Amazon Web Services'' publish-subscribe service. Planned: nothing is
+  specified about it yet.'
+provider:
+  name: aws
+  service: Amazon Simple Notification Service
+hosting: managed

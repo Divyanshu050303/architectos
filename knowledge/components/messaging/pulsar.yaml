@@ -1,14 +1,15 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
-id: messaging/nats
+id: messaging/pulsar
 version: 1
-name: NATS
+name: Apache Pulsar
 category: messaging
-technology: nats
+technology: pulsar
 node_kinds:
 - queue
 support_status: planned
-description: 'A messaging system. Planned: nothing is specified about it yet.'
+description: 'A messaging and streaming platform. Planned: nothing is specified about
+  it yet.'
 provider:
   name: community
-  service: NATS
+  service: Apache Pulsar
 hosting: null

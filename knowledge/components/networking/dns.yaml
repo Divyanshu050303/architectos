@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: networking/dns
+version: 1
+name: DNS
+category: networking
+technology: dns
+node_kinds:
+- external
+support_status: planned
+description: 'A domain name system service. Planned: nothing is specified about it
+  yet.'
+provider:
+  name: generic
+  service: DNS
+hosting: null

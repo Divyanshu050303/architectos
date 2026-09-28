@@ -1,0 +1,16 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: compute/aws-ecs
+version: 1
+name: Amazon ECS
+category: compute
+technology: aws-ecs
+node_kinds:
+- service
+- worker
+support_status: planned
+description: 'Amazon Web Services'' container orchestration service. Planned: nothing
+  is specified about it yet.'
+provider:
+  name: aws
+  service: Amazon Elastic Container Service
+hosting: managed

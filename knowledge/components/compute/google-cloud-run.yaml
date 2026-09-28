@@ -1,0 +1,16 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: compute/google-cloud-run
+version: 1
+name: Google Cloud Run
+category: compute
+technology: google-cloud-run
+node_kinds:
+- service
+- worker
+support_status: planned
+description: 'Google Cloud''s managed container service. Planned: nothing is specified
+  about it yet.'
+provider:
+  name: google
+  service: Cloud Run
+hosting: managed
