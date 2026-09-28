@@ -89,12 +89,15 @@ class RunInputs:
     config: Mapping[str, Any] = field(default_factory=dict)  # ValidationConfig.to_dict()
     policy: Mapping[str, Any] | None = None  # the policy in force, None when it constrained nothing
     requirements: tuple[tuple[str, int, str], ...] = ()  # (id, version, status) of each one given
+    # The component specification versions checked (ref -> content hash): re-readable exactly.
+    components: Mapping[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "config": dict(self.config),
             "policy": dict(self.policy) if self.policy is not None else None,
             "requirements": [list(r) for r in self.requirements],
+            "components": dict(sorted(self.components.items())),
         }
 
 

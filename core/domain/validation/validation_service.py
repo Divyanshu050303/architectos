@@ -16,6 +16,7 @@ Audit entries carry identifiers and counts only, never findings or content.
 import logging
 import uuid
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import Any
 
 from core.architecture_ir.model import ArchitectureIR
@@ -121,6 +122,8 @@ class ValidationService:
                 finished = self._run(
                     run, revision.ir, revision_info(revision, architecture), requirements, policy, config
                 )
+            if finished.result is not None and finished.result.components:
+                inputs = replace(inputs, components=finished.result.components)
             report = await uow.validations.add(finished, inputs)
             await uow.audit.record(
                 AuditEvent(

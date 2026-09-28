@@ -66,7 +66,9 @@ async def test_a_validation_is_run_stored_and_read_back(
     assert created["summary"]["blocking"] == 2  # fastapi is prohibited, api-db has tls off
     assert created["summary"]["bySeverity"]["high"] >= 2
     assert created["inputs"]["policy"]["require_tls"] is True
-    assert [x["code"] for x in created["limitations"]] == ["catalog_unavailable"]
+    # the API validates with the component catalog; these nodes refer to no catalog component
+    assert [x["code"] for x in created["limitations"]] == ["components_not_referenced"]
+    assert created["inputs"]["components"] == {}
     assert created["ruleSet"]["id"] == "default"
     assert (await client.get(f"{runs(world, aid)}/{created['id']}", headers=world.ada)).json() == created
 
@@ -256,3 +258,34 @@ async def test_reads_cost_the_same_whatever_the_number_of_runs_and_findings(
 
     assert await cost(small["id"]) == await cost(large["id"])
     assert all(n <= 10 for n in await cost(large["id"])), "authentication, access checks and the read itself"
+
+
+async def test_catalog_components_are_checked_and_their_versions_recorded(
+    client: AsyncClient, db: AsyncSession, world: World
+) -> None:
+    """ARCH-COMP-001: a node referring to a catalog component is checked against its documented
+    constraints; the run records the specification version it used."""
+    ir = to_dict(api_and_postgres())
+    ir["nodes"].append(
+        {"id": "jobs", "kind": "queue", "name": "Jobs", "component": "messaging/aws-sqs",
+         "configuration": {"values": {"retention_seconds": 30}}}
+    )  # fmt: skip
+    aid = await architecture(client, world, ir)
+    created = await run(client, world, aid)
+    assert list(created["inputs"]["components"]) == ["messaging/aws-sqs@2"]
+    response = await client.get(f"{runs(world, aid)}/{created['id']}/findings", headers=world.ada)
+    assert response.status_code == 200, response.text
+    [violation] = [
+        f for f in response.json()["findings"] if f["ruleId"] == "configuration.component-constraints"
+    ]
+    assert (violation["code"], violation["severity"], violation["entityIds"]) == (
+        "component_constraint_violated",
+        "high",
+        ["jobs"],
+    )
+    assert {"label": "specification", "value": "messaging/aws-sqs@2"} in violation["evidence"]
+    stored = await db.scalar(
+        select(ValidationRunRecord.inputs).where(ValidationRunRecord.id == uuid.UUID(created["id"]))
+    )
+    assert stored is not None
+    assert stored["components"] == created["inputs"]["components"]

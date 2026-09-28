@@ -46,6 +46,7 @@ from engines.requirements.factory import build_engine
 from engines.security.service import DeterministicSecurityEngine
 from engines.simulation.service import DeterministicSimulationEngine
 from engines.validation.service import DeterministicValidationEngine
+from persistence.component_catalog import default_catalog
 
 API_PREFIX = "/api/v1"
 _UUID = "[0-9a-fA-F-]{36}"
@@ -81,7 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         timeout_seconds=settings.requirements_llm_timeout_seconds,
         max_output_tokens=settings.requirements_llm_max_output_tokens,
     )
-    app.state.validation_engine = DeterministicValidationEngine()
+    app.state.validation_engine = DeterministicValidationEngine(catalog=default_catalog())
     app.state.capacity_engine = DeterministicCapacityEngine()
     app.state.cost_engine = DeterministicCostEngine(capacity=app.state.capacity_engine)
     app.state.reliability_engine = DeterministicReliabilityEngine()

@@ -65,7 +65,8 @@ refuse it (`409`). Rate limit: 120 runs per user per hour.
   "failures": [],
   "limitations": [{"code": "catalog_unavailable", "message": "…"}],
   "inputs": {"config": {"profile": "default", "rules": null, "parameters": {}, "severity_overrides": {}},
-             "policy": {"require_tls": true, "…": "…"}, "requirementCount": 7},
+             "policy": {"require_tls": true, "…": "…"}, "requirementCount": 7,
+             "components": {"messaging/aws-sqs@2": "c5e1…"}},
   "error": null
 }
 ```
@@ -74,7 +75,9 @@ Counts only: no score is derived from them. A requirement verdict is `satisfied`
 `not_verifiable` (never a pass; the reason says why) or `not_applicable`. `failures` lists rules
 that could not execute (`unexpected_error`, `invalid_output`): their absence of findings proves
 nothing. `limitations` states what no rule of the run could check (`catalog_unavailable`,
-`no_policy`, `requirements_not_provided`).
+`components_not_referenced`, `no_policy`, `requirements_not_provided`). `inputs.components` lists the
+component specification versions (`ref`: content hash) nodes were checked against by
+`configuration.component-constraints`.
 
 ## Findings
 
