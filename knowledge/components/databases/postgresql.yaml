@@ -1,14 +1,201 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
 id: databases/postgresql
-version: 1
+version: 2
 name: PostgreSQL
 category: database
 technology: postgresql
 node_kinds:
 - database
-support_status: planned
-description: 'A relational database. Planned: nothing is specified about it yet.'
+support_status: supported
+description: An open source object-relational database system that uses and extends the SQL language.
 provider:
   name: community
   service: PostgreSQL
 hosting: null
+technology_versions:
+- '18'
+capabilities:
+- id: relational_queries
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - about
+- id: transactions
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - about
+  note: ACID-compliant; all SQL-standard isolation levels.
+- id: read_replication
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - about
+  note: Asynchronous, synchronous and logical replication; active standbys.
+- id: point_in_time_recovery
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - about
+- id: authentication
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - about
+  note: GSSAPI, SSPI, LDAP, SCRAM-SHA-256, certificate, OAuth 2.0 and more.
+- id: authorization
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - about
+  note: Access control, column and row-level security.
+- id: encryption_in_transit
+  state: requires_configuration
+  provenance:
+    kind: documented
+    sources:
+    - connection
+  requires:
+  - ssl = on
+  note: The ssl parameter's default is off.
+configuration:
+- property: max_connections
+  required: true
+  engines:
+  - validation
+  - capacity
+  description: 'The documented default is typically 100, but may be less (set at initdb from kernel settings): stated
+    per deployment, never assumed.'
+- property: replicas
+  engines:
+  - capacity
+  - reliability
+  - cost
+- property: replication_mode
+  engines:
+  - reliability
+- property: cpu_limit_cores
+  engines:
+  - capacity
+  - cost
+- property: memory_limit_bytes
+  engines:
+  - capacity
+  - cost
+- property: storage_bytes
+  engines:
+  - capacity
+  - cost
+- property: backup_enabled
+  engines:
+  - reliability
+capacity:
+- id: connections
+  unit: connections
+  scope: instance
+  property: max_connections
+  description: The maximum number of concurrent connections, as configured.
+  provenance:
+    kind: documented
+    sources:
+    - connection
+failure_modes:
+- id: connection_exhaustion
+  description: Every connection slot allowed by max_connections is in use.
+  impact: Further connections are refused until a slot frees.
+  signals:
+  - connections
+  preconditions:
+  - Concurrent connections reach max_connections.
+  mitigations:
+  - A connection pool in front of the database.
+  - A max_connections sized for the workload.
+  provenance:
+    kind: inferred
+    assumptions:
+    - max_connections is documented as the maximum number of concurrent connections, so connections beyond it cannot
+      be served.
+- id: replication_lag
+  description: A standby has not yet applied recent WAL from the primary.
+  impact: Reads served by the standby return older data; a failover to it loses unapplied changes.
+  signals:
+  - replication_lag
+  preconditions:
+  - Streaming replication to a standby.
+  provenance:
+    kind: documented
+    sources:
+    - statistics
+signals:
+- id: connections
+  type: metric
+  availability: native
+  unit: connections
+  collection: pg_stat_activity
+  description: One row per server process.
+  provenance:
+    kind: documented
+    sources:
+    - statistics
+- id: replication_lag
+  type: metric
+  availability: native
+  collection: pg_stat_replication
+  description: write_lag, flush_lag and replay_lag per standby.
+  provenance:
+    kind: documented
+    sources:
+    - statistics
+security:
+- id: authentication
+  state: native
+  property: authentication
+  provenance:
+    kind: documented
+    sources:
+    - about
+- id: authorization
+  state: native
+  property: authorization
+  provenance:
+    kind: documented
+    sources:
+    - about
+- id: encryption_in_transit
+  state: requires_configuration
+  property: tls
+  requires:
+  - ssl = on
+  note: Off by default.
+  provenance:
+    kind: documented
+    sources:
+    - connection
+- id: encryption_at_rest
+  state: unknown
+  property: encryption_at_rest
+  provenance:
+    kind: unknown
+  note: Not stated by the sources cited here.
+sources:
+- id: about
+  name: 'PostgreSQL: About'
+  reference: https://www.postgresql.org/about/
+  version: null
+  retrieved: '2026-09-28'
+- id: connection
+  name: 'PostgreSQL 18 documentation: Connections and Authentication'
+  reference: https://www.postgresql.org/docs/current/runtime-config-connection.html
+  version: '18'
+  retrieved: '2026-09-28'
+- id: statistics
+  name: 'PostgreSQL 18 documentation: The Cumulative Statistics System'
+  reference: https://www.postgresql.org/docs/current/monitoring-stats.html
+  version: '18'
+  retrieved: '2026-09-28'

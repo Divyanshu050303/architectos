@@ -164,6 +164,10 @@ class RunInputsModel(ApiModel):
     config: dict[str, Any]
     policy: dict[str, Any] | None
     requirement_count: int
+    components: dict[str, str] = Field(
+        default_factory=dict,
+        description="The component specification versions nodes were checked against (ref: content hash).",
+    )
 
 
 class ValidationRunSummary(ApiModel):
@@ -233,6 +237,7 @@ class ValidationRunResponse(ValidationRunSummary):
                 config=dict(report.inputs.config),
                 policy=dict(report.inputs.policy) if report.inputs.policy is not None else None,
                 requirement_count=len(report.inputs.requirements),
+                components=dict(report.inputs.components),
             ),
         )
 

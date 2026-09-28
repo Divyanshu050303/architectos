@@ -56,7 +56,10 @@ crash stores a `failed` run (`engine_error`); a storage failure rolls everything
   why) or `not_applicable`, with the requirement's reference and version, the elements concerned
   and the evidence.
 - **Rule failure**: a rule that could not execute. **Limitation**: something no rule of the run
-  could check (`catalog_unavailable`, `no_policy`, `requirements_not_provided`).
+  could check (`catalog_unavailable` without a component catalog, `components_not_referenced` for
+  nodes that refer to no catalog component, `no_policy`, `requirements_not_provided`).
+- **Components**: the component specification versions the run checked nodes against
+  (`ref` → content hash), recorded with the run's inputs so the result can be re-read against them.
 - **Summary**: counts by severity, category and verdict, blocking findings and rule failures;
   always derived from the findings, never stored separately in the engine. No score is computed.
 - **Rule set**: the profile and a version hashed from every rule's (id, version): changing a rule
@@ -107,6 +110,7 @@ be added without changing what `default` means). Mandatory rules always run and 
 | `configuration.backups` | configuration | medium/low | Backups kept for 0 seconds; a retention without backups |
 | `configuration.retries-without-timeout` | configuration | medium | Retries on a waited-on connection with no timeout |
 | `configuration.dead-letter` | configuration | low | A dead-letter setting on a non-consuming connection |
+| `configuration.component-constraints` | configuration | the constraint's; info when not evaluable | A node's configuration against the documented constraints of the catalog component it refers to (`node.component`); what cannot be evaluated is an `info` finding. See [the component catalog](component-catalog.md) |
 | `policy.technology` (mandatory) | policy | high, blocking | Prohibited technologies; technologies outside the allowed list; unstated ones (low) |
 | `policy.region` (mandatory) | policy | high, blocking | Regions outside the allowed list; unknown ones (low) |
 | `policy.tls` (mandatory) | policy | high, blocking | Communicating connections with `tls` false; unstated ones (medium) |
@@ -185,7 +189,9 @@ number of elements.
 
 ## Known limitations
 
-- No component catalog: configuration is checked against the IR's property definitions only.
+- Only nodes that refer to a catalog component (`node.component`) are checked against a
+  technology's documented constraints, and only the constraints a specification documents; the
+  others are checked against the IR's property definitions only (`components_not_referenced`).
 - Availability zones are not interpreted against regions (naming differs between providers).
 - Verdicts cover regions, storage, retention and encryption in transit only.
 - Runs are synchronous; a very large architecture holds the project row (shared) for the run.

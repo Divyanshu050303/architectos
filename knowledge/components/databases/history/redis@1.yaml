@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: databases/redis
+version: 1
+name: Redis
+category: database
+technology: redis
+node_kinds:
+- cache
+- database
+support_status: planned
+description: 'An in-memory data store. Planned: nothing is specified about it yet.'
+provider:
+  name: community
+  service: Redis
+hosting: null

@@ -1,15 +1,146 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
 id: databases/redis
-version: 1
+version: 2
 name: Redis
 category: database
 technology: redis
 node_kinds:
 - cache
 - database
-support_status: planned
-description: 'An in-memory data store. Planned: nothing is specified about it yet.'
+support_status: supported
+description: An in-memory data store, commonly used as a cache.
 provider:
   name: community
   service: Redis
 hosting: null
+technology_versions:
+- '7.4'
+capabilities:
+- id: in_memory_storage
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - eviction
+- id: key_value_access
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - eviction
+- id: time_to_live
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - eviction
+  note: Keys may have an associated expiration (TTL).
+- id: authentication
+  state: requires_configuration
+  provenance:
+    kind: documented
+    sources:
+    - config
+  requires:
+  - requirepass
+  note: No password is required by default; protected mode is on by default.
+- id: encryption_in_transit
+  state: requires_configuration
+  provenance:
+    kind: documented
+    sources:
+    - config
+  requires:
+  - tls-port
+  note: TLS is disabled by default.
+configuration:
+- property: memory_limit_bytes
+  required: true
+  engines:
+  - capacity
+  - validation
+  description: maxmemory; 0 (the 64-bit default) means no limit.
+- property: eviction_policy
+  engines:
+  - validation
+  - reliability
+  default: noeviction
+  provenance:
+    kind: documented
+    sources:
+    - config
+- property: persistence
+  engines:
+  - reliability
+- property: replicas
+  engines:
+  - capacity
+  - reliability
+  - cost
+failure_modes:
+- id: memory_limit_reached
+  description: The data set reaches maxmemory.
+  impact: Under noeviction, commands that add data return an error (reads still work); under other policies, keys
+    are evicted.
+  signals:
+  - used_memory_dataset
+  - evicted_keys
+  preconditions:
+  - maxmemory is set.
+  mitigations:
+  - An eviction policy that fits the access pattern.
+  - A larger memory limit.
+  provenance:
+    kind: documented
+    sources:
+    - eviction
+signals:
+- id: used_memory_dataset
+  type: metric
+  availability: native
+  unit: B
+  collection: INFO memory
+  provenance:
+    kind: documented
+    sources:
+    - eviction
+- id: evicted_keys
+  type: metric
+  availability: native
+  collection: INFO stats
+  provenance:
+    kind: documented
+    sources:
+    - eviction
+security:
+- id: authentication
+  state: requires_configuration
+  property: authentication
+  requires:
+  - requirepass
+  note: Not required by default.
+  provenance:
+    kind: documented
+    sources:
+    - config
+- id: encryption_in_transit
+  state: requires_configuration
+  property: tls
+  requires:
+  - tls-port
+  note: Disabled by default.
+  provenance:
+    kind: documented
+    sources:
+    - config
+sources:
+- id: eviction
+  name: 'Redis documentation: Key eviction'
+  reference: https://redis.io/docs/latest/develop/reference/eviction/
+  version: null
+  retrieved: '2026-09-28'
+- id: config
+  name: redis.conf (Redis 7.4.0)
+  reference: https://github.com/redis/redis/blob/7.4.0/redis.conf
+  version: 7.4.0
+  retrieved: '2026-09-28'

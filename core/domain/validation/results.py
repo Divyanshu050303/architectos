@@ -18,7 +18,7 @@ import json
 import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
@@ -423,8 +423,11 @@ class ValidationResult:
     requirement_results: tuple[RequirementResult, ...] = ()
     failures: tuple[RuleFailure, ...] = ()
     limitations: tuple[Limitation, ...] = ()
+    # The component specification versions the run checked nodes against (ref -> content hash).
+    components: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "components", dict(sorted(self.components.items())))
         object.__setattr__(
             self, "findings", tuple(sorted(dict.fromkeys(self.findings), key=Finding.sort_key))
         )
@@ -455,6 +458,8 @@ class ValidationResult:
             "failures": [f.to_dict() for f in self.failures],
             "limitations": [x.to_dict() for x in self.limitations],
         }
+        if self.components:  # absent when no component was checked: earlier results keep their fingerprint
+            document["components"] = dict(self.components)
         return hashlib.sha256(
             json.dumps(document, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest()

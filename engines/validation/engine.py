@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
+from core.architecture_ir.component import NodeKind
 from core.domain.parameters import ParamSpec, ParamType, parameter_problem
 from core.domain.validation.errors import InvalidFinding, InvalidValidationConfig
 from core.domain.validation.results import (
@@ -53,9 +54,27 @@ NO_REQUIREMENTS = Limitation(
 )
 
 
+UNCHECKED_KINDS = frozenset({NodeKind.CLIENT, NodeKind.BOUNDARY})
+
+
+def _components_not_referenced(count: int) -> Limitation:
+    return Limitation(
+        "components_not_referenced",
+        f"{count} node(s) refer to no catalog component: their configuration is checked against the "
+        "architecture schema's property definitions only, not against what their technology supports "
+        "or limits.",
+    )
+
+
 def limitations(context: ValidationContext) -> tuple[Limitation, ...]:
     """What no rule of this run could check, whichever rules were selected."""
-    found = [CATALOG_UNAVAILABLE]
+    found: list[Limitation] = []
+    if context.catalog is None:
+        found.append(CATALOG_UNAVAILABLE)
+    else:
+        unreferenced = [n for n in context.ir.nodes if n.kind not in UNCHECKED_KINDS and n.component is None]
+        if unreferenced:
+            found.append(_components_not_referenced(len(unreferenced)))
     if not context.has_policy:
         found.append(NO_POLICY)
     if context.requirements is None:
@@ -68,6 +87,7 @@ class Input(StrEnum):
 
     REQUIREMENTS = "requirements"
     POLICY = "policy"
+    CATALOG = "catalog"  # the component catalog
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,7 +258,16 @@ def validate(context: ValidationContext, registry: Registry) -> ValidationResult
         requirement_results=tuple(verdicts),
         failures=tuple(failures),
         limitations=limitations(context),
+        components=_components_used(context, rules),
     )
+
+
+def _components_used(context: ValidationContext, rules: Iterable[Rule]) -> dict[str, str]:
+    """The specification versions the run checked nodes against, when a catalog rule ran."""
+    uses_catalog = any(Input.CATALOG in rule.meta.inputs for rule in rules)
+    if not uses_catalog or context.components is None:
+        return {}
+    return dict(context.components.specifications)
 
 
 __all__ = ["ParamSpec", "ParamType"]  # re-exported: the rules import them from here

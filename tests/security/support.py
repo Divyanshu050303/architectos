@@ -52,6 +52,8 @@ class Operation:
             .replace("{decision_id}", str(uuid.uuid4()))
             .replace("{snapshot_id}", str(uuid.uuid4()))
             .replace("{invitation_token}", "A" * 43)
+            .replace("{directory}", "messaging")
+            .replace("{entry}", "aws-sqs")
         ) + ("?from=1&to=1" if url.endswith("/compare") else "")
 
 

@@ -11,8 +11,10 @@ from core.architecture_ir.component import COMPONENT_REFERENCE, TECHNOLOGY_NAME,
 from core.architecture_ir.configuration import CONNECTION_PROPERTIES, NODE_PROPERTIES
 from core.domain.capacity.units import UNITS
 from core.domain.cost.pricing import PricingUnit
+from core.domain.validation.results import Severity
 
 from .capabilities import CAPABILITIES, SCALING_METHODS, SECURITY_PROPERTIES, CapabilityState
+from .constraints import MAX_VALUES, Comparison, ConstraintType
 from .entities import CATEGORIES, CODE, MAX_ITEMS, Engine, Hosting, ProvenanceKind, SupportStatus
 from .specifications import (
     Effect,
@@ -168,6 +170,32 @@ def json_schema() -> dict[str, Any]:
             },
             ["id", "unit", "provenance"],
         ),
+        "condition": _object(
+            {
+                "property": _enum(NODE_PROPERTIES),
+                "values": {"type": "array", "minItems": 1, "maxItems": MAX_VALUES},
+            },
+            ["property", "values"],
+        ),
+        "constraint": _object(
+            {
+                "id": code,
+                "type": _enum(ConstraintType),
+                "description": text,
+                "property": _enum(NODE_PROPERTIES),
+                "comparison": _nullable(_enum(Comparison)),
+                "limit": _nullable(decimal),
+                "minimum": _nullable(decimal),
+                "maximum": _nullable(decimal),
+                "values": {"type": "array", "maxItems": MAX_VALUES},
+                "severity": _enum(Severity),
+                "conditions": _list(_ref("condition")),
+                "technology_versions": _list(text),
+                "remediation": _nullable(text),
+                **provenanced,
+            },
+            ["id", "type", "description", "property", "severity", "provenance"],
+        ),
         "operational_consideration": _object(
             {
                 "area": _enum(OperationArea),
@@ -202,6 +230,7 @@ def json_schema() -> dict[str, Any]:
             "security": _list(_ref("security_property")),
             "billing": _list(_ref("billing_dimension")),
             "operations": _list(_ref("operational_consideration")),
+            "constraints": _list(_ref("constraint")),
             "sources": _list(_ref("source")),
         },
         [

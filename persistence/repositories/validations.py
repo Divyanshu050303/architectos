@@ -47,6 +47,7 @@ def _inputs(data: dict[str, Any]) -> RunInputs:
         config=data.get("config", {}),
         policy=data.get("policy"),
         requirements=tuple((r[0], r[1], r[2]) for r in data.get("requirements", ())),
+        components=data.get("components", {}),
     )
 
 
