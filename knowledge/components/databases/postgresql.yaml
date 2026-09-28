@@ -1,0 +1,14 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: databases/postgresql
+version: 1
+name: PostgreSQL
+category: database
+technology: postgresql
+node_kinds:
+- database
+support_status: planned
+description: 'A relational database. Planned: nothing is specified about it yet.'
+provider:
+  name: community
+  service: PostgreSQL
+hosting: null

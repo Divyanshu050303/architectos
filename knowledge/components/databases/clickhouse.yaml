@@ -1,14 +1,15 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
-id: databases/mysql
+id: databases/clickhouse
 version: 1
-name: MySQL
+name: ClickHouse
 category: database
-technology: mysql
+technology: clickhouse
 node_kinds:
 - database
 support_status: planned
-description: 'A relational database. Planned: nothing is specified about it yet.'
+description: 'A column-oriented analytical database. Planned: nothing is specified
+  about it yet.'
 provider:
   name: community
-  service: MySQL
+  service: ClickHouse
 hosting: null

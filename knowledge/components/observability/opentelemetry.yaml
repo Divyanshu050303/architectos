@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: observability/opentelemetry
+version: 1
+name: OpenTelemetry
+category: observability
+technology: opentelemetry
+node_kinds:
+- observability
+support_status: planned
+description: 'Telemetry APIs, SDKs and a collector. Planned: nothing is specified
+  about it yet.'
+provider:
+  name: community
+  service: OpenTelemetry
+hosting: null

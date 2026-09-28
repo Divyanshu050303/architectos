@@ -1,14 +1,14 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
-id: databases/mysql
+id: databases/scylladb
 version: 1
-name: MySQL
+name: ScyllaDB
 category: database
-technology: mysql
+technology: scylladb
 node_kinds:
 - database
 support_status: planned
-description: 'A relational database. Planned: nothing is specified about it yet.'
+description: 'A wide-column database. Planned: nothing is specified about it yet.'
 provider:
   name: community
-  service: MySQL
+  service: ScyllaDB
 hosting: null

@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: observability/grafana
+version: 1
+name: Grafana
+category: observability
+technology: grafana
+node_kinds:
+- observability
+support_status: planned
+description: 'A visualization and dashboard tool. Planned: nothing is specified about
+  it yet.'
+provider:
+  name: community
+  service: Grafana
+hosting: null

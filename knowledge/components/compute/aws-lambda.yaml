@@ -1,0 +1,16 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: compute/aws-lambda
+version: 1
+name: AWS Lambda
+category: compute
+technology: aws-lambda
+node_kinds:
+- service
+- worker
+support_status: planned
+description: 'Amazon Web Services'' function service. Planned: nothing is specified
+  about it yet.'
+provider:
+  name: aws
+  service: AWS Lambda
+hosting: managed

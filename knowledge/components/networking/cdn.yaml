@@ -1,0 +1,14 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: networking/cdn
+version: 1
+name: CDN
+category: networking
+technology: cdn
+node_kinds:
+- cdn
+support_status: planned
+description: 'A content delivery network. Planned: nothing is specified about it yet.'
+provider:
+  name: generic
+  service: Content delivery network
+hosting: null

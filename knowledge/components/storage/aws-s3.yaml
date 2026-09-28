@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: storage/aws-s3
+version: 1
+name: Amazon S3
+category: storage
+technology: aws-s3
+node_kinds:
+- storage
+support_status: planned
+description: 'Amazon Web Services'' object storage service. Planned: nothing is specified
+  about it yet.'
+provider:
+  name: aws
+  service: Amazon Simple Storage Service
+hosting: managed

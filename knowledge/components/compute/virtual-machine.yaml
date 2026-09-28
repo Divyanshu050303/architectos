@@ -1,0 +1,16 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: compute/virtual-machine
+version: 1
+name: Virtual Machine
+category: compute
+technology: virtual-machine
+node_kinds:
+- service
+- worker
+support_status: planned
+description: 'A virtual machine running workloads. Planned: nothing is specified about
+  it yet.'
+provider:
+  name: generic
+  service: Virtual machine
+hosting: null

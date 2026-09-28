@@ -1,15 +1,15 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
-id: messaging/kafka
+id: observability/jaeger
 version: 1
-name: Apache Kafka
-category: messaging
-technology: kafka
+name: Jaeger
+category: observability
+technology: jaeger
 node_kinds:
-- queue
+- observability
 support_status: planned
-description: 'An event streaming platform. Planned: nothing is specified about it
+description: 'A distributed tracing system. Planned: nothing is specified about it
   yet.'
 provider:
   name: community
-  service: Apache Kafka
+  service: Jaeger
 hosting: null

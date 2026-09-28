@@ -7,7 +7,7 @@ UV := uv run
 API_PORT ?= 8000
 
 .PHONY: install db-up db-down migrate migration run lint format typecheck test test-unit \
-        test-integration test-api test-security test-eval eval schemas coverage migrate-check check
+        test-integration test-api test-security test-eval eval schemas catalog-lock coverage migrate-check check
 
 install:            ## Install Python dependencies (including dev tools) into .venv
 	uv sync
@@ -58,6 +58,10 @@ eval:               ## Requirements Engine evaluation report (metrics and every 
 
 schemas:            ## Regenerate the published JSON Schemas (core/schemas) from the code
 	$(UV) python -m core.architecture_ir.schema > core/schemas/architecture.schema.json
+	$(UV) python -m core.domain.components.schema > core/schemas/component.schema.json
+
+catalog-lock:       ## Record new component specification versions in knowledge/components/catalog.lock.json
+	$(UV) python -m persistence.component_catalog lock
 
 coverage:           ## Full suite with line coverage of the API, domain and persistence code
 	$(UV) pytest --cov=apps/api --cov=core --cov=persistence --cov-report=term-missing:skip-covered
