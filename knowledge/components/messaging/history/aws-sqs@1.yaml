@@ -1,0 +1,15 @@
+# ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
+id: messaging/aws-sqs
+version: 1
+name: Amazon SQS
+category: messaging
+technology: aws-sqs
+node_kinds:
+- queue
+support_status: planned
+description: 'Amazon Web Services'' message queue service. Planned: nothing is specified
+  about it yet.'
+provider:
+  name: aws
+  service: Amazon Simple Queue Service
+hosting: managed

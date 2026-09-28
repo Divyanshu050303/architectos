@@ -1,16 +1,168 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
 id: compute/aws-lambda
-version: 1
+version: 2
 name: AWS Lambda
 category: compute
 technology: aws-lambda
 node_kinds:
 - service
 - worker
-support_status: planned
-description: 'Amazon Web Services'' function service. Planned: nothing is specified
-  about it yet.'
+support_status: supported
+description: Amazon Web Services' function service for short-lived compute tasks that do not retain state between
+  invocations.
 provider:
   name: aws
   service: AWS Lambda
 hosting: managed
+capabilities:
+- id: autoscaling
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - quotas
+  note: Concurrency scales with demand up to the concurrency quota.
+- id: encryption_in_transit
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - protection
+  note: Lambda API endpoints only support HTTPS (TLS).
+configuration:
+- property: memory_limit_bytes
+  required: true
+  engines:
+  - validation
+  - capacity
+  - cost
+  description: Memory allocation; CPU is allocated in proportion to it.
+- property: runtime
+  engines:
+  - validation
+capacity:
+- id: execution_time
+  unit: s
+  scope: request
+  value: 900
+  provenance:
+    kind: documented
+    sources:
+    - quotas
+  description: The maximum function timeout (15 minutes), except for Lambda Managed Instances invoked asynchronously
+    or through event source mappings.
+- id: synchronous_payload
+  unit: B
+  scope: request
+  value: 6291456
+  provenance:
+    kind: documented
+    sources:
+    - quotas
+  description: 6 MB each for request and response (synchronous); the documentation's MB is 1,024 KB.
+scaling:
+- id: autoscaling
+  state: native
+  affects:
+  - cost
+  provenance:
+    kind: documented
+    sources:
+    - quotas
+  limitations:
+  - Bounded by the account's concurrent executions quota (1,000 by default, can be increased).
+failure_modes:
+- id: throttling
+  description: No concurrency is available to scale up.
+  impact: Lambda rejects additional requests with a TooManyRequestsException error.
+  signals:
+  - throttles
+  - concurrent_executions
+  provenance:
+    kind: documented
+    sources:
+    - metrics
+  mitigations:
+  - A concurrency quota increase.
+  - Reserved concurrency for critical functions.
+- id: timeout
+  description: An invocation runs longer than its timeout.
+  impact: The invocation ends with an error.
+  signals:
+  - errors
+  - duration
+  provenance:
+    kind: documented
+    sources:
+    - metrics
+signals:
+- id: errors
+  type: metric
+  availability: native
+  collection: CloudWatch Errors
+  provenance:
+    kind: documented
+    sources:
+    - metrics
+- id: throttles
+  type: metric
+  availability: native
+  collection: CloudWatch Throttles
+  provenance:
+    kind: documented
+    sources:
+    - metrics
+- id: duration
+  type: metric
+  availability: native
+  collection: CloudWatch Duration
+  provenance:
+    kind: documented
+    sources:
+    - metrics
+- id: concurrent_executions
+  type: metric
+  availability: native
+  collection: CloudWatch ConcurrentExecutions
+  provenance:
+    kind: documented
+    sources:
+    - metrics
+security:
+- id: encryption_in_transit
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - protection
+  note: For the Lambda API; the function's own connections are the architecture's configuration.
+constraints:
+- id: memory_allocation
+  type: hard_limit
+  property: memory_limit_bytes
+  comparison: between
+  minimum: 134217728
+  maximum: 10737418240
+  severity: high
+  provenance:
+    kind: documented
+    sources:
+    - quotas
+  description: Function memory is between 128 MB and 10,240 MB (MB = 1,024 KB).
+  remediation: Allocate between 128 MB and 10,240 MB; split work that needs more.
+sources:
+- id: quotas
+  name: Lambda quotas
+  reference: https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html
+  version: null
+  retrieved: '2026-09-28'
+- id: metrics
+  name: Types of metrics for Lambda functions
+  reference: https://docs.aws.amazon.com/lambda/latest/dg/monitoring-metrics-types.html
+  version: null
+  retrieved: '2026-09-28'
+- id: protection
+  name: Data protection in AWS Lambda
+  reference: https://docs.aws.amazon.com/lambda/latest/dg/security-dataprotection.html
+  version: null
+  retrieved: '2026-09-28'

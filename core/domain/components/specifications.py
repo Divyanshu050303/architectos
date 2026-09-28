@@ -6,7 +6,8 @@ variant of it), versioned, every claim with its provenance.
   technology name it describes. ``aliases`` are for display and search only — a node is linked to a
   specification by its ``component`` path, never by matching names.
 - **Version.** ``version`` counts the specification's revisions: a change of any claim is a new
-  version, and the previous version stays readable. ``content_hash`` identifies the exact content;
+  version, and the previous version stays readable. ``content_hash`` identifies the exact content
+  (empty and absent values left out, so a new optional field of the contract changes no hash);
   ``ref`` (``databases/postgresql@2``) is what an analysis records having used.
 - **Claims.** Capabilities, configuration fields, capacity dimensions, scaling methods, failure
   modes, signals, security properties, billing dimensions and operational considerations — each
@@ -48,6 +49,7 @@ from .capabilities import (
     CapabilityState,
     state_problems,
 )
+from .constraints import Constraint
 from .entities import (
     CATEGORIES,
     MAX_ITEMS,
@@ -613,6 +615,7 @@ type Claim = (
     | SecurityProperty
     | BillingDimension
     | OperationalConsideration
+    | Constraint
 )
 CLAIM_SECTIONS = (
     "capabilities",
@@ -623,7 +626,19 @@ CLAIM_SECTIONS = (
     "security",
     "billing",
     "operations",
+    "constraints",
 )
+
+
+def _compact(value: Any) -> Any:
+    """The hashed form: empty and absent values left out, so a new optional field of the contract
+    does not change the hash of a specification that does not use it."""
+    if isinstance(value, dict):
+        kept = {k: _compact(v) for k, v in value.items()}
+        return {k: v for k, v in kept.items() if v not in (None, [], {})}
+    if isinstance(value, list):
+        return [_compact(v) for v in value]
+    return value
 
 
 def _many[T](data: Mapping[str, Any], name: str, build: type[T]) -> tuple[T, ...]:
@@ -658,6 +673,7 @@ class ComponentSpecification:
     security: tuple[SecurityProperty, ...] = ()
     billing: tuple[BillingDimension, ...] = ()
     operations: tuple[OperationalConsideration, ...] = ()
+    constraints: tuple[Constraint, ...] = ()
     sources: tuple[Source, ...] = ()
     _hash: str = field(default="", init=False, repr=False, compare=False)
 
@@ -671,7 +687,7 @@ class ComponentSpecification:
         object.__setattr__(self, "node_kinds", tuple(sorted(set(self.node_kinds))))
         object.__setattr__(self, "aliases", tuple(sorted(set(self.aliases))))
         object.__setattr__(self, "technology_versions", tuple(sorted(set(self.technology_versions))))
-        canonical = json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
+        canonical = json.dumps(_compact(self.to_dict()), sort_keys=True, separators=(",", ":"))
         object.__setattr__(self, "_hash", hashlib.sha256(canonical.encode()).hexdigest())
 
     def _check_identity(self) -> None:
@@ -723,11 +739,13 @@ class ComponentSpecification:
             "security": (self.security, SecurityProperty),
             "billing": (self.billing, BillingDimension),
             "operations": (self.operations, OperationalConsideration),
+            "constraints": (self.constraints, Constraint),
             "sources": (self.sources, Source),
         }
         check([items(values, kind, name) for name, (values, kind) in sections.items()])
         kinds = {k.value for k in self.node_kinds}
         signal_ids = {s.id for s in self.signals}
+        versions = set(self.technology_versions)
         cited = {s for _, provenance in self.claims() for s in provenance.sources}
         filled = {name for name, (values, _) in sections.items() if values and name != "sources"}
         required = {
@@ -755,6 +773,14 @@ class ComponentSpecification:
                     if not NODE_PROPERTIES[f.property].applies_to & kinds
                 ),
                 *(f"failure_modes.{m.id}.signals" for m in self.failure_modes if set(m.signals) - signal_ids),
+                # a constraint bounds a property of the kinds this technology is modeled as, for the
+                # versions the specification was checked for
+                *(
+                    f"constraints.{c.id}"
+                    for c in self.constraints
+                    if not all(NODE_PROPERTIES[p].applies_to & kinds for p in c.properties())
+                    or (versions and set(c.technology_versions) - versions)
+                ),
                 "sources" if cited - {s.id for s in self.sources} else None,
                 # planned entries claim nothing; the others claim at least what their status says
                 "support_status" if self.support_status is SupportStatus.PLANNED and filled else None,
@@ -803,6 +829,7 @@ class ComponentSpecification:
             "security": [s.to_dict() for s in self.security],
             "billing": [b.to_dict() for b in self.billing],
             "operations": [o.to_dict() for o in self.operations],
+            "constraints": [c.to_dict() for c in self.constraints],
             "sources": [s.to_dict() for s in self.sources],
         }
 
@@ -846,5 +873,6 @@ class ComponentSpecification:
             security=_many(data, "security", SecurityProperty),
             billing=_many(data, "billing", BillingDimension),
             operations=_many(data, "operations", OperationalConsideration),
+            constraints=_many(data, "constraints", Constraint),
             sources=_many(data, "sources", Source),
         )

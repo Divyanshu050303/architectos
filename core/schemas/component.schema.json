@@ -406,6 +406,95 @@
       ],
       "type": "object"
     },
+    "condition": {
+      "additionalProperties": false,
+      "properties": {
+        "property": {
+          "enum": [
+            "alert_delivery",
+            "alerts",
+            "audit_logging",
+            "authentication",
+            "authorization",
+            "autoscaling_max_replicas",
+            "autoscaling_min_replicas",
+            "autoscaling_target_cpu_ratio",
+            "availability",
+            "availability_zones",
+            "backup_enabled",
+            "backup_interval_seconds",
+            "backup_retention_seconds",
+            "boundary_type",
+            "correlation_ids",
+            "cpu_core_seconds_per_request",
+            "cpu_limit_cores",
+            "cpu_request_cores",
+            "criticality",
+            "data_classification",
+            "deployment_model",
+            "encryption_at_rest",
+            "eviction_policy",
+            "exposure",
+            "failover_mode",
+            "failover_seconds",
+            "failure_independence",
+            "health_check",
+            "instance_class",
+            "logs",
+            "management_interface",
+            "max_connections",
+            "memory_limit_bytes",
+            "memory_request_bytes",
+            "metrics",
+            "min_healthy_replicas",
+            "mtbf_seconds",
+            "mttr_seconds",
+            "multi_az",
+            "network_bandwidth_bytes_per_second",
+            "owner",
+            "partitions",
+            "persistence",
+            "personal_data",
+            "pricing_conditions",
+            "pricing_service",
+            "pricing_sku",
+            "pricing_storage_sku",
+            "redundancy_group",
+            "redundancy_group_min_healthy",
+            "region",
+            "replica_availability",
+            "replicas",
+            "replication_factor",
+            "replication_lag_seconds",
+            "replication_mode",
+            "retention_seconds",
+            "runtime",
+            "secret_rotation",
+            "secret_source",
+            "secrets_required",
+            "sensitive_operations",
+            "storage_bytes",
+            "structured_logs",
+            "throughput_limit_per_second",
+            "throughput_per_replica_per_second",
+            "trace_context",
+            "trace_sampling_ratio",
+            "traces",
+            "trust_level"
+          ]
+        },
+        "values": {
+          "maxItems": 50,
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "property",
+        "values"
+      ],
+      "type": "object"
+    },
     "configuration_field": {
       "additionalProperties": false,
       "properties": {
@@ -537,6 +626,227 @@
       },
       "required": [
         "property"
+      ],
+      "type": "object"
+    },
+    "constraint": {
+      "additionalProperties": false,
+      "properties": {
+        "comparison": {
+          "anyOf": [
+            {
+              "enum": [
+                "at_least",
+                "at_most",
+                "between",
+                "not_one_of",
+                "one_of"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conditions": {
+          "items": {
+            "$ref": "#/$defs/condition"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "description": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maximum": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "minimum": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                  "type": "string"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "property": {
+          "enum": [
+            "alert_delivery",
+            "alerts",
+            "audit_logging",
+            "authentication",
+            "authorization",
+            "autoscaling_max_replicas",
+            "autoscaling_min_replicas",
+            "autoscaling_target_cpu_ratio",
+            "availability",
+            "availability_zones",
+            "backup_enabled",
+            "backup_interval_seconds",
+            "backup_retention_seconds",
+            "boundary_type",
+            "correlation_ids",
+            "cpu_core_seconds_per_request",
+            "cpu_limit_cores",
+            "cpu_request_cores",
+            "criticality",
+            "data_classification",
+            "deployment_model",
+            "encryption_at_rest",
+            "eviction_policy",
+            "exposure",
+            "failover_mode",
+            "failover_seconds",
+            "failure_independence",
+            "health_check",
+            "instance_class",
+            "logs",
+            "management_interface",
+            "max_connections",
+            "memory_limit_bytes",
+            "memory_request_bytes",
+            "metrics",
+            "min_healthy_replicas",
+            "mtbf_seconds",
+            "mttr_seconds",
+            "multi_az",
+            "network_bandwidth_bytes_per_second",
+            "owner",
+            "partitions",
+            "persistence",
+            "personal_data",
+            "pricing_conditions",
+            "pricing_service",
+            "pricing_sku",
+            "pricing_storage_sku",
+            "redundancy_group",
+            "redundancy_group_min_healthy",
+            "region",
+            "replica_availability",
+            "replicas",
+            "replication_factor",
+            "replication_lag_seconds",
+            "replication_mode",
+            "retention_seconds",
+            "runtime",
+            "secret_rotation",
+            "secret_source",
+            "secrets_required",
+            "sensitive_operations",
+            "storage_bytes",
+            "structured_logs",
+            "throughput_limit_per_second",
+            "throughput_per_replica_per_second",
+            "trace_context",
+            "trace_sampling_ratio",
+            "traces",
+            "trust_level"
+          ]
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "remediation": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "severity": {
+          "enum": [
+            "critical",
+            "high",
+            "info",
+            "low",
+            "medium"
+          ]
+        },
+        "technology_versions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 100,
+          "type": "array"
+        },
+        "type": {
+          "enum": [
+            "conditional_limit",
+            "configurable_limit",
+            "hard_limit",
+            "recommended_range",
+            "unknown",
+            "unsupported_configuration"
+          ]
+        },
+        "values": {
+          "maxItems": 50,
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "description",
+        "property",
+        "severity",
+        "provenance"
       ],
       "type": "object"
     },
@@ -1117,6 +1427,13 @@
     "configuration": {
       "items": {
         "$ref": "#/$defs/configuration_field"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
+    "constraints": {
+      "items": {
+        "$ref": "#/$defs/constraint"
       },
       "maxItems": 100,
       "type": "array"

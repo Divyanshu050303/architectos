@@ -1,15 +1,62 @@
 # ARCH-COMP-001 catalog entry. A change is a new version: see docs/architecture/component-catalog.md.
 id: storage/aws-s3
-version: 1
+version: 2
 name: Amazon S3
 category: storage
 technology: aws-s3
 node_kinds:
 - storage
-support_status: planned
-description: 'Amazon Web Services'' object storage service. Planned: nothing is specified
-  about it yet.'
+support_status: partial
+description: 'Amazon Web Services'' object storage service: files are stored as objects in buckets.'
 provider:
   name: aws
   service: Amazon Simple Storage Service
 hosting: managed
+capabilities:
+- id: object_storage
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - upload
+- id: encryption_at_rest
+  state: native
+  provenance:
+    kind: documented
+    sources:
+    - upload
+  note: New objects are encrypted with SSE-S3 by default; SSE-KMS can be chosen.
+capacity:
+- id: object_size
+  unit: TB
+  scope: item
+  value: 50
+  provenance:
+    kind: documented
+    sources:
+    - upload
+  description: Up to 50 TB with multipart upload; whether decimal or binary units are meant is not stated.
+- id: single_put_size
+  unit: GB
+  scope: request
+  value: 5
+  provenance:
+    kind: documented
+    sources:
+    - upload
+  description: Up to 5 GB in a single PUT operation; whether decimal or binary units are meant is not stated.
+security:
+- id: encryption_at_rest
+  state: native
+  property: encryption_at_rest
+  provenance:
+    kind: documented
+    sources:
+    - upload
+  note: SSE-S3 by default for new objects.
+sources:
+- id: upload
+  name: 'Amazon S3: Uploading objects'
+  reference: https://docs.aws.amazon.com/AmazonS3/latest/userguide/upload-objects.html
+  version: null
+  retrieved: '2026-09-28'
