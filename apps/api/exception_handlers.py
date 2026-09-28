@@ -43,6 +43,7 @@ from core.domain.capacity.errors import (
     InvalidScenario,
     InvalidWorkload,
 )
+from core.domain.components.errors import ComponentNotFound
 from core.domain.cost.errors import (
     CostAnalysisNotFound,
     IncompatibleCapacityAnalysis,
@@ -229,6 +230,7 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     CandidateNotFound: 404,
     InvalidDecision: 422,
     DecisionNotFound: 404,
+    ComponentNotFound: 404,
     InvalidDecisionTransition: 409,
 }
 

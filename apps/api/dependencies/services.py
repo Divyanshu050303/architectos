@@ -18,6 +18,7 @@ from core.domain.audit.audit_service import AuditService
 from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
 from core.domain.clock import Clock, utc_now
+from core.domain.components.component_service import ComponentService
 from core.domain.cost.cost_service import CostService
 from core.domain.cost.snapshots import PricingService
 from core.domain.decisions.decision_service import DecisionService
@@ -387,3 +388,11 @@ def get_decision_service(
 
 
 DecisionServiceDep = Annotated[DecisionService, Depends(get_decision_service)]
+
+
+def get_component_service(request: Request) -> ComponentService:
+    # The catalog is read from its files once at startup (see apps/api/main.py); read-only afterwards.
+    return ComponentService(request.app.state.component_catalog, request.app.state.constraint_engine)
+
+
+ComponentServiceDep = Annotated[ComponentService, Depends(get_component_service)]

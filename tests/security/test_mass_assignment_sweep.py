@@ -136,6 +136,10 @@ VALID_BODIES: dict[str, dict[str, object]] = {
         "scenario": {"name": "Sweep", "workload": {"growth": "2"}},
         "label": "Sweep",
     },
+    "evaluate_component_configuration_api_v1_components__directory___entry__evaluate_post": {
+        "nodeKind": "queue",
+        "configuration": {"values": {"retention_seconds": 60}},
+    },
     "create_invitation_api_v1_organizations__organization_id__invitations_post": {
         "email": "y@example.com",
         "role": "member",

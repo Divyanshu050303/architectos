@@ -20,6 +20,7 @@ from apps.api.routes import (
     architectures,
     auth,
     capacity,
+    components,
     cost,
     decisions,
     evolution,
@@ -38,6 +39,7 @@ from apps.api.routes import (
     validations,
 )
 from engines.capacity.service import DeterministicCapacityEngine
+from engines.constraints.service import DeterministicConstraintEngine
 from engines.cost.service import DeterministicCostEngine
 from engines.evolution.service import DeterministicEvolutionEngine
 from engines.observability.service import DeterministicObservabilityEngine
@@ -82,7 +84,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         timeout_seconds=settings.requirements_llm_timeout_seconds,
         max_output_tokens=settings.requirements_llm_max_output_tokens,
     )
-    app.state.validation_engine = DeterministicValidationEngine(catalog=default_catalog())
+    app.state.component_catalog = (
+        default_catalog()
+    )  # read and checked at startup: a broken catalog fails fast
+    app.state.constraint_engine = DeterministicConstraintEngine()
+    app.state.validation_engine = DeterministicValidationEngine(catalog=app.state.component_catalog)
     app.state.capacity_engine = DeterministicCapacityEngine()
     app.state.cost_engine = DeterministicCostEngine(capacity=app.state.capacity_engine)
     app.state.reliability_engine = DeterministicReliabilityEngine()
@@ -142,5 +148,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(observability.router, prefix=API_PREFIX)
     app.include_router(simulations.router, prefix=API_PREFIX)
     app.include_router(evolution.router, prefix=API_PREFIX)
+    app.include_router(components.router, prefix=API_PREFIX)
     app.include_router(decisions.router, prefix=API_PREFIX)
     return app

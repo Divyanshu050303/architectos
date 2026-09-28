@@ -11,6 +11,7 @@ from core.architecture_ir import errors as ir_errors
 from core.domain.architecture import errors as architecture_errors
 from core.domain.audit.entities import AuditAction
 from core.domain.capacity import errors as capacity_errors
+from core.domain.components import errors as component_errors
 from core.domain.cost import errors as cost_errors
 from core.domain.decisions import errors as decision_errors
 from core.domain.errors import DomainError
@@ -44,6 +45,7 @@ API_DOCS = "".join(
         "simulations.md",
         "evolution.md",
         "decisions.md",
+        "components.md",
     )
 )
 DOMAIN_DOCS = (DOCS / "domain" / "projects.md").read_text() + (
@@ -111,6 +113,7 @@ def test_every_error_code_is_documented() -> None:
             decision_errors.InvalidDecision,
             decision_errors.DecisionNotFound,
             decision_errors.InvalidDecisionTransition,
+            component_errors.ComponentNotFound,
         )
     }
     assert {code for code in codes if code not in API_DOCS} == set()
