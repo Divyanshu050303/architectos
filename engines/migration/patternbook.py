@@ -28,6 +28,7 @@ STATELESS = frozenset({NodeKind.SERVICE.value, NodeKind.WORKER.value, NodeKind.G
 ROUTERS = frozenset({NodeKind.LOAD_BALANCER, NodeKind.GATEWAY})
 REPLICATING = frozenset({"asynchronous", "synchronous"})
 MIN_ROLLING_REPLICAS = 2  # one replaced while another serves
+ROLLING_ID, BLUE_GREEN_ID, REPLICATION_ID = "rolling", "blue_green", "replication_cutover"
 CONFIGURATION_ASPECTS = (
     A.CONFIGURATION,
     A.RESOURCES,
