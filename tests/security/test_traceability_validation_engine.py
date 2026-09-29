@@ -274,6 +274,9 @@ def test_there_is_one_validation_framework() -> None:
         # changes from other engines' evidence, they do not report validation findings.
         "engines/evolution/rules.py: RuleMeta",
         "engines/evolution/rules.py: Registry",
+        # And the migration planner's patterns: they describe how a change is carried out (steps),
+        # they do not report validation findings.
+        "engines/migration/patterns.py: Registry",
     }
     assert set(found) - allowed == set()
 

@@ -33,8 +33,10 @@ from .steps import (
 )
 from .values import (
     FINGERPRINT,
+    DowntimeStatus,
     FindingType,
     PlanStatus,
+    Reversibility,
     TargetKind,
     check,
     code,
@@ -190,6 +192,53 @@ class PlanFinding:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class StrategyOption:
+    """A migration strategy considered for this plan: whether it applies, whether its prerequisites
+    are modeled (and what is missing), and its trade-offs — side by side with the others, never
+    scored or ranked."""
+
+    pattern: str  # the pattern's ref, e.g. "rolling@1"
+    name: str
+    applies: bool  # the changes include what it is for
+    supported: bool  # it applies and every prerequisite is modeled
+    subjects: tuple[str, ...] = ()  # the elements it would cover
+    missing: tuple[str, ...] = ()  # what must be declared for it to be supported
+    tradeoffs: tuple[str, ...] = ()
+    downtime: DowntimeStatus = DowntimeStatus.UNKNOWN
+    reversibility: Reversibility = Reversibility.UNKNOWN
+
+    def __post_init__(self) -> None:
+        check(
+            [
+                text(self.pattern, "strategy.pattern", 64),
+                text(self.name, "strategy.name", 100),
+                None if isinstance(self.applies, bool) else "strategy.applies",
+                None if isinstance(self.supported, bool) else "strategy.supported",
+                "strategy.supported" if self.supported and (not self.applies or self.missing) else None,
+                references(self.subjects, "strategy.subjects"),
+                texts(self.missing, "strategy.missing"),
+                texts(self.tradeoffs, "strategy.tradeoffs"),
+                None if isinstance(self.downtime, DowntimeStatus) else "strategy.downtime",
+                None if isinstance(self.reversibility, Reversibility) else "strategy.reversibility",
+            ]
+        )
+        object.__setattr__(self, "subjects", tuple(sorted(set(self.subjects))))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "pattern": self.pattern,
+            "name": self.name,
+            "applies": self.applies,
+            "supported": self.supported,
+            "subjects": list(self.subjects),
+            "missing": list(self.missing),
+            "tradeoffs": list(self.tradeoffs),
+            "downtime": self.downtime.value,
+            "reversibility": self.reversibility.value,
+        }
+
+
 def _findings(values: object) -> str | None:
     ok = (
         isinstance(values, tuple)
@@ -217,9 +266,10 @@ class MigrationProposal:
     findings: tuple[PlanFinding, ...] = ()
     evidence: tuple[EvidenceRef, ...] = ()  # every stored analysis considered, with its state
     assumptions: tuple[str, ...] = ()  # the request's, recorded — never computed with
-    strategy: str | None = None  # the pattern the steps follow, when one is supported
+    strategy: str | None = None  # the strategy the steps follow: one of the supported alternatives
     models: Mapping[str, int] = field(default_factory=dict)  # rule and model versions used
     diff_summary: str | None = None  # the architecture diff's summary, for display
+    alternatives: tuple[StrategyOption, ...] = ()  # the strategies considered, side by side
 
     def __post_init__(self) -> None:
         check(
@@ -238,6 +288,13 @@ class MigrationProposal:
                 code(self.strategy, "strategy") if self.strategy is not None else None,
                 _models(self.models),
                 text(self.diff_summary, "diff_summary", required=False),
+                items(self.alternatives, StrategyOption, "alternatives"),
+                "strategy"
+                if self.strategy is not None
+                and not any(
+                    o.supported and o.pattern.split("@")[0] == self.strategy for o in self.alternatives
+                )
+                else None,
             ]
         )
         check(pair_problems(self.source, self.target))
@@ -248,6 +305,7 @@ class MigrationProposal:
         object.__setattr__(self, "findings", tuple(sorted(set(self.findings), key=lambda f: f.sort_key)))
         object.__setattr__(self, "evidence", tuple(sorted(set(self.evidence), key=lambda e: e.key)))
         object.__setattr__(self, "models", dict(sorted(self.models.items())))
+        object.__setattr__(self, "alternatives", tuple(sorted(self.alternatives, key=lambda o: o.pattern)))
 
     def _consistency(self) -> list[str | None]:
         steps = [s.id for s in self.steps]
@@ -307,6 +365,7 @@ class MigrationProposal:
             "assumptions": list(self.assumptions),
             "models": dict(self.models),
             "diff_summary": self.diff_summary,
+            "alternatives": [o.to_dict() for o in self.alternatives],
         }
 
     @property
