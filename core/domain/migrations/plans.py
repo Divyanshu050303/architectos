@@ -10,6 +10,9 @@ checks and findings — with the rule and model versions that produced it.
   steps, a rollback's step, a data migration's steps) exists in it, and ids are unique. A step's
   dependency on a step that does not exist, or a cycle, is not refused here: the dependency analysis
   reports it as a finding.
+- The **sequence** is the order the steps would be carried out in: numbered stages, each one step,
+  or several steps together only when every one of them is explicitly parallelizable. It covers
+  every step exactly once, and is empty when the dependencies are invalid or cyclic.
 - Its **status** follows from its findings: ``needs_information`` when something it needs is
   missing or unsupported, ``draft`` otherwise. It is never approved by the engine.
 """
@@ -58,6 +61,7 @@ BLOCKING_FINDINGS = frozenset(
         FindingType.MANUAL_INTERPRETATION,
         FindingType.INVALID_DEPENDENCY,
         FindingType.DEPENDENCY_CYCLE,
+        FindingType.MISSING_PREREQUISITE,
         FindingType.STALE_EVIDENCE,
     }
 )
@@ -239,6 +243,30 @@ class StrategyOption:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class Stage:
+    """One position in the plan's sequence: its steps are carried out together only when
+    ``parallel`` — which requires every one of them to be explicitly parallelizable."""
+
+    number: int  # from 1
+    step_ids: tuple[str, ...]
+    parallel: bool = False
+
+    def __post_init__(self) -> None:
+        check(
+            [
+                None if _count(self.number) else "stage.number",
+                references(self.step_ids, "stage.step_ids") if self.step_ids else "stage.step_ids",
+                None if isinstance(self.parallel, bool) else "stage.parallel",
+                "stage.parallel" if self.parallel and len(self.step_ids) < 2 else None,
+                "stage.step_ids" if not self.parallel and len(self.step_ids) != 1 else None,
+            ]
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"number": self.number, "step_ids": list(self.step_ids), "parallel": self.parallel}
+
+
 def _findings(values: object) -> str | None:
     ok = (
         isinstance(values, tuple)
@@ -270,6 +298,7 @@ class MigrationProposal:
     models: Mapping[str, int] = field(default_factory=dict)  # rule and model versions used
     diff_summary: str | None = None  # the architecture diff's summary, for display
     alternatives: tuple[StrategyOption, ...] = ()  # the strategies considered, side by side
+    sequence: tuple[Stage, ...] = ()  # the steps in order; empty when the dependencies are invalid
 
     def __post_init__(self) -> None:
         check(
@@ -289,6 +318,7 @@ class MigrationProposal:
                 _models(self.models),
                 text(self.diff_summary, "diff_summary", required=False),
                 items(self.alternatives, StrategyOption, "alternatives"),
+                items(self.sequence, Stage, "sequence"),
                 "strategy"
                 if self.strategy is not None
                 and not any(
@@ -328,7 +358,24 @@ class MigrationProposal:
         return [
             *(f"{name}.step_ids" for name, ids in referred.items() if ids - known),
             *(name for name, ids in unique.items() if len(ids) != len(set(ids))),
+            self._sequence_problem(),
         ]
+
+    def _sequence_problem(self) -> str | None:
+        """An empty sequence, or every step exactly once in numbered stages, parallel only when
+        every step of the stage is explicitly parallelizable."""
+        if not self.sequence:
+            return None
+        parallelizable = {s.id: s.parallelizable for s in self.steps}
+        placed = [i for stage in self.sequence for i in stage.step_ids]
+        ok = (
+            [s.number for s in self.sequence] == list(range(1, len(self.sequence) + 1))
+            and sorted(placed) == sorted(parallelizable)
+            and all(
+                all(parallelizable[i] for i in stage.step_ids) for stage in self.sequence if stage.parallel
+            )
+        )
+        return None if ok else "sequence"
 
     @property
     def status(self) -> PlanStatus:
@@ -346,6 +393,8 @@ class MigrationProposal:
             "checkpoints": len(self.checkpoints),
             "blocking_checkpoints": sum(1 for c in self.checkpoints if c.blocking),
             "manual_verification_steps": sum(1 for s in self.steps if s.manual_verification),
+            "stages": len(self.sequence),
+            "parallel_stages": sum(1 for s in self.sequence if s.parallel),
             "findings": {t.value: findings.get(t.value, 0) for t in FindingType},
         }
 
@@ -366,6 +415,7 @@ class MigrationProposal:
             "models": dict(self.models),
             "diff_summary": self.diff_summary,
             "alternatives": [o.to_dict() for o in self.alternatives],
+            "sequence": [s.to_dict() for s in self.sequence],
         }
 
     @property

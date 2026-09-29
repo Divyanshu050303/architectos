@@ -130,6 +130,7 @@ class FindingType(StrEnum):
     STRATEGY_NOT_SUPPORTED = "strategy_not_supported"  # a preferred strategy's prerequisites are not modeled
     INVALID_DEPENDENCY = "invalid_dependency"  # a step depends on a step that does not exist
     DEPENDENCY_CYCLE = "dependency_cycle"
+    MISSING_PREREQUISITE = "missing_prerequisite"  # a transition lacks what must precede it
     NO_CHANGES = "no_changes"  # source and target do not differ in anything migration-relevant
 
 
