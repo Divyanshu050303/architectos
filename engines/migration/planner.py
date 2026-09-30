@@ -14,8 +14,10 @@ are explicit: a connection after its new endpoints, a cutover after the verifica
 decommissioning after the traffic and data have moved away, connections before their components.
 Each step's downtime, traffic and availability are then stated against the request's constraints
 (``availability``), the data each stateful change moves is described (``data_migration``), the
-compatibility questions are raised (``compatibility``), and the dependencies are checked and the
-steps sequenced (``sequencing``): what is missing is a finding on the plan, never repaired silently.
+compatibility questions are raised (``compatibility``), the dependencies are checked and the steps
+sequenced (``sequencing``): what is missing is a finding on the plan, never repaired silently.
+Finally the risks are identified from all of it (``risk``), the high-impact steps' rollback
+considered (``rollback``) and the verification checkpoints stated (``checkpoints``).
 Changes needing manual interpretation or no pattern supports are findings, never invented steps.
 """
 
@@ -30,10 +32,13 @@ from core.domain.migrations.steps import MigrationStep, Trace, step_id
 from core.domain.migrations.values import DowntimeStatus, Reversibility, StepType, TraceKind
 
 from .availability import availability
+from .checkpoints import checkpoints
 from .compatibility import compatibility
 from .data_migration import data_migrations
 from .patternbook import BLUE_GREEN_ID, REPLICATION_ID, ROLLING_ID, stateful_replacements
 from .patterns import PatternMeta, PlanningContext, Registry, choose, strategy_options
+from .risk import risks
+from .rollback import rollbacks
 from .sequencing import sequence
 
 PLANNER = ("migration_planner", 1)
@@ -604,13 +609,19 @@ def generate(context: PlanningContext, registry: Registry) -> MigrationProposal:
     steps, downtime = availability(context, steps)
     data, data_findings = data_migrations(context, steps)
     ordered = sequence(steps, analysis)
+    questions = compatibility(context, steps)
+    findings = (*analysis.findings, *choice_findings, *downtime, *data_findings, *ordered.findings)
+    recovery = rollbacks(steps, data)
     return MigrationProposal(
         source=analysis.source,
         target=analysis.target,
         steps=steps,
         data_migrations=data,
-        compatibility=compatibility(context, steps),
-        findings=(*analysis.findings, *choice_findings, *downtime, *data_findings, *ordered.findings),
+        compatibility=questions,
+        risks=risks(context, steps, data, questions, findings),
+        checkpoints=checkpoints(context, steps, data, recovery),
+        rollbacks=recovery,
+        findings=findings,
         assumptions=tuple(a.statement for a in context.request.assumptions),
         strategy=chosen.pattern.split("@")[0] if chosen and steps else None,
         models={**registry.versions(), PLANNER[0]: PLANNER[1]},
