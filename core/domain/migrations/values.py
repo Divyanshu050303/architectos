@@ -131,6 +131,7 @@ class FindingType(StrEnum):
     INVALID_DEPENDENCY = "invalid_dependency"  # a step depends on a step that does not exist
     DEPENDENCY_CYCLE = "dependency_cycle"
     MISSING_PREREQUISITE = "missing_prerequisite"  # a transition lacks what must precede it
+    CONSTRAINT_CONFLICT = "constraint_conflict"  # the plan contradicts a constraint the request states
     NO_CHANGES = "no_changes"  # source and target do not differ in anything migration-relevant
 
 

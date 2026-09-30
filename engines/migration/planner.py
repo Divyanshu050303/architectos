@@ -12,8 +12,10 @@ Every step names the changes it addresses and the pattern that produced it; its 
 its key (``configure:api``, ``cutover:db``), so identical inputs give identical steps. Dependencies
 are explicit: a connection after its new endpoints, a cutover after the verification it needs,
 decommissioning after the traffic and data have moved away, connections before their components.
-The dependencies are then checked and the steps sequenced (``sequencing``): what is missing is a
-finding on the plan, never repaired silently.
+Each step's downtime, traffic and availability are then stated against the request's constraints
+(``availability``), the data each stateful change moves is described (``data_migration``), the
+compatibility questions are raised (``compatibility``), and the dependencies are checked and the
+steps sequenced (``sequencing``): what is missing is a finding on the plan, never repaired silently.
 Changes needing manual interpretation or no pattern supports are findings, never invented steps.
 """
 
@@ -27,6 +29,9 @@ from core.domain.migrations.plans import MigrationProposal, StrategyOption
 from core.domain.migrations.steps import MigrationStep, Trace, step_id
 from core.domain.migrations.values import DowntimeStatus, Reversibility, StepType, TraceKind
 
+from .availability import availability
+from .compatibility import compatibility
+from .data_migration import data_migrations
 from .patternbook import BLUE_GREEN_ID, REPLICATION_ID, ROLLING_ID, stateful_replacements
 from .patterns import PatternMeta, PlanningContext, Registry, choose, strategy_options
 from .sequencing import sequence
@@ -141,7 +146,6 @@ class _Generator:
                 traces,
                 element_ids=(eid, conn.source_id, conn.target_id),
                 preconditions=(f"{conn.source_id} and {conn.target_id} exist and are verified.",),
-                downtime=D.MODELED_ONLINE,
                 reversibility=V.REVERSIBLE,
             )
             self.steps.add(
@@ -597,12 +601,16 @@ def generate(context: PlanningContext, registry: Registry) -> MigrationProposal:
     chosen, choice_findings = choose(options, context.request.strategy)
     steps = _Generator(_Plan(context, registry, chosen)).generate()
     analysis = context.analysis
+    steps, downtime = availability(context, steps)
+    data, data_findings = data_migrations(context, steps)
     ordered = sequence(steps, analysis)
     return MigrationProposal(
         source=analysis.source,
         target=analysis.target,
         steps=steps,
-        findings=(*analysis.findings, *choice_findings, *ordered.findings),
+        data_migrations=data,
+        compatibility=compatibility(context, steps),
+        findings=(*analysis.findings, *choice_findings, *downtime, *data_findings, *ordered.findings),
         assumptions=tuple(a.statement for a in context.request.assumptions),
         strategy=chosen.pattern.split("@")[0] if chosen and steps else None,
         models={**registry.versions(), PLANNER[0]: PLANNER[1]},

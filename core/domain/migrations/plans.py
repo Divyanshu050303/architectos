@@ -62,6 +62,7 @@ BLOCKING_FINDINGS = frozenset(
         FindingType.INVALID_DEPENDENCY,
         FindingType.DEPENDENCY_CYCLE,
         FindingType.MISSING_PREREQUISITE,
+        FindingType.CONSTRAINT_CONFLICT,
         FindingType.STALE_EVIDENCE,
     }
 )
@@ -394,6 +395,9 @@ class MigrationProposal:
             "blocking_checkpoints": sum(1 for c in self.checkpoints if c.blocking),
             "manual_verification_steps": sum(1 for s in self.steps if s.manual_verification),
             "stages": len(self.sequence),
+            "downtime": dict(sorted(Counter(s.downtime.value for s in self.steps).items())),
+            "data_migrations": len(self.data_migrations),
+            "compatibility": dict(sorted(Counter(c.status.value for c in self.compatibility).items())),
             "parallel_stages": sum(1 for s in self.sequence if s.parallel),
             "findings": {t.value: findings.get(t.value, 0) for t in FindingType},
         }

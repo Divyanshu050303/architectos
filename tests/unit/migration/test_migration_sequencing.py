@@ -98,7 +98,8 @@ def test_every_generated_plan_is_sequenced_with_its_prerequisites(name: str) -> 
         assert all(stage_of[d] < stage_of[each.id] for d in each.depends_on)  # after what it waits for
     assert not any(s.parallel for s in proposal.sequence)  # no rule marks a step parallelizable
     assert proposal.summary()["stages"] == len(proposal.steps)
-    assert proposal.status is PlanStatus.DRAFT
+    # only what a person must state (a data scope, whether downtime is allowed) is open
+    assert {f.type for f in proposal.findings} <= {FindingType.MISSING_INFORMATION}
 
 
 def test_the_order_is_deterministic_with_ties_broken_by_key() -> None:

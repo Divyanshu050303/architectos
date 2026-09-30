@@ -41,6 +41,7 @@ from .values import (
 )
 
 MAX_KEY = 128
+UNEVALUABLE = "unevaluable"
 
 
 def _key(value: object, name: str = "key") -> str | None:
@@ -91,6 +92,8 @@ class MigrationStep:
     parallelizable: bool = False  # only when a rule states it explicitly
     downtime: DowntimeStatus = DowntimeStatus.UNKNOWN
     downtime_note: str | None = None
+    traffic: str | None = None  # its traffic-routing implications, in words
+    availability: tuple[str, ...] = ()  # availability and recovery considerations
     data_impact: str | None = None
     reversibility: Reversibility = Reversibility.UNKNOWN
     manual_verification: bool = False  # a person must verify before the plan proceeds past it
@@ -116,6 +119,8 @@ class MigrationStep:
                 None if isinstance(self.parallelizable, bool) else "parallelizable",
                 None if isinstance(self.downtime, DowntimeStatus) else "downtime",
                 text(self.downtime_note, "downtime_note", required=False),
+                text(self.traffic, "traffic", required=False),
+                texts(self.availability, "availability"),
                 text(self.data_impact, "data_impact", required=False),
                 None if isinstance(self.reversibility, Reversibility) else "reversibility",
                 None if isinstance(self.manual_verification, bool) else "manual_verification",
@@ -149,6 +154,8 @@ class MigrationStep:
             "parallelizable": self.parallelizable,
             "downtime": self.downtime.value,
             "downtime_note": self.downtime_note,
+            "traffic": self.traffic,
+            "availability": list(self.availability),
             "data_impact": self.data_impact,
             "reversibility": self.reversibility.value,
             "manual_verification": self.manual_verification,
@@ -343,8 +350,9 @@ class RollbackConsideration:
 
 @dataclass(frozen=True, slots=True)
 class DataMigration:
-    """What moving a stateful component's data involves. Volumes, throughput and durations are never
-    stated here: the architecture does not model them, so they are among ``missing``."""
+    """What moving (or removing) a stateful component's data involves. Volumes, throughput and
+    durations are never stated here: the architecture does not model them, so they are among
+    ``missing`` and the duration is ``unevaluable``."""
 
     key: str
     traces: tuple[Trace, ...]
@@ -352,6 +360,9 @@ class DataMigration:
     destination_element_id: str | None = None
     scope: str | None = None  # what data, when stated
     method: str | None = None  # e.g. replication then cutover, when a pattern supports it
+    backfill: str | None = None  # the initial copy of existing data
+    replication: str | None = None  # the replication or change-capture requirements
+    cutover: tuple[str, ...] = ()  # the prerequisites of the cutover
     step_ids: tuple[str, ...] = ()
     verification: tuple[str, ...] = ()  # how consistency is verified
     retention: tuple[str, ...] = ()  # retention requirements
@@ -370,6 +381,9 @@ class DataMigration:
                 None if self.source_element_id or self.destination_element_id else "source_element_id",
                 text(self.scope, "scope", required=False),
                 text(self.method, "method", required=False),
+                text(self.backfill, "backfill", required=False),
+                text(self.replication, "replication", required=False),
+                texts(self.cutover, "cutover"),
                 references(self.step_ids, "step_ids"),
                 texts(self.verification, "verification"),
                 texts(self.retention, "retention"),
@@ -392,6 +406,10 @@ class DataMigration:
             "destination_element_id": self.destination_element_id,
             "scope": self.scope,
             "method": self.method,
+            "backfill": self.backfill,
+            "replication": self.replication,
+            "cutover": list(self.cutover),
+            "duration": UNEVALUABLE,  # volume and throughput are not modeled
             "step_ids": list(self.step_ids),
             "verification": list(self.verification),
             "retention": list(self.retention),
