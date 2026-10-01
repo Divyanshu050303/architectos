@@ -62,7 +62,9 @@ def test_a_data_move_names_its_loss_divergence_downtime_and_irreversible_risks()
     proposal = SCENARIOS["offline"]()
     found = risk_of(proposal)
     assert (found["data_loss:db"].category, found["data_loss:db"].status) == (C.DATA_LOSS, S.POTENTIAL)
-    assert found["data_loss:db"].preconditions == ("Writes reach db after the copy to db begins.",)
+    assert found["data_loss:db"].preconditions == (
+        "Writes reach db's source instance after the copy to db's target instance begins.",
+    )
     divergence = found["divergence:db"]
     assert (divergence.category, divergence.status) == (C.DATA_INCONSISTENCY, S.POTENTIAL)
     assert {s.key for s in proposal.steps if s.id in divergence.step_ids} == {"cutover:db"}
@@ -173,7 +175,8 @@ def test_switching_back_after_a_data_cutover_states_the_divergence() -> None:
     cutover = rollback_of(SCENARIOS["offline"]())["cutover:db"]
     assert cutover.reversibility is Reversibility.CONDITIONALLY_REVERSIBLE
     assert cutover.consistency == (
-        "Writes db accepts after the cutover are not in db: switching back makes the two diverge."
+        "Writes db's target instance accepts after the cutover are not in db's source instance: switching "
+        "back makes the two diverge."
     )
     assert cutover.limitations
     assert any("reconciled" in p for p in cutover.preconditions)

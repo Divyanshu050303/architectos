@@ -24,6 +24,14 @@ from .patternbook import stateful_replacements
 from .patterns import PlanningContext
 
 
+def instances(old: str, new: str) -> tuple[str, str]:
+    """How the two sides are named in words: a component changing technology keeps its id, so its
+    source and target instances are named as such."""
+    if old == new:
+        return f"{old}'s source instance", f"{old}'s target instance"
+    return old, new
+
+
 def _traces(steps: Iterable[MigrationStep], stated: tuple[str, ...], element: str) -> tuple[Trace, ...]:
     found = {t for s in steps for t in s.traces if t.kind in {TraceKind.CHANGE, TraceKind.PATTERN}}
     if stated:
@@ -48,52 +56,53 @@ class _Data:
         return tuple(s for s in self.steps if element in s.element_ids and s.type is not StepType.PROVISION)
 
     def move(self, old: str, new: str) -> tuple[DataMigration, PlanFinding | None]:
+        src, dst = instances(old, new)
         replicated = f"replicate:{old}" in self.keys
         target = self.context.node(self.context.target, new)
         mode = target.configuration.values.get("replication_mode") if target else None
         stated = self.statements(old, new)
         steps = self.concerning(old)
         missing = [
-            f"The volume of {old}'s data (not modeled): the copy's duration cannot be evaluated.",
+            f"The volume of {src}'s data (not modeled): the copy's duration cannot be evaluated.",
             "The throughput of the copy (not modeled).",
-            f"How the consistency of {new} with {old} is checked.",
+            f"How the consistency of {dst} with {src} is checked.",
         ]
         if not stated:
             missing[:0] = [
-                f"The scope of {old}'s data to move, stated as a data requirement.",
-                f"How long {old}'s data must be retained once {new} serves.",
+                f"The scope of {src}'s data to move, stated as a data requirement.",
+                f"How long {src}'s data must be retained once {dst} serves.",
             ]
         if replicated:
-            method = f"Replication from {old} to {new}, an initial copy, then a cutover."
+            method = f"Replication from {src} to {dst}, an initial copy, then a cutover."
             replication: str | None = (
-                f"{new} declares replication_mode {mode}: {old}'s changes are captured and applied to "
-                f"{new} until the cutover. How they are captured is not modeled."
+                f"{dst} declares replication_mode {mode}: {src}'s changes are captured and applied to "
+                f"{dst} until the cutover. How they are captured is not modeled."
             )
-            cutover = f"Replication from {old} to {new} has caught up; its lag is not modeled."
+            cutover = f"Replication from {src} to {dst} has caught up; its lag is not modeled."
             if mode == "synchronous":
                 data_loss = (
                     "Synchronous replication is declared; that it holds until the cutover must be verified."
                 )
             else:
                 data_loss = (
-                    f"With asynchronous replication, changes {old} accepted but not yet replicated at the "
-                    f"cutover would be missing from {new}; the lag is not modeled."
+                    f"With asynchronous replication, changes {src} accepted but not yet replicated at the "
+                    f"cutover would be missing from {dst}; the lag is not modeled."
                 )
             rollback = (
-                f"Until {old} is retired, its clients can be switched back to it; changes written to "
-                f"{new} after the cutover are not in {old} unless replicated back."
+                f"Until {src} is retired, its clients can be switched back to it; changes written to "
+                f"{dst} after the cutover are not in {src} unless replicated back."
             )
         else:
-            method = f"An offline copy from {old} to {new} with writes to {old} stopped, then a cutover."
+            method = f"An offline copy from {src} to {dst} with writes to {src} stopped, then a cutover."
             replication = None
-            cutover = f"Writes to {old} are still stopped."
+            cutover = f"Writes to {src} are still stopped."
             data_loss = (
-                f"Writes {old} accepts after the copy begins would be missing from {new}: the plan relies "
+                f"Writes {src} accepts after the copy begins would be missing from {dst}: the plan relies "
                 "on writes staying stopped until the cutover."
             )
             rollback = (
-                f"Until {old} is retired, its clients can be switched back to it; writes made to {new} "
-                f"after the cutover are not in {old}."
+                f"Until {src} is retired, its clients can be switched back to it; writes made to {dst} "
+                f"after the cutover are not in {src}."
             )
         migration = DataMigration(
             key=f"data:{old}",
@@ -102,12 +111,12 @@ class _Data:
             destination_element_id=new,
             scope="; ".join(stated) if stated else None,
             method=method,
-            backfill=f"An initial copy of {old}'s existing data to {new}.",
+            backfill=f"An initial copy of {src}'s existing data to {dst}.",
             replication=replication,
-            cutover=(f"{new} holds {old}'s data and its consistency check has passed.", cutover),
+            cutover=(f"{dst} holds {src}'s data and its consistency check has passed.", cutover),
             step_ids=tuple(s.id for s in steps),
-            verification=(f"A consistency check of {new} against {old} passes before the cutover.",),
-            retention=(f"{old}'s data is retained until {new} is verified under traffic.",),
+            verification=(f"A consistency check of {dst} against {src} passes before the cutover.",),
+            retention=(f"{src}'s data is retained until {dst} is verified under traffic.",),
             rollback=rollback,
             data_loss=data_loss,
             missing=tuple(missing),
@@ -117,10 +126,10 @@ class _Data:
         return migration, PlanFinding(
             FindingType.MISSING_INFORMATION,
             f"data_scope:{old}",
-            f"The request does not state which of {old}'s data moves to {new}, or what is retained.",
+            f"The request does not state which of {src}'s data moves to {dst}, or what is retained.",
             element_ids=(old, new),
             step_ids=migration.step_ids,
-            missing=(f"A data requirement for {old}: its scope, retention and verification.",),
+            missing=(f"A data requirement for {src}: its scope, retention and verification.",),
             traces=migration.traces,
         )
 

@@ -27,6 +27,7 @@ from core.domain.migrations.values import (
 )
 
 from .changes import OBSERVABILITY, SECURITY
+from .data_migration import instances
 from .patternbook import BLUE_GREEN_ID, ROLLING_ID
 from .patterns import PlanningContext
 
@@ -72,40 +73,41 @@ class _Risks:
             if new is None:
                 yield self.removal(move)
                 continue
+            src, dst = instances(old, new)
             if f"replicate:{old}" in self.steps:
                 target = self.context.node(self.context.target, new)
                 mode = target.configuration.values.get("replication_mode") if target else None
                 when = (
                     "Synchronous replication does not hold until the cutover."
                     if mode == "synchronous"
-                    else f"Changes {old} accepts are not yet replicated at the cutover."
+                    else f"Changes {src} accepts are not yet replicated at the cutover."
                 )
             else:
-                when = f"Writes reach {old} after the copy to {new} begins."
+                when = f"Writes reach {src} after the copy to {dst} begins."
             yield Risk(
                 f"data_loss:{old}",
                 C.DATA_LOSS,
                 S.POTENTIAL,
                 move.data_loss or when,
-                f"Data {old} accepted would be missing from {new}.",
+                f"Data {src} accepted would be missing from {dst}.",
                 move.traces,
                 (old, new),
                 move.step_ids,
                 preconditions=(when,),
-                mitigation=f"Verify {new}'s consistency with {old} before the cutover (consistency:{old}).",
+                mitigation=f"Verify {dst}'s consistency with {src} before the cutover (consistency:{old}).",
             )
             cutover = self.steps.get(f"cutover:{old}")
             yield Risk(
                 f"divergence:{old}",
                 C.DATA_INCONSISTENCY,
                 S.POTENTIAL,
-                f"Switching {old}'s clients back after {new} accepted writes makes {old} and {new} diverge.",
-                f"Writes made to {new} after the cutover are missing from {old}.",
+                f"Switching {src}'s clients back after {dst} accepted writes makes {src} and {dst} diverge.",
+                f"Writes made to {dst} after the cutover are missing from {src}.",
                 move.traces,
                 (old, new),
                 (cutover.id,) if cutover else (),
-                preconditions=(f"Clients are switched back to {old} after {new} has accepted writes.",),
-                mitigation=f"Reconcile, or knowingly discard, {new}'s writes before switching back to {old}.",
+                preconditions=(f"Clients are switched back to {src} after {dst} has accepted writes.",),
+                mitigation=f"Reconcile, or knowingly discard, {dst}'s writes before switching back to {src}.",
             )
 
     def downtime(self) -> Iterator[Risk]:

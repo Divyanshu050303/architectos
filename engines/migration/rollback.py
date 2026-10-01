@@ -17,6 +17,7 @@ from typing import Any
 from core.domain.migrations.steps import DataMigration, MigrationStep, RollbackConsideration
 from core.domain.migrations.values import Reversibility, StepType, TraceKind
 
+from .data_migration import instances
 from .patternbook import BLUE_GREEN_ID, ROLLING_ID
 
 R = Reversibility
@@ -39,26 +40,27 @@ class _Rollback:
         old = step.key.removeprefix("cutover:")
         move = self.moves.get(old)
         if move is not None:
-            new = move.destination_element_id
+            new = move.destination_element_id or old
+            src, dst = instances(old, new)
             return self.consider(
                 step,
                 triggers=(
-                    f"{new} fails its verification under traffic.",
+                    f"{dst} fails its verification under traffic.",
                     "Clients report errors after the switch.",
                 ),
-                action=f"Switch {old}'s clients back to {old}.",
-                retained=(f"{old} and its data, until {new} is verified under traffic.",),
+                action=f"Switch the clients back to {src}.",
+                retained=(f"{src} and its data, until {dst} is verified under traffic.",),
                 preconditions=(
-                    f"{old} has not been decommissioned.",
-                    f"Writes {new} accepted since the cutover are reconciled with {old} or knowingly "
+                    f"{src} has not been decommissioned.",
+                    f"Writes {dst} accepted since the cutover are reconciled with {src} or knowingly "
                     "discarded.",
                 ),
                 consistency=(
-                    f"Writes {new} accepts after the cutover are not in {old}: switching back makes the two "
+                    f"Writes {dst} accepts after the cutover are not in {src}: switching back makes the two "
                     "diverge."
                 ),
-                verification=(f"{old}'s clients are served by {old} again.",),
-                limitations=(f"Writes made to {new} after the cutover are lost to {old} unless reconciled.",),
+                verification=(f"The clients are served by {src} again.",),
+                limitations=(f"Writes made to {dst} after the cutover are lost to {src} unless reconciled.",),
             )
         if BLUE_GREEN_ID in _patterns(step):
             return self.consider(
