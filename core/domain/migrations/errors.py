@@ -29,3 +29,29 @@ class InvalidPlanTransition(DomainError):
 
     code = "invalid_migration_plan_transition"
     message = "The migration plan cannot move to that status from its current status."
+
+
+class PlanVersionMismatch(DomainError):
+    """A review that does not name the exact version it reviewed: ``details`` = {"version", "reason"}
+    (``version_mismatch`` or ``content_mismatch``)."""
+
+    code = "migration_plan_version_mismatch"
+    message = "The review does not refer to the exact content of this migration plan version."
+
+
+class StaleMigrationPlan(DomainError):
+    """A version whose source, target, models or evidence changed: ``details`` = {"reasons": [...]}."""
+
+    code = "stale_migration_plan"
+    message = "The migration plan is stale and must be regenerated before it is reviewed."
+
+
+class ReviewedPlanNotReplaced(DomainError):
+    """Regeneration would replace a version under review or approved without being asked to:
+    ``details`` = {"version", "status"}."""
+
+    code = "reviewed_migration_plan"
+    message = (
+        "The latest version of this migration plan is under review or approved; replacing it must be "
+        "explicit."
+    )

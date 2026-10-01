@@ -26,7 +26,7 @@ from typing import Any
 
 from core.domain.evolution.candidates import CANDIDATE_ID
 
-from .errors import InvalidMigrationRequest, InvalidPlanTransition
+from .errors import InvalidMigrationRequest, InvalidPlanTransition, PlanVersionMismatch
 from .plans import MigrationProposal
 from .values import CODE, MAX_TEXT, MAX_TITLE, PlanStatus
 
@@ -50,6 +50,7 @@ TRANSITIONS: dict[PlanStatus, frozenset[PlanStatus]] = {
     S.ARCHIVED: frozenset(),
 }
 FEEDBACK_REQUIRED = frozenset({S.REJECTED})  # a rejection says why
+EXACT = frozenset({S.APPROVED, S.REJECTED})  # a verdict names the exact content it reviewed
 
 
 def _invalid(field: str, reason: str) -> InvalidMigrationRequest:
@@ -232,13 +233,15 @@ class MigrationRequest:
 
 @dataclass(frozen=True, slots=True)
 class ReviewEvent:
-    """A person's action on a plan version: who, when, from which status to which, and why."""
+    """A person's action on a plan version: who, when, from which status to which, and why — and for
+    an approval or a rejection, the fingerprint of the exact proposal reviewed."""
 
     from_status: PlanStatus
     to_status: PlanStatus
     user_id: uuid.UUID
     at: datetime
     comment: str | None = None
+    fingerprint: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -247,6 +250,7 @@ class ReviewEvent:
             "user_id": str(self.user_id),
             "at": self.at.isoformat(),
             "comment": self.comment,
+            "fingerprint": self.fingerprint,
         }
 
 
@@ -278,16 +282,25 @@ class MigrationPlanVersion:
         return self.request.title or f"Migration from revision {self.proposal.source.revision_number}"
 
     def move(
-        self, to: PlanStatus, *, user_id: uuid.UUID, at: datetime, comment: str | None = None
+        self,
+        to: PlanStatus,
+        *,
+        user_id: uuid.UUID,
+        at: datetime,
+        comment: str | None = None,
+        fingerprint: str | None = None,
     ) -> MigrationPlanVersion:
-        """A person's transition, recorded. Refused when the lifecycle does not allow it."""
+        """A person's transition, recorded. Refused when the lifecycle does not allow it; an approval
+        or a rejection must name the fingerprint of this version's exact proposal."""
         if to not in TRANSITIONS[self.status]:
             raise InvalidPlanTransition(details={"from": self.status.value, "to": to.value})
+        if to in EXACT and fingerprint != self.proposal.fingerprint:
+            raise PlanVersionMismatch(details={"version": self.version, "reason": "content_mismatch"})
         if comment is not None and not _is_text(comment, MAX_COMMENT):
             raise _invalid("comment", "invalid_text")
         if to in FEEDBACK_REQUIRED and not comment:
             raise _invalid("comment", "required")
-        event = ReviewEvent(self.status, to, user_id, at, comment)
+        event = ReviewEvent(self.status, to, user_id, at, comment, fingerprint if to in EXACT else None)
         return replace(self, status=to, reviews=(*self.reviews, event))
 
     @property

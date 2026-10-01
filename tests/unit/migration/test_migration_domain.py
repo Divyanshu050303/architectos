@@ -334,7 +334,10 @@ def version(status: PlanStatus = PlanStatus.DRAFT) -> MigrationPlanVersion:
 
 def test_the_review_lifecycle_is_made_by_people_and_recorded() -> None:
     submitted = version().move(PlanStatus.READY_FOR_REVIEW, user_id=ADA, at=AT)
-    approved = submitted.move(PlanStatus.APPROVED, user_id=BOB, at=AT, comment="Reviewed with the team.")
+    exact = submitted.proposal.fingerprint
+    approved = submitted.move(
+        PlanStatus.APPROVED, user_id=BOB, at=AT, comment="Reviewed with the team.", fingerprint=exact
+    )
     assert [(r.from_status, r.to_status, r.user_id) for r in approved.reviews] == [
         (PlanStatus.DRAFT, PlanStatus.READY_FOR_REVIEW, ADA),
         (PlanStatus.READY_FOR_REVIEW, PlanStatus.APPROVED, BOB),
@@ -343,7 +346,7 @@ def test_the_review_lifecycle_is_made_by_people_and_recorded() -> None:
     assert approved.approved_by.user_id == BOB
     assert approved.proposal is submitted.proposal  # content never changes with the status
     with pytest.raises(InvalidMigrationRequest) as error:
-        submitted.move(PlanStatus.REJECTED, user_id=BOB, at=AT)
+        submitted.move(PlanStatus.REJECTED, user_id=BOB, at=AT, fingerprint=exact)
     assert error.value.details == {"field": "comment", "reason": "required"}  # a rejection says why
     for status, to in [
         (PlanStatus.DRAFT, PlanStatus.APPROVED),  # never approved without review
