@@ -73,6 +73,14 @@ from core.domain.identity.errors import (
     TokenExpired,
     WeakPassword,
 )
+from core.domain.migrations.errors import (
+    InvalidMigrationRequest,
+    InvalidPlanTransition,
+    MigrationPlanNotFound,
+    PlanVersionMismatch,
+    ReviewedPlanNotReplaced,
+    StaleMigrationPlan,
+)
 from core.domain.observability.errors import InvalidObservabilityRequest, ObservabilityAnalysisNotFound
 from core.domain.organizations.errors import (
     AlreadyMember,
@@ -232,6 +240,12 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     DecisionNotFound: 404,
     ComponentNotFound: 404,
     InvalidDecisionTransition: 409,
+    InvalidMigrationRequest: 422,
+    MigrationPlanNotFound: 404,
+    InvalidPlanTransition: 409,
+    PlanVersionMismatch: 409,
+    StaleMigrationPlan: 409,
+    ReviewedPlanNotReplaced: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

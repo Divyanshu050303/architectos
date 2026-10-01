@@ -48,6 +48,8 @@ ARCHITECTURE = {
 # The shared middle of architecture operation ids.
 _ARCH = "_api_v1_projects__project_id__architectures__architecture_id__"
 _DECISION = "_api_v1_projects__project_id__decisions__decision_id__"
+_PLAN = "_api_v1_projects__project_id__migration_plans__plan_id__"
+_PLAN_VERSION = _PLAN + "versions__version__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 READ_ONLY = {"validate_requirement_api_v1_projects__project_id__requirements__requirement_id__validate_post"}
@@ -72,6 +74,8 @@ class Target:
     decision_id: str = ""  # set by with_proposal
     candidate_id: str = ""  # an option of that decision
     successor_id: str = ""  # set by with_accepted_pair
+    plan_id: str = ""  # set by with_plan (its version 1)
+    fingerprint: str = ""  # of that version
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -203,6 +207,38 @@ async def with_accepted_and_revision(client: AsyncClient, auth: dict[str, str], 
         headers=auth,
     )
     assert edited.status_code == 201, edited.text
+
+
+def migration_request(target: Target, title: str | None = None) -> dict[str, Any]:
+    """From revision 1 to revision 2 (the latest, so the plan is never stale)."""
+    request: dict[str, Any] = {
+        "architectureId": target.architecture_id,
+        "sourceRevision": 1,
+        "target": {"revision": 2},
+        "goals": [CANARY_STATEMENT],
+    }
+    return request | ({"title": title} if title is not None else {})
+
+
+async def with_plan(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An architecture with two revisions and a draft migration plan between them."""
+    await with_two_revisions(client, auth, target)
+    created = await client.post(
+        f"/api/v1/projects/{target.project_id}/migration-plans", json=migration_request(target), headers=auth
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["status"] == "draft", created.text
+    target.plan_id = str(created.json()["planId"])
+    target.fingerprint = str(created.json()["fingerprint"])
+
+
+async def with_submitted_plan(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    await with_plan(client, auth, target)
+    submitted = await client.post(
+        f"/api/v1/projects/{target.project_id}/migration-plans/{target.plan_id}/versions/1/submit",
+        headers=auth,
+    )
+    assert submitted.status_code == 200, submitted.text
 
 
 @dataclass(frozen=True)
@@ -356,6 +392,29 @@ PLANS: dict[str, Plan] = {
     f"link_decision_revision{_DECISION}resulting_revision_post": Plan(
         {"decision.revision_linked"}, "decision", {"revision": 2}, with_accepted_and_revision
     ),
+    "create_plan_api_v1_projects__project_id__migration_plans_post": Plan(
+        {"migration_plan.created"}, "created_plan", migration_request, with_two_revisions
+    ),
+    f"regenerate_plan{_PLAN}regenerate_post": Plan(
+        {"migration_plan.regenerated"},
+        "plan",
+        lambda target: {"request": migration_request(target, CANARY_TITLE)},
+        with_plan,
+    ),
+    f"submit_plan{_PLAN_VERSION}submit_post": Plan({"migration_plan.submitted"}, "plan", None, with_plan),
+    f"approve_plan{_PLAN_VERSION}approve_post": Plan(
+        {"migration_plan.approved"},
+        "plan",
+        lambda target: {"fingerprint": target.fingerprint, "comment": CANARY_REASON},
+        with_submitted_plan,
+    ),
+    f"reject_plan{_PLAN_VERSION}reject_post": Plan(
+        {"migration_plan.rejected"},
+        "plan",
+        lambda target: {"fingerprint": target.fingerprint, "comment": CANARY_REASON},
+        with_submitted_plan,
+    ),
+    f"archive_plan{_PLAN_VERSION}archive_post": Plan({"migration_plan.archived"}, "plan", None, with_plan),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -376,25 +435,36 @@ def test_every_mutating_project_endpoint_is_classified(app: FastAPI) -> None:
 
 def test_every_project_scoped_audit_action_is_exercised() -> None:
     """No action is declared and then never written."""
-    scoped = {"project", "requirement", "requirement_set", "requirement_analysis", "architecture", "decision"}
+    scoped = {
+        "project",
+        "requirement",
+        "requirement_set",
+        "requirement_analysis",
+        "architecture",
+        "decision",
+        "migration_plan",
+    }
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
 
 
 def _expected_resource(resource: str, target: Target, response: Any) -> str | None:
+    existing = {
+        "project": target.project_id,
+        "requirement": target.requirement_id,
+        "architecture": target.architecture_id,
+        "decision": target.decision_id,
+        "plan": target.plan_id,
+    }
     match resource:
-        case "project":
-            return target.project_id
-        case "requirement":
-            return target.requirement_id
         case "promoted":
             return str(response.json()["promotions"][0]["requirement"]["id"])
-        case "architecture":
-            return target.architecture_id
-        case "decision":
-            return target.decision_id
-        case _:  # "created"
+        case "created_plan":  # the plan's id, not its version's
+            return str(response.json()["planId"])
+        case "created":
             return str(response.json()["id"]) if response.content else None
+        case _:
+            return existing[resource]
 
 
 async def audit_entries(client: AsyncClient, auth: dict[str, str], org_id: str) -> list[dict[str, Any]]:
@@ -456,6 +526,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             analysis_id=target.analysis_id,
             architecture_id=target.architecture_id,
             decision_id=target.decision_id,
+            plan_id=target.plan_id,
         )
         body = plan.body(target) if callable(plan.body) else plan.body
         response = await client.request(op.method, url, json=body, headers=auth)
@@ -527,6 +598,8 @@ async def test_read_only_endpoints_write_nothing(
         org_id, target.project_id, target.requirement_id, target.analysis_id, target.candidate_key
     )
     await with_proposal(client, auth, decided)  # its own architecture: an analysis with candidates
+    planned = await fresh_target(client, auth, org_id)
+    await with_plan(client, auth, planned)  # its own project and architecture, with two revisions
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -560,9 +633,10 @@ async def test_read_only_endpoints_write_nothing(
     }
     for op in reads:
         uses = ("{evolution_analysis_id}", "{decision_id}", "/decisions")
-        response = await client.request(
-            op.method, op.url(**(evolving if any(u in op.path for u in uses) else ids)), headers=auth
-        )
+        values = evolving if any(u in op.path for u in uses) else ids
+        if "/migration-plans" in op.path:
+            values = ids | {"project_id": planned.project_id, "plan_id": planned.plan_id}
+        response = await client.request(op.method, op.url(**values), headers=auth)
         assert response.is_success, (op.operation_id, response.text)
 
     assert await audit_entries(client, auth, org_id) == before

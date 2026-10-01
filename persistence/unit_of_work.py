@@ -12,6 +12,7 @@ from persistence.repositories.cost import SqlAlchemyCostAnalysisRepository
 from persistence.repositories.decisions import SqlAlchemyDecisionRepository
 from persistence.repositories.evolution import SqlAlchemyEvolutionRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
+from persistence.repositories.migrations import SqlAlchemyMigrationPlanRepository
 from persistence.repositories.observability import SqlAlchemyObservabilityAnalysisRepository
 from persistence.repositories.organizations import (
     SqlAlchemyMembershipRepository,
@@ -65,6 +66,7 @@ class SqlAlchemyUnitOfWork:
         self.simulations = SqlAlchemySimulationRepository(session)
         self.evolution = SqlAlchemyEvolutionRepository(session)
         self.decisions = SqlAlchemyDecisionRepository(session)
+        self.migrations = SqlAlchemyMigrationPlanRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

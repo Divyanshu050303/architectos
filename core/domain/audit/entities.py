@@ -64,6 +64,12 @@ class AuditAction(StrEnum):
     DECISION_REJECTED = "decision.rejected"  # a person rejected its options
     DECISION_SUPERSEDED = "decision.superseded"  # replaced by a later decision
     DECISION_REVISION_LINKED = "decision.revision_linked"  # a person linked the implementing revision
+    MIGRATION_PLAN_CREATED = "migration_plan.created"  # version 1 of a migration plan was generated
+    MIGRATION_PLAN_REGENERATED = "migration_plan.regenerated"  # a new version superseded the latest
+    MIGRATION_PLAN_SUBMITTED = "migration_plan.submitted"  # a version was submitted for review
+    MIGRATION_PLAN_APPROVED = "migration_plan.approved"  # a person approved an exact version
+    MIGRATION_PLAN_REJECTED = "migration_plan.rejected"  # a person rejected an exact version
+    MIGRATION_PLAN_ARCHIVED = "migration_plan.archived"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

@@ -46,6 +46,9 @@ class Permission(StrEnum):
     ARCHITECTURE_SIMULATE = "architecture.simulate"
     ARCHITECTURE_EVOLVE = "architecture.evolve"
 
+    MIGRATION_PLAN = "migration.plan"  # generate, regenerate, submit and archive migration plans
+    MIGRATION_APPROVE = "migration.approve"  # approve or reject a migration plan version
+
 
 _VIEWER = frozenset(
     {
@@ -70,6 +73,7 @@ _MEMBER = _VIEWER | {
     Permission.ARCHITECTURE_ANALYZE,
     Permission.ARCHITECTURE_SIMULATE,
     Permission.ARCHITECTURE_EVOLVE,
+    Permission.MIGRATION_PLAN,
 }
 
 _ADMIN = _MEMBER | {
@@ -83,6 +87,7 @@ _ADMIN = _MEMBER | {
     Permission.PROJECT_DELETE,
     Permission.PROJECT_POLICY_UPDATE,
     Permission.ARCHITECTURE_DELETE,
+    Permission.MIGRATION_APPROVE,
 }
 
 _OWNER = frozenset(Permission)

@@ -234,6 +234,21 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/reject"),
     ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/supersede"),
     ("POST", "/api/v1/projects/{project_id}/decisions/{decision_id}/resulting-revision"),
+    # Migration planning: plans between exact revisions of an architecture, and their review.
+    ("POST", "/api/v1/projects/{project_id}/migration-plans"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/steps"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/risks"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/checkpoints"),
+    ("GET", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/rollbacks"),
+    ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/regenerate"),
+    ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/submit"),
+    ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/approve"),
+    ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/reject"),
+    ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/archive"),
 }
 
 

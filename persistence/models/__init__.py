@@ -9,6 +9,7 @@ from .decision import DecisionRecord
 from .email_verification_token import EmailVerificationTokenRecord
 from .evolution import EvolutionAnalysisRecord, EvolutionCandidateRecord
 from .invitation import InvitationRecord
+from .migration import MigrationPlanVersionRecord
 from .observability import (
     ObservabilityAnalysisRecord,
     ObservabilityComponentRecord,
@@ -45,6 +46,7 @@ __all__ = [
     "EvolutionAnalysisRecord",
     "EvolutionCandidateRecord",
     "InvitationRecord",
+    "MigrationPlanVersionRecord",
     "ObservabilityAnalysisRecord",
     "ObservabilityComponentRecord",
     "ObservabilityFindingRecord",

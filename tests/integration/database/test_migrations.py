@@ -38,6 +38,7 @@ SECURITY_TABLES = {"security_analyses", "security_components", "security_finding
 OBSERVABILITY_TABLES = {"observability_analyses", "observability_components", "observability_findings"}
 SIMULATION_TABLES = {"simulations", "simulation_components", "simulation_deltas"}
 EVOLUTION_TABLES = {"evolution_analyses", "evolution_candidates", "decisions"}
+MIGRATION_TABLES = {"migration_plan_versions"}
 ALL_TABLES = (
     AUTH_TABLES
     | PROJECT_TABLES
@@ -54,8 +55,14 @@ ALL_TABLES = (
     | OBSERVABILITY_TABLES
     | SIMULATION_TABLES
     | EVOLUTION_TABLES
+    | MIGRATION_TABLES
 )
-GUARDS = {"audit_logs_reject_change", "requirement_versions_reject_change", "requirement_sets_reject_change"}
+GUARDS = {
+    "audit_logs_reject_change",
+    "requirement_versions_reject_change",
+    "requirement_sets_reject_change",
+    "migration_plan_versions_guard",
+}
 
 
 @pytest.fixture
@@ -235,6 +242,7 @@ def test_downgrading_analyses_leaves_requirement_sets_intact(empty_database_url:
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - ANALYSIS_TABLES
         - ARCHITECTURE_TABLES
         - VALIDATION_TABLES
@@ -258,6 +266,7 @@ def test_downgrading_validation_leaves_architectures_intact(empty_database_url: 
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - VALIDATION_TABLES
         - CAPACITY_TABLES
         - PRICING_TABLES
@@ -279,6 +288,7 @@ def test_downgrading_capacity_leaves_validation_intact(empty_database_url: str) 
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - CAPACITY_TABLES
         - PRICING_TABLES
         - COST_TABLES
@@ -299,6 +309,7 @@ def test_downgrading_pricing_leaves_capacity_intact(empty_database_url: str) -> 
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - PRICING_TABLES
         - COST_TABLES
         - RELIABILITY_TABLES
@@ -318,6 +329,7 @@ def test_downgrading_cost_leaves_pricing_intact(empty_database_url: str) -> None
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - COST_TABLES
         - RELIABILITY_TABLES
         - SECURITY_TABLES
@@ -336,6 +348,7 @@ def test_downgrading_reliability_leaves_cost_intact(empty_database_url: str) -> 
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - RELIABILITY_TABLES
         - SECURITY_TABLES
         - OBSERVABILITY_TABLES
@@ -352,7 +365,12 @@ def test_downgrading_security_leaves_reliability_intact(empty_database_url: str)
     command.downgrade(config, "0015")
     assert (
         _tables(empty_database_url)
-        == ALL_TABLES - SECURITY_TABLES - OBSERVABILITY_TABLES - SIMULATION_TABLES - EVOLUTION_TABLES
+        == ALL_TABLES
+        - MIGRATION_TABLES
+        - SECURITY_TABLES
+        - OBSERVABILITY_TABLES
+        - SIMULATION_TABLES
+        - EVOLUTION_TABLES
     )
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -364,7 +382,7 @@ def test_downgrading_observability_leaves_security_intact(empty_database_url: st
     command.downgrade(config, "0016")
     assert (
         _tables(empty_database_url)
-        == ALL_TABLES - OBSERVABILITY_TABLES - SIMULATION_TABLES - EVOLUTION_TABLES
+        == ALL_TABLES - MIGRATION_TABLES - OBSERVABILITY_TABLES - SIMULATION_TABLES - EVOLUTION_TABLES
     )
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -374,7 +392,7 @@ def test_downgrading_evolution_leaves_simulations_intact(empty_database_url: str
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0018")
-    assert _tables(empty_database_url) == ALL_TABLES - EVOLUTION_TABLES
+    assert _tables(empty_database_url) == ALL_TABLES - MIGRATION_TABLES - EVOLUTION_TABLES
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
 
@@ -383,7 +401,17 @@ def test_downgrading_simulations_leaves_observability_intact(empty_database_url:
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0017")
-    assert _tables(empty_database_url) == ALL_TABLES - SIMULATION_TABLES - EVOLUTION_TABLES
+    assert _tables(empty_database_url) == ALL_TABLES - MIGRATION_TABLES - SIMULATION_TABLES - EVOLUTION_TABLES
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES
+
+
+def test_downgrading_migration_plans_leaves_evolution_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0019")
+    assert _tables(empty_database_url) == ALL_TABLES - MIGRATION_TABLES
+    assert "migration_plan_versions_guard" not in _functions(empty_database_url)
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
 
@@ -395,6 +423,7 @@ def test_downgrading_architectures_leaves_requirements_intact(empty_database_url
     assert (
         _tables(empty_database_url)
         == ALL_TABLES
+        - MIGRATION_TABLES
         - ARCHITECTURE_TABLES
         - VALIDATION_TABLES
         - CAPACITY_TABLES
