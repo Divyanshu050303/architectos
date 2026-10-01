@@ -25,6 +25,7 @@ from typing import Any
 
 from core.domain.evolution.candidates import CANDIDATE_ID, EvidenceRef
 
+from .evidence import EvidenceCoverage
 from .steps import (
     Checkpoint,
     CompatibilityCheck,
@@ -300,6 +301,7 @@ class MigrationProposal:
     diff_summary: str | None = None  # the architecture diff's summary, for display
     alternatives: tuple[StrategyOption, ...] = ()  # the strategies considered, side by side
     sequence: tuple[Stage, ...] = ()  # the steps in order; empty when the dependencies are invalid
+    coverage: tuple[EvidenceCoverage, ...] = ()  # per engine and side, what the plan rests on
 
     def __post_init__(self) -> None:
         check(
@@ -320,6 +322,7 @@ class MigrationProposal:
                 text(self.diff_summary, "diff_summary", required=False),
                 items(self.alternatives, StrategyOption, "alternatives"),
                 items(self.sequence, Stage, "sequence"),
+                items(self.coverage, EvidenceCoverage, "coverage"),
                 "strategy"
                 if self.strategy is not None
                 and not any(
@@ -337,6 +340,7 @@ class MigrationProposal:
         object.__setattr__(self, "evidence", tuple(sorted(set(self.evidence), key=lambda e: e.key)))
         object.__setattr__(self, "models", dict(sorted(self.models.items())))
         object.__setattr__(self, "alternatives", tuple(sorted(self.alternatives, key=lambda o: o.pattern)))
+        object.__setattr__(self, "coverage", tuple(sorted(self.coverage, key=lambda c: c.key)))
 
     def _consistency(self) -> list[str | None]:
         steps = [s.id for s in self.steps]
@@ -420,6 +424,7 @@ class MigrationProposal:
             "diff_summary": self.diff_summary,
             "alternatives": [o.to_dict() for o in self.alternatives],
             "sequence": [s.to_dict() for s in self.sequence],
+            "coverage": [c.to_dict() for c in self.coverage],
         }
 
     @property
