@@ -21,7 +21,9 @@ class MigrationEngine:
     def plan(self, inputs: PlanningInputs) -> MigrationProposal:
         source, target = inputs.source, inputs.target
         if isinstance(target, TargetCandidate):
-            reference, target_ir = candidate_target(source, inputs.source_ir, target.analysis_id, target.candidate)
+            reference, target_ir = candidate_target(
+                source, inputs.source_ir, target.analysis_id, target.candidate
+            )
             candidate = target.candidate
         else:
             reference, target_ir = revision_target(source, target.number, target.content_hash), target.ir

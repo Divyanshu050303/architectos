@@ -20,7 +20,7 @@ from persistence.models import AuditLogRecord, MigrationPlanVersionRecord
 from tests.unit.evolution.test_evolution_triggers import shop
 
 from .requirement_support import World, member, signed_in
-from .test_evolution import architecture, run
+from .test_evolution import WORKLOAD, architecture, run
 
 pytestmark = pytest.mark.integration
 
@@ -270,3 +270,27 @@ async def test_an_engine_failure_exposes_nothing_and_stores_nothing(
     assert (response.status_code, response.json()["error"]["code"]) == (500, "internal_error")
     assert "sk_live" not in json.dumps(response.json())
     assert await db.scalar(select(func.count()).select_from(MigrationPlanVersionRecord)) == 0
+
+
+async def test_stored_analyses_of_the_target_become_evaluated_checkpoints(
+    client: AsyncClient, world: World
+) -> None:
+    aid = await two_revisions(client, world)
+    url = f"/api/v1/projects/{world.project_id}/architectures/{aid}"
+    validation = await client.post(f"{url}/validations", json={"revision": 2}, headers=world.ada)
+    assert validation.status_code == 201, validation.text
+    capacity = await client.post(
+        f"{url}/capacity-analyses", json={"workload": WORKLOAD, "revision": 2}, headers=world.ada
+    )
+    assert capacity.status_code == 201, capacity.text
+    created = await create(client, world, aid)
+    coverage = {(c["source"], c["side"]): c for c in created["coverage"]}
+    assert coverage[("validation", "target")]["analysisIds"] == [validation.json()["id"]]
+    assert coverage[("capacity", "target")]["state"] == "current"
+    checkpoints = {c["key"]: c for c in created["checkpoints"]}
+    evaluated = checkpoints["validation:target"]
+    assert evaluated["status"] in {"pass", "warning", "fail"}  # from the stored run, never recomputed
+    assert evaluated["basis"] == "modeled"
+    assert [e["reference"] for e in evaluated["evidence"]] == [validation.json()["id"]]
+    cited = {(e["source"], e["reference"]) for e in created["evidence"] if e["state"] == "current"}
+    assert ("capacity", capacity.json()["id"]) in cited

@@ -27,7 +27,8 @@ from typing import Any
 
 from core.architecture_ir.diff import ChangeKind
 from core.domain.migrations.changes import Aspect, MigrationChange
-from core.domain.migrations.plans import MigrationProposal, StrategyOption
+from core.domain.migrations.errors import InvalidMigrationRequest
+from core.domain.migrations.plans import MAX_FINDINGS, MAX_STEPS, MigrationProposal, StrategyOption
 from core.domain.migrations.steps import MigrationStep, Trace, step_id
 from core.domain.migrations.values import DowntimeStatus, Reversibility, StepType, TraceKind
 
@@ -600,11 +601,22 @@ class _Generator:
         return self.steps.build()
 
 
+def _too_large(limit: int) -> InvalidMigrationRequest:
+    """A transition too large to plan as one migration: refused, never truncated."""
+    return InvalidMigrationRequest(details={"field": "target", "reason": "too_many_changes", "limit": limit})
+
+
 def generate(context: PlanningContext, registry: Registry) -> MigrationProposal:
-    """The plan's steps for one exact source and target: deterministic for identical inputs."""
+    """The plan's steps for one exact source and target: deterministic for identical inputs. A
+    transition needing more steps or findings than one plan holds is refused (split it into
+    several migrations), before any further analysis."""
+    if len(context.analysis.findings) > MAX_FINDINGS // 2:
+        raise _too_large(MAX_FINDINGS // 2)
     options = strategy_options(context, registry)
     chosen, choice_findings = choose(options, context.request.strategy)
     steps = _Generator(_Plan(context, registry, chosen)).generate()
+    if len(steps) > MAX_STEPS:
+        raise _too_large(MAX_STEPS)
     analysis = context.analysis
     steps, downtime = availability(context, steps)
     data, data_findings = data_migrations(context, steps)
