@@ -179,6 +179,17 @@ class AgentUsage:
             self.engine_runs,
         )
 
+    def plus(self, other: AgentUsage) -> AgentUsage:
+        """Both together; a token count either side did not report stays unknown."""
+        return AgentUsage(
+            self.model_calls + other.model_calls,
+            _add(self.input_tokens, other.input_tokens),
+            _add(self.output_tokens, other.output_tokens),
+            self.model_latency_ms + other.model_latency_ms,
+            self.retrieval_calls + other.retrieval_calls,
+            self.engine_runs + other.engine_runs,
+        )
+
     def exceeded(self, budget: Budget, elapsed_seconds: float) -> str | None:
         """The first limit exceeded, or None."""
         if self.model_calls > budget.max_model_calls:

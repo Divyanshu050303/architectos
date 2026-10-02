@@ -455,3 +455,27 @@ def test_an_outcome_is_a_proposal_or_a_failure() -> None:
         ProposerOutcome("m/x", "v1", usage)
     with pytest.raises(InvalidAgentRecord):
         ProposerOutcome("m/x", "v1", usage, proposal=a_proposal(), failure=FailureCode.LLM_TIMEOUT)
+
+
+# --- phase 5 helpers ----------------------------------------------------------------------------
+
+
+def test_usage_adds_up_and_unknown_stays_unknown() -> None:
+    total = AgentUsage(1, 100, 20, 5, 1, 2).plus(AgentUsage(1, None, 10, 5, 1, 2))
+    assert (total.model_calls, total.input_tokens, total.output_tokens) == (2, None, 30)
+    assert (total.retrieval_calls, total.engine_runs, total.model_latency_ms) == (2, 4, 10)
+
+
+def test_limitations_are_said_once() -> None:
+    run = a_run().noting("a", "b").noting("a")
+    assert run.limitations == ("a", "b")
+
+
+def test_non_blocking_questions_are_kept_while_running() -> None:
+    optional = a_question(blocking=False)
+    running = a_run().start(NOW).with_questions((optional, optional))
+    assert running.questions == (optional,)
+    with pytest.raises(InvalidAgentRequest):
+        running.with_questions((a_question(),))  # a blocking one goes through ask
+    with pytest.raises(InvalidAgentRequest):
+        a_run().with_questions((optional,))  # not before the run starts

@@ -26,7 +26,7 @@ from .errors import InvalidAgentRequest, InvalidAgentTransition
 from .proposals import Answer, ClarificationQuestion, Proposal
 from .requests import AgentRequest, AgentUsage, Budget
 from .results import Candidate, EngineReport, Rejection
-from .values import FINGERPRINT, FailureCode, RunStatus, Stage, check, code, count, items, text
+from .values import FINGERPRINT, FailureCode, RunStatus, Stage, check, code, count, items, text, texts
 
 S = RunStatus
 MOVES: dict[RunStatus, frozenset[RunStatus]] = {
@@ -37,6 +37,7 @@ MOVES: dict[RunStatus, frozenset[RunStatus]] = {
 }
 WITH_CANDIDATE = frozenset({S.CANDIDATE_READY, S.ACCEPTED, S.REJECTED})
 MAX_HISTORY = 50
+MAX_LIMITATIONS = 50
 
 
 def _unanswered(
@@ -129,6 +130,7 @@ class AgentRun:
     decision_reason: str | None = None
     history: tuple[StatusEvent, ...] = ()
     completed_at: datetime | None = None
+    limitations: tuple[str, ...] = ()  # what the run left out or could not do, said (never silent)
 
     def __post_init__(self) -> None:
         waiting_without_question = self.status is S.AWAITING_CLARIFICATION and not self.unanswered
@@ -148,6 +150,8 @@ class AgentRun:
                 code(self.prompt_version, "run.prompt_version", required=False),
                 text(self.decision_reason, "run.decision_reason", 2000, required=False),
                 "run.history" if len(self.history) > MAX_HISTORY else None,
+                texts(self.limitations, "run.limitations", 500),
+                "run.limitations" if len(self.limitations) > MAX_LIMITATIONS else None,
             ]
         )
 
@@ -175,6 +179,18 @@ class AgentRun:
         if self.status is not S.RUNNING:
             raise InvalidAgentTransition(details={"from": self.status.value, "to": stage.value})
         return replace(self, stage=stage)
+
+    def noting(self, *limitations: str) -> AgentRun:
+        """Adds what was left out or could not be done (each once, in order)."""
+        merged = tuple(dict.fromkeys((*self.limitations, *(x[:500] for x in limitations))))
+        return replace(self, limitations=merged[:MAX_LIMITATIONS])
+
+    def with_questions(self, questions: tuple[ClarificationQuestion, ...]) -> AgentRun:
+        """Records questions that do not stop the run (a blocking one goes through ``ask``)."""
+        if self.status is not S.RUNNING or any(q.blocking for q in questions):
+            raise InvalidAgentRequest(details={"field": "questions", "reason": "not_while_running"})
+        known = tuple({q.id: q for q in (*self.questions, *questions)}.values())
+        return replace(self, questions=known)
 
     def ask(self, questions: tuple[ClarificationQuestion, ...], at: datetime) -> AgentRun:
         """Blocking gaps: the run waits for a person. A question already answered is not asked again."""
