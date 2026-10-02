@@ -2,6 +2,8 @@
 how the ingestion ended — and whether a record snapshot is out of date. The engine is pure: it reads
 what it is given, stores nothing and fetches nothing; the service authorizes, loads and stores."""
 
+import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -12,6 +14,7 @@ from core.domain.requirements.entities import Requirement
 from .documents import KnowledgeChunk, KnowledgeDocument
 from .errors import InvalidKnowledgeRequest
 from .ingestion import IngestionRun
+from .retrieval import Candidate, RetrievalQuery, RetrievalResult, Scope
 from .sources import KnowledgeSource, SourceVersion
 from .uploads import DocumentUpload
 from .values import SourceType
@@ -67,3 +70,25 @@ class KnowledgeEngine(Protocol):
         ...
 
     def versions(self, source_type: SourceType) -> dict[str, int]: ...
+
+    def terms(self, text: str) -> tuple[str, ...]:
+        """The terms a passage or query is matched by — stored with each passage for the index."""
+        ...
+
+    def retrieve(
+        self, query: RetrievalQuery, candidates: Iterable[Candidate], scope: Scope
+    ) -> RetrievalResult:
+        """The passages that support ``query`` among ``candidates``, cited and ordered; never outside
+        ``scope``'s project, never padded."""
+        ...
+
+
+class KnowledgeRetriever(Protocol):
+    """The boundary every consumer of project knowledge uses — the requirements engine, a future
+    architecture agent, an AI diff: authorized retrieval returning evidence with citations, never
+    tables, embeddings or persistence models. Retrieved text is untrusted data: a consumer passing it
+    to a language model keeps it apart from its instructions."""
+
+    async def retrieve(
+        self, *, project_id: uuid.UUID, user_id: uuid.UUID, query: RetrievalQuery
+    ) -> RetrievalResult: ...

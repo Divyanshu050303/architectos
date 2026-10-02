@@ -18,7 +18,7 @@ from typing import Any
 
 from core.domain.text import has_forbidden_characters
 
-from .documents import Locator
+from .documents import KnowledgeChunk, Locator
 from .errors import InvalidKnowledgeRequest
 from .values import (
     KEY,
@@ -88,6 +88,31 @@ class RetrievalQuery:
         object.__setattr__(self, "identifiers", tuple(sorted(set(identifiers))))
         object.__setattr__(self, "source_ids", tuple(sorted(set(self.source_ids))))
         object.__setattr__(self, "source_types", tuple(sorted(set(self.source_types))))
+
+
+@dataclass(frozen=True, slots=True)
+class Candidate:
+    """A passage the index proposes for a query, with what a citation needs from its source. Found by a
+    prefilter (the index); the engine decides — it never trusts the prefilter for scope or match."""
+
+    project_id: uuid.UUID
+    chunk: KnowledgeChunk
+    source_name: str
+    source_type: SourceType
+    stale: bool  # the source's snapshot is out of date
+    verification: Verification
+    record_status: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class Scope:
+    """What a search covered: retrievable sources searched after the filters, and those in scope that
+    were not (never indexed or failed; stale ones when excluded). Archived sources are never searched."""
+
+    project_id: uuid.UUID
+    searched: int
+    not_indexed: int = 0
+    stale_excluded: int = 0
 
 
 @dataclass(frozen=True, slots=True)

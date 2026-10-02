@@ -16,15 +16,18 @@ An input that does not belong to the source (another document's path, another re
 before anything starts; so is a source that is archived or already being ingested.
 """
 
+from collections.abc import Iterable
 from datetime import datetime
 
 from core.domain.knowledge.errors import InvalidKnowledgeRequest
 from core.domain.knowledge.ingestion import Counts, IngestionRun
 from core.domain.knowledge.ports import Indexed, IngestionInput, IngestionOutcome
+from core.domain.knowledge.retrieval import Candidate, RetrievalQuery, RetrievalResult, Scope
 from core.domain.knowledge.sources import KnowledgeSource, SourceVersion
 from core.domain.knowledge.values import SourceType, Stage
 
-from . import redaction, structure
+from . import redaction, retrieval, structure
+from . import terms as term_rule
 from .adapters import (
     VERSIONS,
     Extraction,
@@ -116,6 +119,14 @@ class DeterministicKnowledgeEngine:
             )
         except ExtractionFailed as failure:
             return IngestionOutcome(working.ingestion_failed(at, before), run.fail(failure.errors, at))
+
+    def terms(self, text: str) -> tuple[str, ...]:
+        return term_rule.terms(text)
+
+    def retrieve(
+        self, query: RetrievalQuery, candidates: Iterable[Candidate], scope: Scope
+    ) -> RetrievalResult:
+        return retrieval.retrieve(query, candidates, scope)
 
     def snapshot_changed(self, source: KnowledgeSource, content: IngestionInput) -> bool:
         if source.record is None or source.indexed_checksum is None:
