@@ -11,9 +11,8 @@ refuses for its limits is stored as ``failed``, with the reason.
 workflow (``ArchitectureService.create`` or ``replace``, source ``discovery``): the person must hold
 ``architecture.discover`` and ``architecture.create`` (a new architecture) or ``architecture.update``
 (a new revision on ``base_version``, which must still be current); the proposal accepted must be the
-one reviewed (its content hash). History is never rewritten. The acceptance is then recorded on the
-run (a second transaction: if it fails, the revision exists with source ``discovery`` and a reason
-naming the run).
+one reviewed (its content hash). History is never rewritten. The acceptance is recorded on the run in
+the revision's own transaction: both commit, or neither does.
 
 Access: running, deciding, accepting and deleting need ``architecture.discover``; reading needs
 ``architecture.read``. Every lookup goes project -> run; a run of another project or tenant is not
@@ -31,8 +30,9 @@ from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.serialization import content_hash
 from core.domain import pagination
 from core.domain.architecture.architecture_service import ArchitectureService
+from core.domain.architecture.entities import Architecture
 from core.domain.architecture.errors import ArchitectureNotFound, ArchitectureRevisionNotFound
-from core.domain.architecture.versions import RevisionSource
+from core.domain.architecture.versions import ArchitectureRevision, RevisionSource
 from core.domain.audit.entities import AuditAction, AuditEvent
 from core.domain.clock import Clock, utc_now
 from core.domain.organizations.permissions import Permission
@@ -231,33 +231,42 @@ class DiscoveryService:
         if problem is not None or architecture is None:
             raise ProposalNotAcceptable(details={"reason": problem or "nothing_to_accept"})
         reason = f"Accepted from discovery run {run_id}."
+        recorded: list[DiscoveryRun] = []
+
+        async def record(uow: UnitOfWork, target: Architecture, revision: ArchitectureRevision) -> None:
+            """In the revision's transaction: the acceptance commits with it, or neither does."""
+            access = await project_access(
+                uow, project_id, user_id, Permission.ARCHITECTURE_DISCOVER, lock=ProjectLock.SHARE
+            )
+            locked = await _run(uow, project_id, run_id, for_update=True)
+            if locked.decisions != found.decisions:  # reviewed again meanwhile: not what was accepted
+                raise ProposalNotAcceptable(details={"reason": "proposal_changed"})
+            acceptance = Acceptance(target.id, revision.number, revision.content_hash, user_id, self._clock())
+            accepted = locked.accepted(acceptance)
+            await uow.discoveries.update_review(accepted)
+            facts = {
+                "architecture_id": str(target.id),
+                "revision": revision.number,
+                "created_architecture": architecture_id is None,
+            }
+            await _audit(uow, access, AuditAction.DISCOVERY_RUN_ACCEPTED, user_id, accepted, facts)
+            recorded.append(accepted)
+
         if architecture_id is None or base_version is None:
-            created, revision = await self._architectures.create(
+            await self._architectures.create(
                 project_id=project_id, user_id=user_id, name=name or architecture.name, ir=architecture,
-                source=RevisionSource.DISCOVERY, reason=reason,
+                source=RevisionSource.DISCOVERY, reason=reason, then=record,
             )  # fmt: skip
-            target, made_revision = created.id, True
+            made_revision = True
         else:
             revised = await self._architectures.replace(
                 project_id=project_id, architecture_id=architecture_id, user_id=user_id,
                 base_version=base_version, ir=architecture, source=RevisionSource.DISCOVERY, reason=reason,
+                then=record,
             )  # fmt: skip
-            target, revision, made_revision = architecture_id, revised.revision, revised.created
-        acceptance = Acceptance(target, revision.number, revision.content_hash, user_id, self._clock())
-        async with self._uow as uow:
-            access = await project_access(
-                uow, project_id, user_id, Permission.ARCHITECTURE_DISCOVER, lock=ProjectLock.SHARE
-            )
-            recorded = (await _run(uow, project_id, run_id, for_update=True)).accepted(acceptance)
-            await uow.discoveries.update_review(recorded)
-            facts = {
-                "architecture_id": str(target),
-                "revision": revision.number,
-                "created_architecture": architecture_id is None,
-                "created_revision": made_revision,
-            }
-            await _audit(uow, access, AuditAction.DISCOVERY_RUN_ACCEPTED, user_id, recorded, facts)
-        return AcceptedProposal(recorded, acceptance, architecture_id is None, made_revision)
+            made_revision = revised.created
+        run = recorded[0]
+        return AcceptedProposal(run, run.acceptances[-1], architecture_id is None, made_revision)
 
     # --- comparison ------------------------------------------------------------------------------
 

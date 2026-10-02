@@ -18,7 +18,7 @@ belong to the project. Audit entries carry identifiers and counts only, never na
 """
 
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -71,6 +71,9 @@ _REVISION_CURSOR = "architecture_revisions"
 _LIST_CURSOR = "architectures"
 
 type Builder = Callable[[ArchitectureRevision], tuple[NewRevision, ArchitectureDiff]]
+# Work that must commit with a content change, or not at all: called inside its transaction with the
+# architecture and the revision now current (the existing one when the content did not change).
+type AfterWrite = Callable[[UnitOfWork, Architecture, ArchitectureRevision], Awaitable[None]]
 
 
 def encode_revision_cursor(number: int) -> str:
@@ -225,7 +228,7 @@ class ArchitectureService:
 
     # --- creating --------------------------------------------------------------------------------
 
-    async def create(
+    async def create(  # noqa: PLR0913 - every part of a first revision, by keyword
         self,
         *,
         project_id: uuid.UUID,
@@ -236,6 +239,7 @@ class ArchitectureService:
         source: RevisionSource = RevisionSource.USER,
         reason: str | None = None,
         requirement_set_id: uuid.UUID | None = None,
+        then: AfterWrite | None = None,
     ) -> tuple[Architecture, ArchitectureRevision]:
         """A new architecture of the project, starting at revision 1: ``ir``, or an empty
         architecture (no nodes; the valid starting point of every design)."""
@@ -267,6 +271,8 @@ class ArchitectureService:
                 architecture,
                 _revision_facts(revision),
             )
+            if then is not None:
+                await then(uow, architecture, revision)
         return architecture, revision
 
     # --- metadata and lifecycle (no revision) ----------------------------------------------------
@@ -377,7 +383,7 @@ class ArchitectureService:
 
         return await self._revise(project_id, architecture_id, user_id, base_version, build, None)
 
-    async def replace(
+    async def replace(  # noqa: PLR0913 - every part of a new revision, by keyword
         self,
         *,
         project_id: uuid.UUID,
@@ -388,9 +394,10 @@ class ArchitectureService:
         source: RevisionSource = RevisionSource.USER,
         reason: str | None = None,
         requirement_set_id: uuid.UUID | None = None,
+        then: AfterWrite | None = None,
     ) -> Revised:
         """A whole new content: a full save, an import, an approved proposal, a discovery, the
-        Architecture Engine's output. Same concurrency rule as ``edit``."""
+        Architecture Engine's output. Same concurrency rule as ``edit``. ``then`` commits with it."""
 
         def build(parent: ArchitectureRevision) -> tuple[NewRevision, ArchitectureDiff]:
             return next_revision(
@@ -403,7 +410,7 @@ class ArchitectureService:
             )
 
         return await self._revise(
-            project_id, architecture_id, user_id, base_version, build, requirement_set_id
+            project_id, architecture_id, user_id, base_version, build, requirement_set_id, then=then
         )
 
     async def restore_revision(
@@ -455,6 +462,8 @@ class ArchitectureService:
         build: Builder,
         requirement_set_id: uuid.UUID | None,
         load: Callable[[UnitOfWork, Architecture], object] | None = None,
+        *,
+        then: AfterWrite | None = None,
     ) -> Revised:
         async with self._uow as uow:
             access = await _write_access(uow, project_id, user_id, Permission.ARCHITECTURE_UPDATE)
@@ -468,6 +477,8 @@ class ArchitectureService:
             try:
                 new, changes = build(parent)
             except ArchitectureUnchanged:
+                if then is not None:
+                    await then(uow, architecture, parent)
                 layout = await uow.architectures.get_layout(architecture.id)
                 return Revised(architecture, parent, ArchitectureDiff(), layout, created=False)
             await _check_references(uow, project_id, new.ir, requirement_set_id)
@@ -478,6 +489,8 @@ class ArchitectureService:
                 facts["restored_from"] = revision.restored_from
                 action = AuditAction.ARCHITECTURE_REVISION_RESTORED
             await _record(uow, access, action, user_id, architecture, facts)
+            if then is not None:
+                await then(uow, architecture, revision)
             layout = await uow.architectures.get_layout(architecture.id)
         return Revised(architecture, revision, changes, layout)
 

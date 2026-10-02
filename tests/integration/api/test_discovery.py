@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.api.email.transport import InMemoryTransport
 from engines.discovery import engine as engine_module
 from persistence.models import ArchitectureRevisionRecord, DiscoveryRunRecord
+from persistence.repositories.discovery import SqlAlchemyDiscoveryRunRepository
 from tests.unit.discovery.test_discovery_sources import COMPOSE, DEPLOYMENT, TERRAFORM
 
 from .requirement_support import World, member, signed_in
@@ -273,3 +274,26 @@ async def test_an_engine_failure_exposes_nothing_and_stores_nothing(
     assert (response.status_code, response.json()["error"]["code"]) == (500, "internal_error")
     assert "sk_live" not in json.dumps(response.json())
     assert await db.scalar(select(func.count()).select_from(DiscoveryRunRecord)) == 0
+
+
+async def test_an_acceptance_that_cannot_be_recorded_leaves_no_revision(
+    client: AsyncClient, db: AsyncSession, world: World, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run = await discover(client, world, ("compose.yaml", COMPOSE))
+    reviewed = await proposal(client, world, run["id"])
+    before = await db.scalar(select(func.count()).select_from(ArchitectureRevisionRecord))
+
+    async def broken(self: Any, run: Any) -> Any:
+        raise RuntimeError("the acceptance cannot be stored")
+
+    monkeypatch.setattr(SqlAlchemyDiscoveryRunRepository, "update_review", broken)
+    response = await client.post(
+        f"{runs(world)}/{run['id']}/accept",
+        json={"proposalContentHash": reviewed["contentHash"]},
+        headers=world.ada,
+    )
+    assert response.status_code == 500
+    assert (
+        await db.scalar(select(func.count()).select_from(ArchitectureRevisionRecord)) == before
+    )  # rolled back
+    assert (await client.get(f"{runs(world)}/{run['id']}", headers=world.ada)).json()["accepted"] == []
