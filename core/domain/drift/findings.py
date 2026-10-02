@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.domain.discovery.values import MAX_REFERENCE
+from core.domain.evolution.values import EvidenceSource, EvidenceState
 
 from .values import (
     Classification,
@@ -34,6 +35,7 @@ from .values import (
 )
 
 MAX_SUBJECT = 512
+MAX_ITEMS = 50
 REMOVED = frozenset({FindingType.COMPONENT_REMOVED, FindingType.CONNECTION_REMOVED})
 ADDED = frozenset({FindingType.COMPONENT_ADDED, FindingType.CONNECTION_ADDED})
 VALUED = frozenset(
@@ -45,6 +47,46 @@ VALUED = frozenset(
         FindingType.MAPPING_CHANGED,
     }
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ImpactRef:
+    """Context, not a claim: an engine whose model reads what the finding concerns, why (``basis``),
+    and the stored analysis of the baseline revision by that engine — ``current`` (of its exact
+    content), ``stale`` (of another revision or content: not to be relied on) or ``missing``. The
+    analysis describes the baseline; nothing is recomputed for the discovered state."""
+
+    engine: EvidenceSource
+    basis: str
+    state: EvidenceState
+    analysis_id: str | None = None
+    revision_number: int | None = None
+    items: tuple[str, ...] = ()  # the analysis's own items about the same element
+
+    def __post_init__(self) -> None:
+        check(
+            [
+                None if isinstance(self.engine, EvidenceSource) else "impact.engine",
+                text(self.basis, "impact.basis"),
+                None if isinstance(self.state, EvidenceState) else "impact.state",
+                text(self.analysis_id, "impact.analysis_id", 64, required=False),
+                texts(self.items, "impact.items", MAX_REFERENCE),
+                "impact.analysis_id"
+                if (self.state is EvidenceState.MISSING) != (self.analysis_id is None)
+                else None,
+                "impact.items" if len(self.items) > MAX_ITEMS else None,
+            ]
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "engine": self.engine.value,
+            "basis": self.basis,
+            "state": self.state.value,
+            "analysis_id": self.analysis_id,
+            "revision_number": self.revision_number,
+            "items": list(self.items),
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +108,10 @@ class DriftFinding:
     locations: tuple[str, ...] = ()  # source references, "path#document:pointer"
     baseline_reference: str | None = None  # the baseline element's own provenance reference
     limitations: tuple[str, ...] = ()
+    impact: tuple[ImpactRef, ...] = ()  # context from the other engines: never part of its identity
+    # The requirements and decisions the baseline element references ("requirement:<id>[@<version>]",
+    # "decision:<id>") — named for review, never judged violated or invalid.
+    references: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         confirmed = self.classification is Classification.CONFIRMED
@@ -89,6 +135,10 @@ class DriftFinding:
                 texts(self.locations, "finding.locations", MAX_REFERENCE),
                 text(self.baseline_reference, "finding.baseline_reference", MAX_REFERENCE, required=False),
                 texts(self.limitations, "finding.limitations"),
+                None
+                if isinstance(self.impact, tuple) and all(isinstance(i, ImpactRef) for i in self.impact)
+                else "finding.impact",
+                texts(self.references, "finding.references", 128),
                 "finding.redacted" if self.redacted and values != (None, None) else None,  # never kept
                 # What was removed is a baseline element; what was added, a discovered one.
                 "finding.baseline_id" if self.type in REMOVED and self.baseline_id is None else None,
@@ -140,6 +190,8 @@ class DriftFinding:
             "locations": list(self.locations),
             "baseline_reference": self.baseline_reference,
             "limitations": list(self.limitations),
+            "impact": [i.to_dict() for i in self.impact],
+            "references": list(self.references),
         }
 
 
