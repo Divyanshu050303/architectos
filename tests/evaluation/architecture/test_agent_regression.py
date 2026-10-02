@@ -44,8 +44,8 @@ def _with(scenario: dict[str, Any], **expected: Any) -> dict[str, Any]:
 def test_a_wrong_expectation_is_a_miss() -> None:
     """The metrics can fail: a scenario expected to end otherwise is counted as a miss."""
     scenarios = {s["id"]: s for s in load_scenarios()}
-    ready = asyncio.run(run_scenario(_with(scenarios["covered-ready"], status="failed")))
-    refused = asyncio.run(run_scenario(_with(scenarios["url-in-output"], rejections=["secret_in_output"])))
+    ready = asyncio.run(run_scenario(_with(scenarios["api-relational-db"], status="failed")))
+    refused = asyncio.run(run_scenario(_with(scenarios["prompt-injection"], rejections=["secret_in_output"])))
     metrics = Evaluation((ready, refused)).metrics()
     assert metrics["outcome_accuracy"] == 0.5
     assert metrics["rejection_accuracy"] == 0.0

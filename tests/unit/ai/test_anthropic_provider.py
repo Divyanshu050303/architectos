@@ -145,3 +145,13 @@ async def test_the_api_key_never_appears_in_errors() -> None:
     with pytest.raises(LlmUnavailable) as caught:
         await AnthropicStructuredLlm(api_key="sk-secret-123", client=client).complete(REQUEST)
     assert "sk-secret-123" not in str(caught.value)
+
+
+async def test_a_refusal_is_unavailable_and_not_retried() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=message("I can't help with that.", "refusal"))
+
+    with pytest.raises(LlmUnavailable) as caught:
+        await llm(handler).complete(REQUEST)
+    assert caught.value.retryable is False
+    assert caught.value.code == "llm_unavailable"

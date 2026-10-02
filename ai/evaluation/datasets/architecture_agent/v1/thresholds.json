@@ -1,4 +1,9 @@
 {
+  "ir_structural_validity": 1.0,
+  "requirement_traceability": 1.0,
+  "assumption_disclosure": 1.0,
+  "unknowns_disclosed": 1.0,
+  "validation_integration": 1.0,
   "outcome_accuracy": 1.0,
   "rejection_accuracy": 1.0,
   "injection_containment": 1.0,

@@ -233,6 +233,31 @@ async def test_a_viewer_reads_but_does_not_run(
     assert (await client.post(runs(world), json=request, headers=viewer)).status_code == 403
     refused = await client.post(f"{runs(world)}/{run['id']}/reject", json={"reason": "No"}, headers=viewer)
     assert refused.status_code == 403
+    taken = await client.post(f"{runs(world)}/{run['id']}/accept", json=accept_body(run), headers=viewer)
+    assert taken.status_code == 403
+    after = await client.get(f"{runs(world)}/{run['id']}", headers=world.ada)
+    assert after.json()["status"] == "candidate_ready"
+
+
+@pytest.mark.parametrize(
+    "oversized",
+    [
+        {"objective": "x" * 4001},
+        {"constraints": ["c"] * 21},
+        {"preferences": ["p" * 301]},
+        {"context": "x" * 4001},
+        {"budget": {"maxModelCalls": 3}},  # a budget can be lowered, never raised
+        {"budget": {"maxSeconds": 600}},
+    ],
+)
+async def test_oversized_requests_are_refused_before_anything_runs(
+    client: AsyncClient, world: World, oversized: dict[str, Any]
+) -> None:
+    body = {"requirementSetId": await requirement_set(client, world), "objective": "An order service"}
+    response = await client.post(runs(world), json=body | oversized, headers=world.ada)
+    assert response.status_code == 422
+    listed = await client.get(runs(world), headers=world.ada)
+    assert listed.json()["runs"] == []
 
 
 async def test_runs_and_sets_of_other_projects_are_not_found(

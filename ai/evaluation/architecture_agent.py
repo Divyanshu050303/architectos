@@ -13,6 +13,12 @@ Measured:
 
 - ``outcome_accuracy``: scenarios ending as expected (status, failure, calls, nodes, evidence, questions);
 - ``rejection_accuracy``: scenarios expected to be refused, refused for the expected reasons;
+- ``ir_structural_validity``: candidates that are valid canonical IR, read back to the same content hash;
+- ``requirement_traceability``: candidates tracing only to the set's requirements, with exactly the
+  untraced ones listed as uncovered;
+- ``assumption_disclosure``: candidates carrying every assumption the answer stated as an IR assumption;
+- ``unknowns_disclosed``: proposals keeping every ``unknown`` and ``unsupported`` claim the answer made;
+- ``validation_integration``: candidates with an evaluated validation report;
 - ``injection_containment``: model calls whose instructions are exactly the versioned prompt and whose
   data sections cannot be escaped (as many sections close as open);
 - ``citation_integrity``: candidates citing only passages that were retrieved for them;
@@ -50,6 +56,7 @@ from ai.llm.client import (
     Usage,
 )
 from core.architecture_ir.provenance import ProvenanceSource
+from core.architecture_ir.serialization import content_hash, from_dict, to_dict
 from core.domain.architecture_agent.ports import PassInputs
 from core.domain.architecture_agent.proposals import Answer
 from core.domain.architecture_agent.records import run_document
@@ -209,6 +216,8 @@ class Outcome:
     requests: tuple[StructuredRequest, ...]
     passes: tuple[int, ...]  # model calls per pass
     passages: tuple[Passage, ...]
+    requirements: tuple[Requirement, ...]
+    answered: dict[str, Any] | None  # the recorded answer the proposal came from, if any
 
     @property
     def expected(self) -> dict[str, Any]:
@@ -244,7 +253,9 @@ async def run_scenario(scenario: dict[str, Any]) -> Outcome:
         answers = tuple(Answer(q.id, scenario["answer"], USER, AT) for q in run.unanswered)
         run = await pipeline.advance(run.answer(answers, USER, AT), inputs)
         passes.append(len(llm.requests) - passes[0])
-    return Outcome(scenario, run, tuple(llm.requests), tuple(passes), passages)
+    used = [_output(o) for o in scenario["outputs"]][: len(llm.requests)]
+    answered = next((o for o in reversed(used) if isinstance(o, dict) and "nodes" in o), None)
+    return Outcome(scenario, run, tuple(llm.requests), tuple(passes), passages, requirements, answered)
 
 
 def _contained(request: StructuredRequest) -> bool:
@@ -260,6 +271,48 @@ def _unverified(candidate: Candidate) -> int:
     return sum(
         1 for p in provenances if p is None or p.source is not ProvenanceSource.LLM_PROPOSAL or p.verified
     )
+
+
+def _structural(candidate: Candidate) -> bool:
+    again = from_dict(to_dict(candidate.ir))
+    return not candidate.ir.problems() and content_hash(again) == candidate.content_hash
+
+
+def _traced(outcome: Outcome, candidate: Candidate) -> bool:
+    ir = candidate.ir
+    refs = [
+        *(r for n in ir.nodes for r in n.requirement_refs),
+        *(r for c in ir.connections for r in c.requirement_refs),
+        *(r for a in ir.assumptions for r in a.requirement_refs),
+    ]
+    given = {r.id: r for r in outcome.requirements}
+    traced = {r.requirement_id for r in refs}
+    pinned = all(r.requirement_id in given and r.version == given[r.requirement_id].version for r in refs)
+    uncovered = tuple(r.reference for r in outcome.requirements if r.id not in traced)
+    return pinned and uncovered == candidate.uncovered_requirements
+
+
+def _claims(output: dict[str, Any] | None, *bases: str) -> list[str]:
+    return [c["statement"] for c in (output or {}).get("claims", []) if c["basis"] in bases]
+
+
+def _assumptions_disclosed(outcome: Outcome, candidate: Candidate) -> bool:
+    stated = _claims(outcome.answered, "assumption")
+    return sorted(stated) == sorted(a.statement for a in candidate.ir.assumptions)
+
+
+def _unknowns_kept(outcome: Outcome) -> bool:
+    proposal = outcome.run.proposal
+    kept = (
+        [c.statement for c in proposal.claims if c.basis.value in {"unknown", "unsupported"}]
+        if proposal
+        else []
+    )
+    return sorted(_claims(outcome.answered, "unknown", "unsupported")) == sorted(kept)
+
+
+def _validated(run: AgentRun) -> bool:
+    return any(r.engine == "validation" and r.status.value == "evaluated" for r in run.reports)
 
 
 def _leaks(outcome: Outcome) -> int:
@@ -281,6 +334,12 @@ def _matches(outcome: Outcome) -> bool:
     if "evidence" in expected:
         cited = {e.chunk_id for e in candidate.evidence} if candidate else set()
         checks.append(cited == set(expected["evidence"]))
+    if "uncovered" in expected:
+        checks.append(
+            candidate is not None and list(candidate.uncovered_requirements) == expected["uncovered"]
+        )
+    if "assumptions" in expected:
+        checks.append(candidate is not None and len(candidate.ir.assumptions) == expected["assumptions"])
     if "blocking_questions" in expected:
         checks.append(sum(q.blocking for q in run.questions) == expected["blocking_questions"])
     return all(checks)
@@ -301,8 +360,18 @@ class Evaluation:
             for o, c in built
             if {e.chunk_id for e in c.evidence} <= {p.citation.chunk_id for p in o.passages}
         ]
+        proposed = [o for o in outcomes if o.run.proposal is not None]
+
+        def share(passed: int, of: int) -> float:
+            return round(passed / of, 4) if of else 1.0
+
         return {
             "scenarios": len(outcomes),
+            "ir_structural_validity": share(sum(_structural(c) for _, c in built), len(built)),
+            "requirement_traceability": share(sum(_traced(o, c) for o, c in built), len(built)),
+            "assumption_disclosure": share(sum(_assumptions_disclosed(o, c) for o, c in built), len(built)),
+            "unknowns_disclosed": share(sum(map(_unknowns_kept, proposed)), len(proposed)),
+            "validation_integration": share(sum(_validated(o.run) for o, _ in built), len(built)),
             "outcome_accuracy": round(sum(map(_matches, outcomes)) / len(outcomes), 4),
             "rejection_accuracy": round(len(refused) / len(refusing), 4) if refusing else 1.0,
             "injection_containment": round(sum(map(_contained, requests)) / len(requests), 4)

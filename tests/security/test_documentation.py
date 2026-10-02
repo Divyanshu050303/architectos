@@ -206,6 +206,7 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-021-deterministic-discovery.md",
         "ADR-022-deterministic-drift-detection.md",
         "ADR-023-lexical-evidence-retrieval.md",
+        "ADR-024-bounded-architecture-agent.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
@@ -219,6 +220,8 @@ def test_the_decisions_are_recorded() -> None:
     assert (DOCS / "architecture" / "drift-engine.md").exists()
     assert (DOCS / "frontend" / "knowledge-contract.md").exists()
     assert (DOCS / "architecture" / "knowledge-engine.md").exists()
+    assert (DOCS / "frontend" / "architecture-agent-contract.md").exists()
+    assert (DOCS / "architecture" / "architecture-agent.md").exists()
     assert (DOCS / "requirements-engine.md").exists()
     assert (DOCS / "frontend" / "architecture-contract.md").exists()
     assert (DOCS / "frontend" / "validation-contract.md").exists()

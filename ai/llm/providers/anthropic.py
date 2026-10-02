@@ -54,6 +54,8 @@ class AnthropicStructuredLlm:
         except anthropic.AnthropicError as error:  # any other SDK failure
             raise LlmUnavailable(type(error).__name__) from error
         latency_ms = int((time.monotonic() - started) * 1000)
+        if message.stop_reason == "refusal":
+            raise LlmUnavailable("refused")  # the model declined: asking again, unchanged, won't help
         if message.stop_reason == "max_tokens":
             raise LlmTruncated("the answer was cut off")
         text = "".join(block.text for block in message.content if block.type == "text")
