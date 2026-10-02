@@ -55,7 +55,15 @@ class Operation:
             .replace("{invitation_token}", "A" * 43)
             .replace("{directory}", "messaging")
             .replace("{entry}", "aws-sqs")
-        ) + ("?from=1&to=1" if url.endswith("/compare") else "")
+        ) + _query(url, values)
+
+
+def _query(url: str, values: dict[str, str]) -> str:
+    if url.endswith("/compare"):
+        return "?from=1&to=1"
+    if url.endswith("/comparison"):  # discovery runs: compared with another run
+        return "?with=" + values.get("other_run_id", str(uuid.uuid4()))
+    return ""
 
 
 def inventory(app: FastAPI) -> list[Operation]:

@@ -36,6 +36,8 @@ from core.domain.cost.queries import (
 from core.domain.cost.reports import CostReport
 from core.domain.cost.results import LineItem
 from core.domain.decisions.entities import Decision, DecisionStatus
+from core.domain.discovery.runs import DiscoveryRun, RunListing
+from core.domain.discovery.values import RunStatus
 from core.domain.evolution.candidates import Candidate
 from core.domain.evolution.queries import CandidateQuery, EvolutionQuery
 from core.domain.evolution.reports import EvolutionReport
@@ -1480,6 +1482,68 @@ class FakeMigrationPlanRepository:
         return sorted(found, key=lambda v: (v.created_at, v.id), reverse=True)[:limit]
 
 
+class FakeDiscoveryRunRepository:
+    def __init__(self) -> None:
+        self.runs: dict[uuid.UUID, DiscoveryRun] = {}
+
+    async def add(self, run: DiscoveryRun) -> DiscoveryRun:
+        self.runs[run.id] = run
+        return run
+
+    async def update_review(self, run: DiscoveryRun) -> DiscoveryRun:
+        assert run.id in self.runs
+        self.runs[run.id] = run
+        return run
+
+    async def get(
+        self, project_id: uuid.UUID, run_id: uuid.UUID, *, for_update: bool = False
+    ) -> DiscoveryRun | None:
+        found = self.runs.get(run_id)
+        return found if found is not None and found.project_id == project_id else None
+
+    async def list(
+        self,
+        project_id: uuid.UUID,
+        *,
+        status: RunStatus | None = None,
+        after: tuple[datetime, uuid.UUID] | None = None,
+        limit: int = 50,
+    ) -> list[RunListing]:
+        found = [
+            r
+            for r in self.runs.values()
+            if r.project_id == project_id
+            and (status is None or r.status is status)
+            and (after is None or (r.requested_at, r.id) < after)
+        ]
+        ordered = sorted(found, key=lambda r: (r.requested_at, r.id), reverse=True)[:limit]
+        return [
+            RunListing(
+                r.id,
+                r.project_id,
+                r.status,
+                r.requested_by_user_id,
+                r.requested_at,
+                r.source_type,
+                r.baseline,
+                r.label,
+                r.completed_at,
+                r.result.summary() if r.result else None,
+                r.result.fingerprint if r.result else None,
+                r.result.sources_fingerprint if r.result else None,
+                r.error,
+                len(r.decisions),
+                len(r.acceptances),
+            )
+            for r in ordered
+        ]
+
+    async def delete(self, project_id: uuid.UUID, run_id: uuid.UUID) -> None:
+        found = self.runs.get(run_id)
+        if found is not None and found.project_id == project_id:
+            del self.runs[run_id]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1506,6 +1570,7 @@ class FakeUnitOfWork:
         self._evolution = FakeEvolutionRepository()
         self._decisions = FakeDecisionRepository()
         self._migrations = FakeMigrationPlanRepository()
+        self._discoveries = FakeDiscoveryRunRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1604,6 +1669,10 @@ class FakeUnitOfWork:
     @property
     def migrations(self) -> FakeMigrationPlanRepository:
         return self._migrations
+
+    @property
+    def discoveries(self) -> FakeDiscoveryRunRepository:
+        return self._discoveries
 
     async def __aenter__(self) -> Self:
         return self

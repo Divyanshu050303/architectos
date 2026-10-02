@@ -33,7 +33,14 @@ class InvalidDiscoveryTransition(DomainError):
 
 
 class ProposalNotAcceptable(DomainError):
-    """``details`` = {"reason": "nothing_to_accept" | "structurally_invalid"}."""
+    """``details`` = {"reason": "nothing_to_accept" | "structurally_invalid" | "proposal_changed"}."""
 
     code = "discovery_proposal_not_acceptable"
     message = "The discovery proposal cannot be accepted as it is."
+
+
+class AcceptedRunNotDeleted(DomainError):
+    """A run whose proposal was accepted is the provenance of that revision: it is kept."""
+
+    code = "accepted_discovery_run"
+    message = "A discovery run whose proposal was accepted cannot be deleted."

@@ -70,6 +70,10 @@ class AuditAction(StrEnum):
     MIGRATION_PLAN_APPROVED = "migration_plan.approved"  # a person approved an exact version
     MIGRATION_PLAN_REJECTED = "migration_plan.rejected"  # a person rejected an exact version
     MIGRATION_PLAN_ARCHIVED = "migration_plan.archived"
+    DISCOVERY_RUN_CREATED = "discovery_run.created"  # artifacts were read; a result (or failure) stored
+    DISCOVERY_RUN_REVIEWED = "discovery_run.reviewed"  # a person decided about one candidate
+    DISCOVERY_RUN_ACCEPTED = "discovery_run.accepted"  # a person accepted the proposal as a revision
+    DISCOVERY_RUN_DELETED = "discovery_run.deleted"
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

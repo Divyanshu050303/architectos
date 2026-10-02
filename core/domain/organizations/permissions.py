@@ -45,6 +45,7 @@ class Permission(StrEnum):
     ARCHITECTURE_ANALYZE = "architecture.analyze"  # capacity analyses
     ARCHITECTURE_SIMULATE = "architecture.simulate"
     ARCHITECTURE_EVOLVE = "architecture.evolve"
+    ARCHITECTURE_DISCOVER = "architecture.discover"  # run discoveries and review their proposals
 
     MIGRATION_PLAN = "migration.plan"  # generate, regenerate, submit and archive migration plans
     MIGRATION_APPROVE = "migration.approve"  # approve or reject a migration plan version
@@ -73,6 +74,7 @@ _MEMBER = _VIEWER | {
     Permission.ARCHITECTURE_ANALYZE,
     Permission.ARCHITECTURE_SIMULATE,
     Permission.ARCHITECTURE_EVOLVE,
+    Permission.ARCHITECTURE_DISCOVER,
     Permission.MIGRATION_PLAN,
 }
 

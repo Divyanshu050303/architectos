@@ -14,6 +14,7 @@ from core.domain.capacity import errors as capacity_errors
 from core.domain.components import errors as component_errors
 from core.domain.cost import errors as cost_errors
 from core.domain.decisions import errors as decision_errors
+from core.domain.discovery import errors as discovery_errors
 from core.domain.errors import DomainError
 from core.domain.evolution import errors as evolution_errors
 from core.domain.migrations import errors as migration_errors
@@ -47,6 +48,7 @@ API_DOCS = "".join(
         "evolution.md",
         "decisions.md",
         "migration-plans.md",
+        "discovery.md",
         "components.md",
     )
 )
@@ -70,10 +72,10 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
     # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability, 6 simulation, 6
-    # evolution, 8 decision and 14 migration plan endpoints (GET /validation/rules, /capacity/models,
-    # /cost/models, /reliability/models, /security/analyzers, /observability/analyzers,
-    # /simulation/catalog and /evolution/catalog are not project-scoped)
-    assert len(served) == 102
+    # evolution, 8 decision, 14 migration plan and 10 discovery endpoints (GET /validation/rules,
+    # /capacity/models, /cost/models, /reliability/models, /security/analyzers,
+    # /observability/analyzers, /simulation/catalog and /evolution/catalog are not project-scoped)
+    assert len(served) == 112
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -121,6 +123,11 @@ def test_every_error_code_is_documented() -> None:
             migration_errors.PlanVersionMismatch,
             migration_errors.StaleMigrationPlan,
             migration_errors.ReviewedPlanNotReplaced,
+            discovery_errors.InvalidDiscoveryRequest,
+            discovery_errors.DiscoveryRunNotFound,
+            discovery_errors.InvalidDiscoveryTransition,
+            discovery_errors.ProposalNotAcceptable,
+            discovery_errors.AcceptedRunNotDeleted,
             component_errors.ComponentNotFound,
         )
     }
@@ -132,7 +139,15 @@ def test_every_audit_action_is_documented() -> None:
         a.value
         for a in AuditAction
         if a.value.split(".")[0]
-        in {"project", "requirement", "requirement_set", "architecture", "decision", "migration_plan"}
+        in {
+            "project",
+            "requirement",
+            "requirement_set",
+            "architecture",
+            "decision",
+            "migration_plan",
+            "discovery_run",
+        }
     }
     assert {a for a in actions if a not in API_DOCS} == set()
 

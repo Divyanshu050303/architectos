@@ -249,6 +249,17 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/approve"),
     ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/reject"),
     ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/archive"),
+    # Discovery: runs over supplied artifacts, their review and explicit acceptance.
+    ("POST", "/api/v1/projects/{project_id}/discovery-runs"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}/discovery-runs/{run_id}"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/findings"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/proposal"),
+    ("POST", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/decisions"),
+    ("POST", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/accept"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/comparison"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/baseline-comparison"),
 }
 
 

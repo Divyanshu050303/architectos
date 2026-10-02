@@ -23,6 +23,7 @@ from apps.api.routes import (
     components,
     cost,
     decisions,
+    discovery,
     evolution,
     invitations,
     migration_plans,
@@ -42,6 +43,7 @@ from apps.api.routes import (
 from engines.capacity.service import DeterministicCapacityEngine
 from engines.constraints.service import DeterministicConstraintEngine
 from engines.cost.service import DeterministicCostEngine
+from engines.discovery.engine import DeterministicDiscoveryEngine
 from engines.evolution.service import DeterministicEvolutionEngine
 from engines.migration.service import MigrationEngine
 from engines.observability.service import DeterministicObservabilityEngine
@@ -59,6 +61,8 @@ ARCHITECTURE_CREATE_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architect
 ARCHITECTURE_CONTENT_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architectures/{_UUID}/content")
 # Creating a price list: up to thousands of records.
 PRICING_SNAPSHOT_PATH = re.compile(rf"{API_PREFIX}/organizations/{_UUID}/pricing-snapshots")
+# Running a discovery: the artifacts' text inline (2 MiB of content, JSON-escaped).
+DISCOVERY_RUN_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/discovery-runs")
 
 
 def _rate_limiter(settings: Settings) -> RateLimiter:
@@ -99,6 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.simulation_engine = DeterministicSimulationEngine()
     app.state.evolution_engine = DeterministicEvolutionEngine()
     app.state.migration_engine = MigrationEngine()
+    app.state.discovery_engine = DeterministicDiscoveryEngine(app.state.component_catalog)
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -127,6 +132,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ("POST", ARCHITECTURE_CREATE_PATH, settings.max_architecture_body_bytes),
             ("PUT", ARCHITECTURE_CONTENT_PATH, settings.max_architecture_body_bytes),
             ("POST", PRICING_SNAPSHOT_PATH, settings.max_architecture_body_bytes),
+            ("POST", DISCOVERY_RUN_PATH, settings.max_discovery_body_bytes),
         ],
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.environment == "production")
@@ -154,4 +160,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(components.router, prefix=API_PREFIX)
     app.include_router(decisions.router, prefix=API_PREFIX)
     app.include_router(migration_plans.router, prefix=API_PREFIX)
+    app.include_router(discovery.router, prefix=API_PREFIX)
     return app

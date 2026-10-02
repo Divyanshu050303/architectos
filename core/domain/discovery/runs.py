@@ -304,3 +304,24 @@ class DiscoveryRun:
         if self.status not in REVIEWABLE:
             raise InvalidDiscoveryTransition(details={"from": self.status.value, "to": "accepted"})
         return replace(self, acceptances=(*self.acceptances, acceptance))
+
+
+@dataclass(frozen=True, slots=True)
+class RunListing:
+    """A run as listed: what it read and produced in counts, without its result."""
+
+    id: uuid.UUID
+    project_id: uuid.UUID
+    status: RunStatus
+    requested_by_user_id: uuid.UUID
+    requested_at: datetime
+    source_type: SourceType | None = None
+    baseline: Baseline | None = None
+    label: str | None = None
+    completed_at: datetime | None = None
+    summary: dict[str, Any] | None = None  # the result's counts; None: no result
+    fingerprint: str | None = None  # the result's
+    sources_fingerprint: str | None = None
+    error: RunError | None = None
+    decisions: int = 0
+    acceptances: int = 0
