@@ -10,6 +10,7 @@ from core.domain.architecture_agent.errors import (
     InvalidAgentRequest,
     InvalidAgentTransition,
 )
+from core.domain.architecture_agent.ports import ContextSection, ProposalContext, ProposerOutcome
 from core.domain.architecture_agent.proposals import (
     Answer,
     Claim,
@@ -419,3 +420,27 @@ def test_records_are_immutable() -> None:
     with pytest.raises(AttributeError):
         run.status = RunStatus.RUNNING  # type: ignore[misc]
     assert replace(run, stage=Stage.CONTEXT).stage is Stage.CONTEXT
+
+
+# --- proposer port ------------------------------------------------------------------------------
+
+
+def test_a_context_has_named_unique_sections() -> None:
+    context = ProposalContext((ContextSection("objective", "abc"), ContextSection("requirements", "de")))
+    assert context.size == 5
+    with pytest.raises(InvalidAgentRecord):
+        ProposalContext(())
+    with pytest.raises(InvalidAgentRecord):
+        ProposalContext((ContextSection("objective", "a"), ContextSection("objective", "b")))
+    with pytest.raises(InvalidAgentRecord):
+        ContextSection("Not A Code", "x")
+
+
+def test_an_outcome_is_a_proposal_or_a_failure() -> None:
+    usage = AgentUsage()
+    assert ProposerOutcome("m/x", "v1", usage, proposal=a_proposal()).failure is None
+    assert ProposerOutcome("m/x", "v1", usage, failure=FailureCode.LLM_TIMEOUT).proposal is None
+    with pytest.raises(InvalidAgentRecord):
+        ProposerOutcome("m/x", "v1", usage)
+    with pytest.raises(InvalidAgentRecord):
+        ProposerOutcome("m/x", "v1", usage, proposal=a_proposal(), failure=FailureCode.LLM_TIMEOUT)

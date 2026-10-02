@@ -87,6 +87,35 @@ async def test_failures_map_to_the_port_errors(handler: Any, error: type[Excepti
         await llm(handler).complete(REQUEST)
 
 
+@pytest.mark.parametrize(
+    ("status", "kind", "retryable"),
+    [
+        (529, "overloaded_error", True),
+        (429, "rate_limit_error", True),
+        (500, "api_error", True),
+        (401, "authentication_error", False),
+        (400, "invalid_request_error", False),
+    ],
+)
+async def test_only_transient_failures_are_retryable(status: int, kind: str, retryable: bool) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, json={"type": "error", "error": {"type": kind, "message": "x"}})
+
+    with pytest.raises(LlmUnavailable) as caught:
+        await llm(handler).complete(REQUEST)
+    assert caught.value.retryable is retryable
+    assert caught.value.code == "llm_unavailable"
+
+
+async def test_a_cut_off_answer_is_not_retried() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=message('{"requirements": [', "max_tokens"))
+
+    with pytest.raises(LlmMalformedOutput) as caught:
+        await llm(handler).complete(REQUEST)
+    assert caught.value.retryable is False
+
+
 async def test_timeouts_and_connection_failures() -> None:
     def timeout(request: httpx.Request) -> httpx.Response:
         raise httpx.ReadTimeout("slow", request=request)
@@ -94,10 +123,12 @@ async def test_timeouts_and_connection_failures() -> None:
     def refused(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("refused", request=request)
 
-    with pytest.raises(LlmTimeout):
+    with pytest.raises(LlmTimeout) as slow:
         await llm(timeout).complete(REQUEST)
-    with pytest.raises(LlmUnavailable):
+    with pytest.raises(LlmUnavailable) as down:
         await llm(refused).complete(REQUEST)
+    assert slow.value.retryable
+    assert down.value.retryable
 
 
 async def test_the_api_key_never_appears_in_errors() -> None:

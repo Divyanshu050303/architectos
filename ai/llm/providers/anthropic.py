@@ -10,7 +10,9 @@ from anthropic import AsyncAnthropic
 
 from ai.llm.client import (
     LlmMalformedOutput,
+    LlmOverloaded,
     LlmTimeout,
+    LlmTruncated,
     LlmUnavailable,
     StructuredRequest,
     StructuredResponse,
@@ -44,13 +46,16 @@ class AnthropicStructuredLlm:
             )
         except anthropic.APITimeoutError as error:
             raise LlmTimeout from error
-        except (anthropic.APIConnectionError, anthropic.APIStatusError) as error:
-            raise LlmUnavailable(type(error).__name__) from error
+        except anthropic.APIConnectionError as error:
+            raise LlmOverloaded(type(error).__name__) from error
+        except anthropic.APIStatusError as error:
+            transient = error.status_code == 429 or error.status_code >= 500
+            raise (LlmOverloaded if transient else LlmUnavailable)(type(error).__name__) from error
         except anthropic.AnthropicError as error:  # any other SDK failure
             raise LlmUnavailable(type(error).__name__) from error
         latency_ms = int((time.monotonic() - started) * 1000)
         if message.stop_reason == "max_tokens":
-            raise LlmMalformedOutput("the answer was cut off")
+            raise LlmTruncated("the answer was cut off")
         text = "".join(block.text for block in message.content if block.type == "text")
         try:
             data = json.loads(text)

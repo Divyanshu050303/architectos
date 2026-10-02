@@ -13,21 +13,35 @@ from typing import Any, Protocol
 
 
 class LlmError(Exception):
-    """A model could not produce a usable answer. ``code`` is stable and safe to record."""
+    """A model could not produce a usable answer. ``code`` is stable and safe to record;
+    ``retryable`` says whether asking again, unchanged, may succeed (a caller retries at most once)."""
 
     code = "llm_error"
+    retryable = False
 
 
 class LlmUnavailable(LlmError):
-    code = "llm_unavailable"  # not configured, unreachable, rate-limited, overloaded, refused
+    code = "llm_unavailable"  # not configured, refused, rejected (e.g. a bad key): asking again won't help
+
+
+class LlmOverloaded(LlmUnavailable):
+    code = "llm_unavailable"  # unreachable, rate-limited, overloaded, a server error: transient
+    retryable = True
 
 
 class LlmTimeout(LlmError):
     code = "llm_timeout"
+    retryable = True
 
 
 class LlmMalformedOutput(LlmError):
     code = "llm_malformed_output"  # not JSON, or not the requested shape
+    retryable = True
+
+
+class LlmTruncated(LlmMalformedOutput):
+    code = "llm_malformed_output"  # cut off at the output limit: the same request is cut off again
+    retryable = False
 
 
 @dataclass(frozen=True, slots=True)
