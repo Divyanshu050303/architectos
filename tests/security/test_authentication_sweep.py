@@ -249,6 +249,28 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/approve"),
     ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/reject"),
     ("POST", "/api/v1/projects/{project_id}/migration-plans/{plan_id}/versions/{version}/archive"),
+    # Discovery: runs over supplied artifacts, their review and explicit acceptance.
+    ("POST", "/api/v1/projects/{project_id}/discovery-runs"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}"),
+    ("DELETE", "/api/v1/projects/{project_id}/discovery-runs/{run_id}"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/findings"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/proposal"),
+    ("POST", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/decisions"),
+    ("POST", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/accept"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/comparison"),
+    ("GET", "/api/v1/projects/{project_id}/discovery-runs/{run_id}/baseline-comparison"),
+    # Drift: analyses of a revision against a discovery run, their review, confirmed identities.
+    ("POST", "/api/v1/projects/{project_id}/drift-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/drift-analyses"),
+    ("GET", "/api/v1/projects/{project_id}/drift-analyses/{drift_analysis_id}"),
+    ("GET", "/api/v1/projects/{project_id}/drift-analyses/{drift_analysis_id}/findings"),
+    ("GET", "/api/v1/projects/{project_id}/drift-analyses/{drift_analysis_id}/findings/{finding_id}"),
+    ("GET", "/api/v1/projects/{project_id}/drift-items"),
+    ("GET", "/api/v1/projects/{project_id}/drift-items/{item_id}"),
+    ("POST", "/api/v1/projects/{project_id}/drift-items/{item_id}/review"),
+    ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/identity-mappings"),
+    ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/identity-mappings"),
 }
 
 

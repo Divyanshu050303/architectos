@@ -39,7 +39,32 @@ MIGRATION_REQUEST = {
     "sourceRevision": 1,
     "target": {"revision": 2},
 }
+DISCOVERY_ARTIFACT = {
+    "path": "compose.yaml",
+    "content": "name: shop\nservices:\n  db:\n    image: postgres:16\n",
+}
+_DISCOVERY_RUN = "_api_v1_projects__project_id__discovery_runs__run_id__"
+_IDENTITY_MAPPINGS = "_api_v1_projects__project_id__architectures__architecture_id__identity_mappings_"
 VALID_BODIES: dict[str, dict[str, object]] = {
+    "run_discovery_api_v1_projects__project_id__discovery_runs_post": {"artifacts": [DISCOVERY_ARTIFACT]},
+    f"decide_discovery_candidate{_DISCOVERY_RUN}decisions_post": {
+        "subjectType": "entity",
+        "subject": "compose:shop/service/db",
+        "decision": "rejected",
+    },
+    f"accept_discovery_proposal{_DISCOVERY_RUN}accept_post": {"proposalContentHash": "0" * 64},
+    "run_drift_analysis_api_v1_projects__project_id__drift_analyses_post": {
+        "architectureId": str(uuid.uuid4()),
+        "baselineRevision": 1,
+        "discoveryRunId": str(uuid.uuid4()),
+    },
+    "review_drift_item_api_v1_projects__project_id__drift_items__item_id__review_post": {
+        "action": "acknowledge"
+    },
+    f"confirm_identity_mapping{_IDENTITY_MAPPINGS}post": {
+        "baselineId": "db",
+        "discoveredKey": "compose:shop/service/db",
+    },
     "create_pricing_snapshot_api_v1_organizations__organization_id__pricing_snapshots_post": {
         "name": "Prices",
         "records": [PRICE],

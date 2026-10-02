@@ -22,6 +22,8 @@ from core.domain.components.component_service import ComponentService
 from core.domain.cost.cost_service import CostService
 from core.domain.cost.snapshots import PricingService
 from core.domain.decisions.decision_service import DecisionService
+from core.domain.discovery.discovery_service import DiscoveryService
+from core.domain.drift.drift_service import DriftService
 from core.domain.evolution.evolution_service import EvolutionService
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
@@ -401,6 +403,25 @@ def get_migration_plan_service(
 
 
 MigrationPlanServiceDep = Annotated[MigrationPlanService, Depends(get_migration_plan_service)]
+
+
+def get_discovery_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> DiscoveryService:
+    # One engine per process, built at startup (see apps/api/main.py): pure, with the catalog injected.
+    return DiscoveryService(SqlAlchemyUnitOfWork(db, client), request.app.state.discovery_engine, clock=clock)
+
+
+DiscoveryServiceDep = Annotated[DiscoveryService, Depends(get_discovery_service)]
+
+
+def get_drift_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> DriftService:
+    return DriftService(SqlAlchemyUnitOfWork(db, client), request.app.state.drift_engine, clock=clock)
+
+
+DriftServiceDep = Annotated[DriftService, Depends(get_drift_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:

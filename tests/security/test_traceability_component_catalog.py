@@ -184,18 +184,23 @@ def test_the_domain_and_engine_reach_no_storage_network_or_dynamic_code() -> Non
 
 
 def test_specification_files_are_read_safely() -> None:
-    """Only the catalog reader parses YAML, with the safe loader that refuses aliases."""
+    """Only the catalog reader (and discovery's reader of untrusted artifacts) parse YAML, each with a
+    safe loader that refuses aliases."""
+    discovery = "engines/discovery/loading.py"
     readers = [
         path.relative_to(ROOT).as_posix()
         for package in ("core", "engines", "persistence", "apps")
         for path, tree in _python(package)
         if "yaml" in {name.split(".")[0] for name in _imports(tree)}
     ]
-    assert readers == [READER]
-    text = (ROOT / READER).read_text()
-    assert "Loader=_SafeLoader" in text
-    for unsafe in ("yaml.unsafe_load", "FullLoader", "UnsafeLoader", "yaml.Loader"):
-        assert unsafe not in text, unsafe
+    assert sorted(readers) == sorted([READER, discovery])
+    assert "Loader=_SafeLoader" in (ROOT / READER).read_text()
+    assert "class _Loader(yaml.SafeLoader)" in (ROOT / discovery).read_text()
+    for path in (READER, discovery):
+        text = (ROOT / path).read_text()
+        assert "aliases are not allowed" in text, path
+        for unsafe in ("yaml.unsafe_load", "FullLoader", "UnsafeLoader", "yaml.Loader"):
+            assert unsafe not in text, (path, unsafe)
 
 
 def _assigned(node: ast.AST) -> list[ast.expr]:
