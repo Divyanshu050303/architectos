@@ -277,6 +277,10 @@ def test_there_is_one_validation_framework() -> None:
         # And the migration planner's patterns: they describe how a change is carried out (steps),
         # they do not report validation findings.
         "engines/migration/patterns.py: Registry",
+        # And discovery's findings: facts extracted from source artifacts (with their location and
+        # how they are known), not validation findings — the proposed architecture is validated by
+        # this engine.
+        "core/domain/discovery/findings.py: Finding",
     }
     assert set(found) - allowed == set()
 

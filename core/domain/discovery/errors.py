@@ -1,0 +1,32 @@
+from core.domain.engine_results import InvalidEngineResult
+from core.domain.errors import DomainError
+
+
+class InvalidDiscoveryRequest(DomainError):
+    """``details`` = {"field", "reason"} (and the artifact concerned, when there is one)."""
+
+    code = "invalid_discovery_request"
+    message = "The discovery request is invalid."
+
+
+class InvalidDiscoveryResult(InvalidEngineResult):
+    """A discovery result with malformed parts (an engine bug, or a corrupted record).
+    ``details`` = {"fields": [...]}."""
+
+    code = "invalid_discovery_result"
+    message = "A discovery result is malformed."
+
+
+class DiscoveryRunNotFound(DomainError):
+    """No such discovery run in this project — also when it belongs to another project or tenant:
+    indistinguishable on purpose."""
+
+    code = "discovery_run_not_found"
+    message = "Discovery run not found."
+
+
+class InvalidDiscoveryTransition(DomainError):
+    """``details`` = {"from": status, "to": status}."""
+
+    code = "invalid_discovery_transition"
+    message = "The discovery run cannot move to that status from its current status."
