@@ -30,6 +30,7 @@ from .findings import (
 )
 from .values import (
     ArtifactStatus,
+    EntityRole,
     MappingStatus,
     RelationshipStatus,
     Severity,
@@ -153,7 +154,8 @@ class DiscoveryResult:
     @property
     def unresolved(self) -> tuple[str, ...]:
         """Entity keys and relationship ids a person must resolve before they enter the architecture."""
-        entities = [e.key for e in self.entities if e.mapping.status not in CONFIDENT or e.kind is None]
+        components = [e for e in self.entities if e.role is EntityRole.COMPONENT]
+        entities = [e.key for e in components if e.mapping.status not in CONFIDENT or e.kind is None]
         relationships = [r.id for r in self.relationships if r.status is RelationshipStatus.UNRESOLVED]
         return (*entities, *relationships)
 

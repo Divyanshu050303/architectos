@@ -27,6 +27,7 @@ from .values import (
     FINGERPRINT,
     MAX_REFERENCE,
     ArtifactStatus,
+    EntityRole,
     FindingType,
     MappingStatus,
     RelationshipStatus,
@@ -311,6 +312,8 @@ class CandidateEntity:
     location: SourceLocation
     mapping: ComponentMapping
     kind: NodeKind | None = None  # None: the source does not establish what it is
+    role: EntityRole = EntityRole.COMPONENT
+    kind_rule: str | None = None  # the rule that established the kind, e.g. "terraform-kinds@1"
     namespace: str | None = None  # a namespace, project or module, when declared
     technology: str | None = None  # a technology name, when established
     technology_version: str | None = None
@@ -327,6 +330,10 @@ class CandidateEntity:
                 None if isinstance(self.location, SourceLocation) else "entity.location",
                 None if isinstance(self.mapping, ComponentMapping) else "entity.mapping",
                 None if self.kind is None or isinstance(self.kind, NodeKind) else "entity.kind",
+                None if isinstance(self.role, EntityRole) else "entity.role",
+                text(self.kind_rule, "entity.kind_rule", 64, required=False),
+                "entity.kind" if self.kind is not None and self.role is not EntityRole.COMPONENT else None,
+                "entity.kind_rule" if (self.kind is None) != (self.kind_rule is None) else None,
                 text(self.namespace, "entity.namespace", 128, required=False),
                 text(self.technology, "entity.technology", 64, required=False),
                 text(self.technology_version, "entity.technology_version", 32, required=False),
@@ -352,6 +359,8 @@ class CandidateEntity:
             "location": self.location.to_dict(),
             "mapping": self.mapping.to_dict(),
             "kind": self.kind.value if self.kind else None,
+            "role": self.role.value,
+            "kind_rule": self.kind_rule,
             "namespace": self.namespace,
             "technology": self.technology,
             "technology_version": self.technology_version,

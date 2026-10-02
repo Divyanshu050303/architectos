@@ -92,6 +92,18 @@ class MappingStatus(StrEnum):
     UNSUPPORTED = "unsupported"  # the resource type is not interpreted
 
 
+class EntityRole(StrEnum):
+    """What a declared resource is to the architecture. Only a ``component`` can become a node; the
+    others are evidence that relationships rest on (a Service routes to workloads, a workload reads a
+    ConfigMap, mounts a volume, joins a network)."""
+
+    COMPONENT = "component"
+    ROUTING = "routing"  # e.g. a Kubernetes Service object
+    CONFIGURATION = "configuration"  # e.g. a ConfigMap, a Secret, a security group
+    VOLUME = "volume"  # e.g. a PersistentVolumeClaim, a Compose volume
+    NETWORK = "network"  # e.g. a Compose network, a VPC or subnet
+
+
 class RelationshipStatus(StrEnum):
     RESOLVED = "resolved"  # an explicit reference to an entity of the same discovery
     UNRESOLVED = "unresolved"  # the referenced entity is absent, or not uniquely identified

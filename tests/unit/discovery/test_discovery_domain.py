@@ -95,7 +95,7 @@ def ambiguous() -> ComponentMapping:
 def entity(key: str = API, mapping: ComponentMapping | None = None, **fields: Any) -> CandidateEntity:
     finding = entity_finding(key, 0 if key == API else 1)
     mapped = mapping or ComponentMapping(MappingStatus.MAPPED, RULE, "compute/kubernetes")
-    defaults: dict[str, Any] = {"kind": NodeKind.SERVICE, "finding_ids": (finding.id,)}
+    defaults: dict[str, Any] = {"kind": NodeKind.SERVICE, "kind_rule": "test@1", "finding_ids": (finding.id,)}
     name = key.rsplit("/", 1)[-1]
     return CandidateEntity(
         key, name, SourceType.KUBERNETES, "Deployment", finding.location, mapped, **(defaults | fields)
@@ -167,7 +167,7 @@ def test_entities_rest_on_evidence_and_their_keys_are_ir_ids() -> None:
         entity(finding_ids=())
     with pytest.raises(InvalidDiscoveryResult):
         entity("../escape")
-    assert entity(kind=None).kind is None  # what it is, the source does not say: unknown, not guessed
+    assert entity(kind=None, kind_rule=None).kind is None  # what it is, the source does not say: unknown
 
 
 def test_a_relationship_is_resolved_only_to_a_discovered_entity() -> None:
