@@ -30,6 +30,7 @@ from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
+from core.domain.knowledge.knowledge_service import KnowledgeService
 from core.domain.migrations.migration_service import MigrationPlanService
 from core.domain.notifications import Mailer
 from core.domain.observability.observability_service import ObservabilityService
@@ -422,6 +423,21 @@ def get_drift_service(
 
 
 DriftServiceDep = Annotated[DriftService, Depends(get_drift_service)]
+
+
+def get_knowledge_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> KnowledgeService:
+    # One engine per process, built at startup (see apps/api/main.py): pure, with its chunking settings.
+    return KnowledgeService(
+        SqlAlchemyUnitOfWork(db, client),
+        request.app.state.knowledge_engine,
+        clock=clock,
+        metrics=LogMetrics(),
+    )
+
+
+KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:

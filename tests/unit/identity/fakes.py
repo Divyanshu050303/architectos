@@ -57,6 +57,15 @@ from core.domain.identity.entities import (
 )
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
+from core.domain.knowledge.errors import KnowledgeSourceExists
+from core.domain.knowledge.ingestion import IngestionRun
+from core.domain.knowledge.ports import Indexed
+from core.domain.knowledge.retrieval import Candidate as KnowledgeCandidate
+from core.domain.knowledge.retrieval import RetrievalQuery, Scope
+from core.domain.knowledge.sources import KnowledgeSource
+from core.domain.knowledge.values import IndexStatus as KnowledgeStatus
+from core.domain.knowledge.values import Lifecycle as KnowledgeLifecycle
+from core.domain.knowledge.values import SourceType as KnowledgeSourceType
 from core.domain.migrations.entities import MigrationPlanVersion
 from core.domain.migrations.values import PlanStatus
 from core.domain.observability.queries import (
@@ -1660,6 +1669,163 @@ class FakeDriftRepository:
         return sorted(found, key=lambda m: m.confirmed_at)
 
 
+class FakeKnowledgeRepository:
+    """In memory, with the SQL repository's scoping and prefilter (shared terms or named identifiers)."""
+
+    def __init__(self) -> None:
+        self.sources: dict[uuid.UUID, KnowledgeSource] = {}
+        self.runs: dict[uuid.UUID, IngestionRun] = {}
+        self.versions: dict[tuple[uuid.UUID, int], Indexed] = {}
+        self.terms: dict[tuple[uuid.UUID, int, str], tuple[str, ...]] = {}
+
+    def _active(self, source: KnowledgeSource) -> bool:
+        return source.lifecycle is KnowledgeLifecycle.ACTIVE
+
+    async def add_source(self, source: KnowledgeSource) -> KnowledgeSource:
+        for other in self.sources.values():
+            same = (source.path is not None and other.path == source.path) or (
+                source.record is not None and other.record is not None
+                and other.record.record_id == source.record.record_id
+            )  # fmt: skip
+            if other.project_id == source.project_id and self._active(other) and same:
+                raise KnowledgeSourceExists(details={})
+        self.sources[source.id] = source
+        return source
+
+    async def save_source(self, source: KnowledgeSource) -> KnowledgeSource:
+        stored = self.sources[source.id]
+        assert (stored.project_id, stored.type, stored.path) == (source.project_id, source.type, source.path)
+        assert (stored.indexed_version or 0) <= (source.indexed_version or 0)  # never goes back
+        self.sources[source.id] = source
+        return source
+
+    async def get_source(
+        self, project_id: uuid.UUID, source_id: uuid.UUID, *, for_update: bool = False
+    ) -> KnowledgeSource | None:
+        found = self.sources.get(source_id)
+        return found if found is not None and found.project_id == project_id else None
+
+    async def find_source(
+        self, project_id: uuid.UUID, *, path: str | None = None, record_id: uuid.UUID | None = None
+    ) -> KnowledgeSource | None:
+        for source in self.sources.values():
+            if source.project_id != project_id or not self._active(source):
+                continue
+            if path is not None and source.path == path:
+                return source
+            if record_id is not None and source.record is not None and source.record.record_id == record_id:
+                return source
+        return None
+
+    async def list_sources(
+        self,
+        project_id: uuid.UUID,
+        *,
+        status: KnowledgeStatus | None = None,
+        source_type: KnowledgeSourceType | None = None,
+        lifecycle: KnowledgeLifecycle | None = KnowledgeLifecycle.ACTIVE,
+        after: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> list[KnowledgeSource]:
+        found = [
+            s
+            for s in self.sources.values()
+            if s.project_id == project_id
+            and (status is None or s.status is status)
+            and (source_type is None or s.type is source_type)
+            and (lifecycle is None or s.lifecycle is lifecycle)
+            and (after is None or s.id > after)
+        ]
+        return sorted(found, key=lambda s: s.id)[:limit]
+
+    async def add_run(self, run: IngestionRun) -> IngestionRun:
+        assert run.id not in self.runs  # written once
+        self.runs[run.id] = run
+        return run
+
+    async def get_run(
+        self, project_id: uuid.UUID, source_id: uuid.UUID, run_id: uuid.UUID
+    ) -> IngestionRun | None:
+        found = self.runs.get(run_id)
+        ok = found is not None and (found.project_id, found.source_id) == (project_id, source_id)
+        return found if ok else None
+
+    async def list_runs(
+        self, project_id: uuid.UUID, source_id: uuid.UUID, *, after: uuid.UUID | None = None, limit: int = 50
+    ) -> list[IngestionRun]:
+        found = [
+            r
+            for r in self.runs.values()
+            if (r.project_id, r.source_id) == (project_id, source_id) and (after is None or r.id < after)
+        ]
+        return sorted(found, key=lambda r: r.id, reverse=True)[:limit]
+
+    async def add_version(
+        self, project_id: uuid.UUID, indexed: Indexed, terms: Mapping[str, tuple[str, ...]]
+    ) -> None:
+        key = (indexed.version.source_id, indexed.version.number)
+        assert key not in self.versions  # append-only
+        assert indexed.version.ingestion_run_id in self.runs  # the run is stored first
+        self.versions[key] = indexed
+        for chunk in indexed.chunks:
+            self.terms[(*key, chunk.id)] = terms.get(chunk.id, ())
+
+    def _in_scope(self, project_id: uuid.UUID, query: RetrievalQuery) -> list[KnowledgeSource]:
+        return [
+            s
+            for s in self.sources.values()
+            if s.project_id == project_id
+            and self._active(s)
+            and (not query.source_ids or s.id in query.source_ids)
+            and (not query.source_types or s.type in query.source_types)
+        ]
+
+    async def scope(self, project_id: uuid.UUID, query: RetrievalQuery) -> Scope:
+        sources = self._in_scope(project_id, query)
+        stale = [s for s in sources if s.status is KnowledgeStatus.STALE]
+        searched = [
+            s for s in sources if s.indexed_version is not None and (query.include_stale or s not in stale)
+        ]
+        not_indexed = [s for s in sources if s.indexed_version is None]
+        return Scope(project_id, len(searched), len(not_indexed), 0 if query.include_stale else len(stale))
+
+    def _candidate(self, source: KnowledgeSource, indexed: Indexed, chunk_id: str) -> KnowledgeCandidate:
+        chunk = next(c for c in indexed.chunks if c.id == chunk_id)
+        document = indexed.document
+        return KnowledgeCandidate(
+            source.project_id, chunk, source.name, source.type, source.status is KnowledgeStatus.STALE,
+            document.verification, document.record_status,
+        )  # fmt: skip
+
+    async def candidates(
+        self, project_id: uuid.UUID, query: RetrievalQuery, terms: tuple[str, ...], limit: int
+    ) -> list[KnowledgeCandidate]:
+        found: list[KnowledgeCandidate] = []
+        for source in self._in_scope(project_id, query):
+            if source.indexed_version is None:
+                continue
+            if not query.include_stale and source.status is KnowledgeStatus.STALE:
+                continue
+            indexed = self.versions[(source.id, source.indexed_version)]
+            for chunk in indexed.chunks:
+                stored = self.terms[(source.id, source.indexed_version, chunk.id)]
+                if set(chunk.identifiers) & set(query.identifiers) or set(stored) & set(terms):
+                    found.append(self._candidate(source, indexed, chunk.id))
+        return found[:limit]
+
+    async def chunk(
+        self, project_id: uuid.UUID, source_id: uuid.UUID, chunk_id: str, version: int | None = None
+    ) -> KnowledgeCandidate | None:
+        source = await self.get_source(project_id, source_id)
+        if source is None or not self._active(source):
+            return None
+        number = version or source.indexed_version
+        indexed = self.versions.get((source_id, number)) if number else None
+        if indexed is None or not any(c.id == chunk_id for c in indexed.chunks):
+            return None
+        return self._candidate(source, indexed, chunk_id)
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1688,6 +1854,7 @@ class FakeUnitOfWork:
         self._migrations = FakeMigrationPlanRepository()
         self._discoveries = FakeDiscoveryRunRepository()
         self._drift = FakeDriftRepository()
+        self._knowledge = FakeKnowledgeRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1794,6 +1961,10 @@ class FakeUnitOfWork:
     @property
     def drift(self) -> FakeDriftRepository:
         return self._drift
+
+    @property
+    def knowledge(self) -> FakeKnowledgeRepository:
+        return self._knowledge
 
     async def __aenter__(self) -> Self:
         return self

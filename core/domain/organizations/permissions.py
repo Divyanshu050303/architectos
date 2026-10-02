@@ -48,6 +48,9 @@ class Permission(StrEnum):
     ARCHITECTURE_DISCOVER = "architecture.discover"  # run discoveries and review their proposals
     ARCHITECTURE_DRIFT = "architecture.drift"  # run drift analyses, review drift items, confirm identities
 
+    KNOWLEDGE_READ = "knowledge.read"  # search project knowledge, read sources, passages and ingestions
+    KNOWLEDGE_MANAGE = "knowledge.manage"  # register, re-index and archive knowledge sources
+
     MIGRATION_PLAN = "migration.plan"  # generate, regenerate, submit and archive migration plans
     MIGRATION_APPROVE = "migration.approve"  # approve or reject a migration plan version
 
@@ -59,6 +62,7 @@ _VIEWER = frozenset(
         Permission.PROJECT_READ,
         Permission.REQUIREMENT_READ,
         Permission.ARCHITECTURE_READ,
+        Permission.KNOWLEDGE_READ,
     }
 )
 
@@ -77,6 +81,7 @@ _MEMBER = _VIEWER | {
     Permission.ARCHITECTURE_EVOLVE,
     Permission.ARCHITECTURE_DISCOVER,
     Permission.ARCHITECTURE_DRIFT,
+    Permission.KNOWLEDGE_MANAGE,
     Permission.MIGRATION_PLAN,
 }
 

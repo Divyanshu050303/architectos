@@ -53,7 +53,13 @@ _PLAN_VERSION = _PLAN + "versions__version__"
 _DISCOVERY = "_api_v1_projects__project_id__discovery_runs__run_id__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
-READ_ONLY = {"validate_requirement_api_v1_projects__project_id__requirements__requirement_id__validate_post"}
+_KNOWLEDGE = "_api_v1_projects__project_id__knowledge_sources__source_id__"
+SEARCH = "search_knowledge_api_v1_projects__project_id__knowledge_search_post"
+READ_ONLY = {
+    "validate_requirement_api_v1_projects__project_id__requirements__requirement_id__validate_post",
+    SEARCH,  # a search: nothing changes but a record snapshot's staleness, which is not an action
+}
+READ_BODIES: dict[str, dict[str, Any]] = {SEARCH: {"text": "replica failover"}}
 # Mutations deliberately not audited, each with the reason.
 NOT_AUDITED = {
     # Where boxes are drawn: presentation, never an architecture change or a revision.
@@ -82,6 +88,7 @@ class Target:
     drift_architecture_id: str = ""  # set by with_drift: accepted from that run
     drift_analysis_id: str = ""
     drift_item_id: str = ""
+    knowledge_source_id: str = ""  # set by with_knowledge
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -323,6 +330,40 @@ async def with_drift(client: AsyncClient, auth: dict[str, str], target: Target) 
     target.drift_item_id = str(listed.json()["items"][0]["id"])
 
 
+# A knowledge document whose name and text carry canaries: the audit log must record none of them.
+KNOWLEDGE_REQUEST = {
+    "name": CANARY_TITLE,
+    "document": {
+        "path": "docs/runbook.md",
+        "content": f"# Runbook\n\n{CANARY_STATEMENT}\n\nPromote the replica on failover.\n",
+    },
+}
+
+
+async def with_knowledge(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An indexed knowledge document."""
+    registered = await client.post(
+        f"/api/v1/projects/{target.project_id}/knowledge-sources", json=KNOWLEDGE_REQUEST, headers=auth
+    )
+    assert registered.status_code == 201, registered.text
+    target.knowledge_source_id = str(registered.json()["source"]["id"])
+
+
+async def knowledge_ids(client: AsyncClient, auth: dict[str, str], target: Target) -> dict[str, str]:
+    """An indexed document, its ingestion and a passage: the ids the knowledge reads need."""
+    await with_knowledge(client, auth, target)
+    url = f"/api/v1/projects/{target.project_id}/knowledge-sources/{target.knowledge_source_id}"
+    runs = (await client.get(f"{url}/ingestions", headers=auth)).json()["runs"]
+    found = await client.post(
+        f"/api/v1/projects/{target.project_id}/knowledge/search", json=READ_BODIES[SEARCH], headers=auth
+    )
+    return {
+        "source_id": target.knowledge_source_id,
+        "ingestion_id": runs[0]["id"],
+        "chunk_id": found.json()["passages"][0]["citation"]["chunkId"],
+    }
+
+
 @dataclass(frozen=True)
 class Plan:
     actions: set[str]  # must all be recorded
@@ -533,6 +574,18 @@ PLANS: dict[str, Plan] = {
         {"baselineId": "compose:shop/service/db", "discoveredKey": "compose:shop/service/db"},
         with_drift_baseline,
     ),
+    "register_knowledge_source_api_v1_projects__project_id__knowledge_sources_post": Plan(
+        {"knowledge_source.registered", "knowledge_source.ingested"}, "created_source", KNOWLEDGE_REQUEST
+    ),
+    f"reindex_knowledge_source{_KNOWLEDGE}ingestions_post": Plan(
+        {"knowledge_source.ingested"},
+        "knowledge",
+        {"content": f"# Runbook\n\n{CANARY_REASON}\n"},
+        with_knowledge,
+    ),
+    f"archive_knowledge_source{_KNOWLEDGE}archive_post": Plan(
+        {"knowledge_source.archived"}, "knowledge", None, with_knowledge
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -565,6 +618,7 @@ def test_every_project_scoped_audit_action_is_exercised() -> None:
         "drift_analysis",
         "drift_item",
         "drift_identity",
+        "knowledge_source",
     }
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
@@ -580,12 +634,15 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
         "discovery": target.discovery_run_id,
         "drift_item": target.drift_item_id,
         "drift_architecture": target.drift_architecture_id,
+        "knowledge": target.knowledge_source_id,
     }
     match resource:
         case "promoted":
             return str(response.json()["promotions"][0]["requirement"]["id"])
         case "created_plan":  # the plan's id, not its version's
             return str(response.json()["planId"])
+        case "created_source":  # the knowledge source the registration created
+            return str(response.json()["source"]["id"])
         case "accepted_architecture":  # the architecture the accepted proposal created
             return str(response.json()["architectureId"])
         case "created":
@@ -656,6 +713,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             "plan_id": target.plan_id,
             **({"run_id": target.discovery_run_id} if target.discovery_run_id else {}),
             **({"item_id": target.drift_item_id} if target.drift_item_id else {}),
+            **({"source_id": target.knowledge_source_id} if target.knowledge_source_id else {}),
         }
         url = op.url(**values)
         body = plan.body(target) if callable(plan.body) else plan.body
@@ -748,6 +806,7 @@ async def test_read_only_endpoints_write_nothing(
         f"/api/v1/projects/{drifted.project_id}/drift-analyses/{drifted.drift_analysis_id}/findings",
         headers=auth,
     )
+    knowledge = await knowledge_ids(client, auth, target)  # an indexed document in the main project
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -772,6 +831,7 @@ async def test_read_only_endpoints_write_nothing(
         "observability_analysis_id": observability.json()["id"],
         "simulation_id": simulation.json()["id"],
         "other_simulation_id": simulation.json()["id"],
+        **knowledge,
     }
     evolving = ids | {
         "architecture_id": decided.architecture_id,
@@ -794,7 +854,8 @@ async def test_read_only_endpoints_write_nothing(
                 "finding_id": drift_findings.json()["findings"][0]["id"],
                 "item_id": drifted.drift_item_id,
             }
-        response = await client.request(op.method, op.url(**values), headers=auth)
+        body = READ_BODIES.get(op.operation_id)
+        response = await client.request(op.method, op.url(**values), json=body, headers=auth)
         assert response.is_success, (op.operation_id, response.text)
 
     assert await audit_entries(client, auth, org_id) == before

@@ -61,6 +61,13 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     "review_drift_item_api_v1_projects__project_id__drift_items__item_id__review_post": {
         "action": "acknowledge"
     },
+    "register_knowledge_source_api_v1_projects__project_id__knowledge_sources_post": {
+        "document": {"path": "docs/a.md", "content": "# A"}
+    },
+    "reindex_knowledge_source_api_v1_projects__project_id__knowledge_sources__source_id__ingestions_post": {
+        "content": "# A"
+    },
+    "search_knowledge_api_v1_projects__project_id__knowledge_search_post": {"text": "replica"},
     f"confirm_identity_mapping{_IDENTITY_MAPPINGS}post": {
         "baselineId": "db",
         "discoveredKey": "compose:shop/service/db",

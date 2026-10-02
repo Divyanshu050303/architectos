@@ -27,6 +27,7 @@ from apps.api.routes import (
     drift,
     evolution,
     invitations,
+    knowledge,
     migration_plans,
     observability,
     organizations,
@@ -47,6 +48,7 @@ from engines.cost.service import DeterministicCostEngine
 from engines.discovery.engine import DeterministicDiscoveryEngine
 from engines.drift.engine import DeterministicDriftEngine
 from engines.evolution.service import DeterministicEvolutionEngine
+from engines.knowledge.engine import DeterministicKnowledgeEngine
 from engines.migration.service import MigrationEngine
 from engines.observability.service import DeterministicObservabilityEngine
 from engines.reliability.service import DeterministicReliabilityEngine
@@ -65,6 +67,9 @@ ARCHITECTURE_CONTENT_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/architec
 PRICING_SNAPSHOT_PATH = re.compile(rf"{API_PREFIX}/organizations/{_UUID}/pricing-snapshots")
 # Running a discovery: the artifacts' text inline (2 MiB of content, JSON-escaped).
 DISCOVERY_RUN_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/discovery-runs")
+# Registering or re-indexing a knowledge document: its text inline (512 KiB, JSON-escaped).
+KNOWLEDGE_SOURCE_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/knowledge-sources")
+KNOWLEDGE_INGESTION_PATH = re.compile(rf"{API_PREFIX}/projects/{_UUID}/knowledge-sources/{_UUID}/ingestions")
 
 
 def _rate_limiter(settings: Settings) -> RateLimiter:
@@ -107,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.migration_engine = MigrationEngine()
     app.state.discovery_engine = DeterministicDiscoveryEngine(app.state.component_catalog)
     app.state.drift_engine = DeterministicDriftEngine(app.state.component_catalog)
+    app.state.knowledge_engine = DeterministicKnowledgeEngine()
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -136,6 +142,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ("PUT", ARCHITECTURE_CONTENT_PATH, settings.max_architecture_body_bytes),
             ("POST", PRICING_SNAPSHOT_PATH, settings.max_architecture_body_bytes),
             ("POST", DISCOVERY_RUN_PATH, settings.max_discovery_body_bytes),
+            ("POST", KNOWLEDGE_SOURCE_PATH, settings.max_knowledge_body_bytes),
+            ("POST", KNOWLEDGE_INGESTION_PATH, settings.max_knowledge_body_bytes),
         ],
     )
     app.add_middleware(SecurityHeadersMiddleware, hsts=settings.environment == "production")
@@ -165,4 +173,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(migration_plans.router, prefix=API_PREFIX)
     app.include_router(discovery.router, prefix=API_PREFIX)
     app.include_router(drift.router, prefix=API_PREFIX)
+    app.include_router(knowledge.router, prefix=API_PREFIX)
     return app

@@ -24,6 +24,14 @@ class KnowledgeSourceNotFound(DomainError):
     message = "Knowledge source not found."
 
 
+class KnowledgeSourceExists(DomainError):
+    """The document (by path) or record is already a source of this project. ``details`` =
+    {"source_id"}: re-index that source instead — registering twice never creates a duplicate."""
+
+    code = "knowledge_source_exists"
+    message = "That document or record is already a knowledge source of this project."
+
+
 class KnowledgeChunkNotFound(DomainError):
     """No such passage in an indexed source of this project — also when it belongs to another project
     or tenant, or to a version that is no longer indexed."""

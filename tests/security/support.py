@@ -58,6 +58,9 @@ class Operation:
             .replace("{drift_analysis_id}", str(uuid.uuid4()))
             .replace("{finding_id}", "dft_" + "0" * 20)
             .replace("{item_id}", str(uuid.uuid4()))
+            .replace("{source_id}", str(uuid.uuid4()))
+            .replace("{ingestion_id}", str(uuid.uuid4()))
+            .replace("{chunk_id}", "kch_" + "0" * 20)
         ) + _query(url, values)
 
 

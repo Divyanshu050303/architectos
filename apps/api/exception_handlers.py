@@ -88,6 +88,14 @@ from core.domain.identity.errors import (
     TokenExpired,
     WeakPassword,
 )
+from core.domain.knowledge.errors import (
+    IngestionRunNotFound,
+    InvalidKnowledgeRequest,
+    InvalidKnowledgeTransition,
+    KnowledgeChunkNotFound,
+    KnowledgeSourceExists,
+    KnowledgeSourceNotFound,
+)
 from core.domain.migrations.errors import (
     InvalidMigrationRequest,
     InvalidPlanTransition,
@@ -270,6 +278,12 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     DriftItemNotFound: 404,
     InvalidDriftTransition: 409,
     InvalidReviewAction: 409,
+    InvalidKnowledgeRequest: 422,
+    KnowledgeSourceNotFound: 404,
+    KnowledgeChunkNotFound: 404,
+    IngestionRunNotFound: 404,
+    KnowledgeSourceExists: 409,
+    InvalidKnowledgeTransition: 409,
     ProposalNotAcceptable: 409,
     AcceptedRunNotDeleted: 409,
 }

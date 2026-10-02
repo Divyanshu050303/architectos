@@ -271,6 +271,16 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/drift-items/{item_id}/review"),
     ("GET", "/api/v1/projects/{project_id}/architectures/{architecture_id}/identity-mappings"),
     ("POST", "/api/v1/projects/{project_id}/architectures/{architecture_id}/identity-mappings"),
+    # Knowledge: sources, their ingestions and passages, and search.
+    ("POST", "/api/v1/projects/{project_id}/knowledge-sources"),
+    ("GET", "/api/v1/projects/{project_id}/knowledge-sources"),
+    ("GET", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}"),
+    ("POST", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/ingestions"),
+    ("GET", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/ingestions"),
+    ("GET", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/ingestions/{ingestion_id}"),
+    ("POST", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/archive"),
+    ("GET", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/passages/{chunk_id}"),
+    ("POST", "/api/v1/projects/{project_id}/knowledge/search"),
 }
 
 

@@ -14,6 +14,7 @@ from persistence.repositories.discovery import SqlAlchemyDiscoveryRunRepository
 from persistence.repositories.drift import SqlAlchemyDriftRepository
 from persistence.repositories.evolution import SqlAlchemyEvolutionRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
+from persistence.repositories.knowledge import SqlAlchemyKnowledgeRepository
 from persistence.repositories.migrations import SqlAlchemyMigrationPlanRepository
 from persistence.repositories.observability import SqlAlchemyObservabilityAnalysisRepository
 from persistence.repositories.organizations import (
@@ -71,6 +72,7 @@ class SqlAlchemyUnitOfWork:
         self.migrations = SqlAlchemyMigrationPlanRepository(session)
         self.discoveries = SqlAlchemyDiscoveryRunRepository(session)
         self.drift = SqlAlchemyDriftRepository(session)
+        self.knowledge = SqlAlchemyKnowledgeRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

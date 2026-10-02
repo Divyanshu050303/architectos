@@ -41,6 +41,10 @@ EVOLUTION_TABLES = {"evolution_analyses", "evolution_candidates", "decisions"}
 MIGRATION_TABLES = {"migration_plan_versions"}
 DISCOVERY_TABLES = {"discovery_runs"}
 DRIFT_TABLES = {"drift_analyses", "drift_items", "drift_identity_mappings"}
+KNOWLEDGE_TABLES = {
+    "knowledge_sources", "knowledge_ingestion_runs", "knowledge_source_versions", "knowledge_documents",
+    "knowledge_chunks",
+}  # fmt: skip
 ALL_TABLES = (
     AUTH_TABLES
     | PROJECT_TABLES
@@ -60,6 +64,7 @@ ALL_TABLES = (
     | MIGRATION_TABLES
     | DISCOVERY_TABLES
     | DRIFT_TABLES
+    | KNOWLEDGE_TABLES
 )
 GUARDS = {
     "audit_logs_reject_change",
@@ -68,6 +73,7 @@ GUARDS = {
     "migration_plan_versions_guard",
     "discovery_runs_guard",
     "drift_items_guard",
+    "knowledge_sources_guard",
 }
 
 
@@ -251,6 +257,7 @@ def test_downgrading_analyses_leaves_requirement_sets_intact(empty_database_url:
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - ANALYSIS_TABLES
         - ARCHITECTURE_TABLES
         - VALIDATION_TABLES
@@ -277,6 +284,7 @@ def test_downgrading_validation_leaves_architectures_intact(empty_database_url: 
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - VALIDATION_TABLES
         - CAPACITY_TABLES
         - PRICING_TABLES
@@ -301,6 +309,7 @@ def test_downgrading_capacity_leaves_validation_intact(empty_database_url: str) 
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - CAPACITY_TABLES
         - PRICING_TABLES
         - COST_TABLES
@@ -324,6 +333,7 @@ def test_downgrading_pricing_leaves_capacity_intact(empty_database_url: str) -> 
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - PRICING_TABLES
         - COST_TABLES
         - RELIABILITY_TABLES
@@ -346,6 +356,7 @@ def test_downgrading_cost_leaves_pricing_intact(empty_database_url: str) -> None
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - COST_TABLES
         - RELIABILITY_TABLES
         - SECURITY_TABLES
@@ -367,6 +378,7 @@ def test_downgrading_reliability_leaves_cost_intact(empty_database_url: str) -> 
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - RELIABILITY_TABLES
         - SECURITY_TABLES
         - OBSERVABILITY_TABLES
@@ -387,6 +399,7 @@ def test_downgrading_security_leaves_reliability_intact(empty_database_url: str)
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - SECURITY_TABLES
         - OBSERVABILITY_TABLES
         - SIMULATION_TABLES
@@ -406,6 +419,7 @@ def test_downgrading_observability_leaves_security_intact(empty_database_url: st
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - OBSERVABILITY_TABLES
         - SIMULATION_TABLES
         - EVOLUTION_TABLES
@@ -420,7 +434,12 @@ def test_downgrading_evolution_leaves_simulations_intact(empty_database_url: str
     command.downgrade(config, "0018")
     assert (
         _tables(empty_database_url)
-        == ALL_TABLES - MIGRATION_TABLES - DISCOVERY_TABLES - DRIFT_TABLES - EVOLUTION_TABLES
+        == ALL_TABLES
+        - MIGRATION_TABLES
+        - DISCOVERY_TABLES
+        - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
+        - EVOLUTION_TABLES
     )
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -436,6 +455,7 @@ def test_downgrading_simulations_leaves_observability_intact(empty_database_url:
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - SIMULATION_TABLES
         - EVOLUTION_TABLES
     )
@@ -447,7 +467,10 @@ def test_downgrading_migration_plans_leaves_evolution_intact(empty_database_url:
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0019")
-    assert _tables(empty_database_url) == ALL_TABLES - MIGRATION_TABLES - DISCOVERY_TABLES - DRIFT_TABLES
+    assert (
+        _tables(empty_database_url)
+        == ALL_TABLES - MIGRATION_TABLES - DISCOVERY_TABLES - DRIFT_TABLES - KNOWLEDGE_TABLES
+    )
     assert "migration_plan_versions_guard" not in _functions(empty_database_url)
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -463,6 +486,7 @@ def test_downgrading_architectures_leaves_requirements_intact(empty_database_url
         - MIGRATION_TABLES
         - DISCOVERY_TABLES
         - DRIFT_TABLES
+        - KNOWLEDGE_TABLES
         - ARCHITECTURE_TABLES
         - VALIDATION_TABLES
         - CAPACITY_TABLES
@@ -525,7 +549,7 @@ def test_downgrading_discovery_leaves_migration_plans_intact(empty_database_url:
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0020")
-    assert _tables(empty_database_url) == ALL_TABLES - DISCOVERY_TABLES - DRIFT_TABLES
+    assert _tables(empty_database_url) == ALL_TABLES - DISCOVERY_TABLES - DRIFT_TABLES - KNOWLEDGE_TABLES
     assert "discovery_runs_guard" not in _functions(empty_database_url)
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES
@@ -535,8 +559,19 @@ def test_downgrading_drift_leaves_discovery_runs_intact(empty_database_url: str)
     config = alembic_config(empty_database_url)
     command.upgrade(config, "head")
     command.downgrade(config, "0021")
-    assert _tables(empty_database_url) == ALL_TABLES - DRIFT_TABLES
+    assert _tables(empty_database_url) == ALL_TABLES - DRIFT_TABLES - KNOWLEDGE_TABLES
     assert "drift_items_guard" not in _functions(empty_database_url)
+    assert "requirement_sets_reject_change" in _functions(empty_database_url)  # still guards its tables
+    command.upgrade(config, "head")
+    assert _tables(empty_database_url) == ALL_TABLES
+
+
+def test_downgrading_knowledge_leaves_drift_intact(empty_database_url: str) -> None:
+    config = alembic_config(empty_database_url)
+    command.upgrade(config, "head")
+    command.downgrade(config, "0022")
+    assert _tables(empty_database_url) == ALL_TABLES - KNOWLEDGE_TABLES
+    assert "knowledge_sources_guard" not in _functions(empty_database_url)
     assert "requirement_sets_reject_change" in _functions(empty_database_url)  # still guards its tables
     command.upgrade(config, "head")
     assert _tables(empty_database_url) == ALL_TABLES

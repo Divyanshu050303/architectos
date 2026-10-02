@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     max_architecture_body_bytes: int = Field(default=2 * 1024 * 1024, ge=64 * 1024, le=16 * 1024 * 1024)
     # A discovery's artifacts, inline: 2 MiB of content at most, more once JSON-escaped.
     max_discovery_body_bytes: int = Field(default=6 * 1024 * 1024, ge=64 * 1024, le=16 * 1024 * 1024)
+    # A knowledge document, inline: 512 KiB of content at most, more once JSON-escaped.
+    max_knowledge_body_bytes: int = Field(default=4 * 1024 * 1024, ge=64 * 1024, le=16 * 1024 * 1024)
     # Concurrent Argon2 hashes per process (each ~64 MiB).
     password_hash_concurrency: int = Field(default=4, ge=1, le=64)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

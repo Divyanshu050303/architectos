@@ -11,6 +11,13 @@ from .drift import DriftAnalysisRecord, DriftIdentityMappingRecord, DriftItemRec
 from .email_verification_token import EmailVerificationTokenRecord
 from .evolution import EvolutionAnalysisRecord, EvolutionCandidateRecord
 from .invitation import InvitationRecord
+from .knowledge import (
+    KnowledgeChunkRecord,
+    KnowledgeDocumentRecord,
+    KnowledgeIngestionRunRecord,
+    KnowledgeSourceRecord,
+    KnowledgeSourceVersionRecord,
+)
 from .migration import MigrationPlanVersionRecord
 from .observability import (
     ObservabilityAnalysisRecord,
@@ -52,6 +59,11 @@ __all__ = [
     "EvolutionAnalysisRecord",
     "EvolutionCandidateRecord",
     "InvitationRecord",
+    "KnowledgeChunkRecord",
+    "KnowledgeDocumentRecord",
+    "KnowledgeIngestionRunRecord",
+    "KnowledgeSourceRecord",
+    "KnowledgeSourceVersionRecord",
     "MigrationPlanVersionRecord",
     "ObservabilityAnalysisRecord",
     "ObservabilityComponentRecord",

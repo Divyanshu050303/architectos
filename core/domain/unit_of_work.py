@@ -17,6 +17,7 @@ from core.domain.discovery.repository import DiscoveryRunRepository
 from core.domain.drift.repository import DriftRepository
 from core.domain.evolution.repository import EvolutionRepository
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
+from core.domain.knowledge.repository import KnowledgeRepository
 from core.domain.migrations.repository import MigrationPlanRepository
 from core.domain.observability.repository import ObservabilityAnalysisRepository
 from core.domain.organizations.repository import (
@@ -114,6 +115,9 @@ class UnitOfWork(Protocol):
 
     @property
     def drift(self) -> DriftRepository: ...
+
+    @property
+    def knowledge(self) -> KnowledgeRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

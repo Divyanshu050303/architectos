@@ -77,6 +77,9 @@ class AuditAction(StrEnum):
     DRIFT_ANALYSIS_CREATED = "drift_analysis.created"  # a baseline revision compared with a discovery run
     DRIFT_ITEM_REVIEWED = "drift_item.reviewed"  # a person acted on a drift item (never the architecture)
     DRIFT_IDENTITY_CONFIRMED = "drift_identity.confirmed"  # a person confirmed (or retracted) an identity
+    KNOWLEDGE_SOURCE_REGISTERED = "knowledge_source.registered"  # a document or record made searchable
+    KNOWLEDGE_SOURCE_INGESTED = "knowledge_source.ingested"  # read again: indexed, unchanged or failed
+    KNOWLEDGE_SOURCE_ARCHIVED = "knowledge_source.archived"  # no longer searched; its versions are kept
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.
