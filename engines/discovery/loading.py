@@ -148,7 +148,12 @@ def _plain(value: Any) -> Any:
 
 
 def parse_yaml(path: str, content: str) -> Parsed:
-    loader = _Loader(content)
+    try:
+        loader = _Loader(content)  # the reader refuses characters YAML does not allow, here
+    except yaml.YAMLError:
+        return _failure(
+            path, "malformed_yaml", "The YAML could not be read: it holds characters YAML forbids."
+        )
     documents: list[Document] = []
     warnings: list[Diagnostic] = []
     nodes = 0
