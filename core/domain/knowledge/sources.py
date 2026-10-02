@@ -164,11 +164,13 @@ class KnowledgeSource:
             raise InvalidKnowledgeTransition(details={"from": self.status.value, "to": "indexed"})
         return replace(self, status=IndexStatus.INDEXED, updated_at=at)
 
-    def ingestion_failed(self, at: datetime) -> KnowledgeSource:
-        """The last known-good version, if any, stays in force (and stays stale if it was)."""
+    def ingestion_failed(self, at: datetime, before: IndexStatus | None = None) -> KnowledgeSource:
+        """The last known-good version, if any, stays in force — and stays stale if it was
+        (``before``: the status the attempt started from)."""
         if self.indexed_version is None:
             return replace(self, status=IndexStatus.FAILED, updated_at=at)
-        return replace(self, status=IndexStatus.INDEXED, updated_at=at)
+        status = IndexStatus.STALE if before is IndexStatus.STALE else IndexStatus.INDEXED
+        return replace(self, status=status, updated_at=at)
 
     def stale(self, at: datetime) -> KnowledgeSource:
         """The snapshotted record changed since the version in force was read."""
