@@ -55,6 +55,13 @@ MOVES: dict[ReviewAction, tuple[frozenset[ReviewStatus], ReviewStatus | None]] =
 NEEDS_NOTE = frozenset({A.DISMISS, A.REOPEN, A.NOTE})
 
 
+def artifacts_of(finding: DriftFinding) -> tuple[str, ...]:
+    """The artifacts a finding was read from: its source locations and the baseline element's
+    provenance ("path#document:pointer")."""
+    references = [*finding.locations, *([finding.baseline_reference] if finding.baseline_reference else [])]
+    return tuple(sorted({r.split("#", 1)[0].split(":", 1)[0] for r in references} - {""}))
+
+
 def _refuse(action: ReviewAction, status: ReviewStatus, reason: str) -> InvalidReviewAction:
     return InvalidReviewAction(details={"action": action.value, "status": status.value, "reason": reason})
 
@@ -120,6 +127,7 @@ class DriftItem:
     status: ReviewStatus = ReviewStatus.OPEN
     history: tuple[ReviewEvent, ...] = ()
     links: tuple[Link, ...] = ()
+    artifacts: tuple[str, ...] = ()  # where its findings were read: the scope a resolution must inspect
 
     @classmethod
     def first_seen(
@@ -135,7 +143,7 @@ class DriftItem:
         return cls(
             item_id, project_id, architecture_id, finding.item_key, finding.element, finding.subject,
             finding.path, finding.type, finding.classification, analysis_id, analysis_id,
-            history=(detected,),
+            history=(detected,), artifacts=artifacts_of(finding),
         )  # fmt: skip
 
     def detected(self, finding: DriftFinding, analysis_id: uuid.UUID, at: datetime) -> DriftItem:
@@ -151,6 +159,7 @@ class DriftItem:
             last_analysis_id=analysis_id,
             status=status,
             history=self._appended(event),
+            artifacts=tuple(sorted({*self.artifacts, *artifacts_of(finding)})),
         )
 
     def act(
@@ -206,4 +215,5 @@ class DriftItem:
             "status": self.status.value,
             "history": [e.to_dict() for e in self.history],
             "links": [link.to_dict() for link in self.links],
+            "artifacts": list(self.artifacts),
         }
