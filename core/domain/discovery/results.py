@@ -308,11 +308,19 @@ class DiscoveryResult:
 
     @property
     def fingerprint(self) -> str:
+        """The whole result: equal for identical inputs and versions."""
         return fingerprint(self._content())
+
+    @property
+    def sources_fingerprint(self) -> str:
+        """The inputs alone — each artifact's path and content hash: equal when the same sources were
+        supplied, whatever the versions that read them."""
+        return fingerprint([[a.path, a.content_hash] for a in self.artifacts])
 
     def to_dict(self) -> dict[str, Any]:
         return self._content() | {
             "summary": self.summary(),
             "unresolved": list(self.unresolved),
             "fingerprint": self.fingerprint,
+            "sources_fingerprint": self.sources_fingerprint,
         }
