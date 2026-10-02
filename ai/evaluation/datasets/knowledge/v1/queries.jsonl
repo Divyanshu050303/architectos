@@ -1,0 +1,24 @@
+{"id": "failover_how", "query": {"text": "how do we fail over the orders database"}, "expected": [{"source": "orders-runbook.md", "section": "Failover"}]}
+{"id": "replica_lag", "query": {"text": "replica lag behind primary"}, "expected": [{"source": "orders-runbook.md", "section": "Failover"}]}
+{"id": "backup_schedule", "query": {"text": "when do orders backups run"}, "expected": [{"source": "orders-runbook.md", "section": "Backups"}]}
+{"id": "backup_retention", "query": {"text": "how long are database backups kept"}, "expected": [{"source": "data-retention.txt", "contains": "Database backups are kept for 90 days."}]}
+{"id": "pod_scaling", "query": {"text": "how many pods does orders-api scale to"}, "expected": [{"source": "orders-runbook.md", "section": "Scaling"}]}
+{"id": "adr_7", "query": {"identifiers": ["ADR-7"]}, "expected": [{"source": "payments-architecture.md", "section": "Decisions"}]}
+{"id": "req_12", "query": {"identifiers": ["REQ-12"]}, "expected": [{"source": "capacity-plan.md", "section": "Targets"}]}
+{"id": "payments_api_id", "query": {"identifiers": ["payments-api"]}, "expected": [{"source": "payments-architecture.md", "section": "Components"}, {"source": "payments-architecture.md", "section": "Data flow"}]}
+{"id": "peak_rps", "query": {"text": "peak checkout requests per second"}, "expected": [{"source": "capacity-plan.md", "section": "Targets"}]}
+{"id": "card_tokens", "query": {"text": "are card numbers stored pci tokenization"}, "expected": [{"source": "payments-architecture.md", "section": "Security"}]}
+{"id": "tls_rotation", "query": {"text": "tls certificate rotation"}, "expected": [{"source": "payments-architecture.md", "section": "Security"}]}
+{"id": "catalog_cache", "query": {"text": "cache for product catalog reads"}, "expected": [{"source": "capacity-plan.md", "section": "Caching"}]}
+{"id": "error_alert", "query": {"text": "error rate alert threshold"}, "expected": [{"source": "observability.md", "section": "Alerts"}]}
+{"id": "tracing", "query": {"text": "distributed tracing sampling"}, "expected": [{"source": "observability.md", "section": "Tracing"}]}
+{"id": "kafka_partitions", "query": {"text": "kafka partitions order-events"}, "expected": [{"source": "kafka-events.md", "section": "Topics"}]}
+{"id": "event_ordering", "query": {"text": "are events of one order ordered"}, "expected": [{"source": "kafka-events.md", "section": "Topics"}]}
+{"id": "consumer_lag", "query": {"text": "consumer lag paging"}, "expected": [{"source": "kafka-events.md", "section": "Consumers"}]}
+{"id": "gdpr_erasure", "query": {"text": "gdpr erasure personal data"}, "expected": [{"source": "data-retention.txt", "contains": "GDPR erasure request"}]}
+{"id": "retention_scoped", "query": {"text": "events kept days retention", "sources": ["kafka-events.md"]}, "expected": [{"source": "kafka-events.md", "section": "Retention"}]}
+{"id": "logs_scoped_text", "query": {"text": "logs kept days", "sources": ["data-retention.txt"]}, "expected": [{"source": "data-retention.txt", "contains": "Application logs are kept for 30 days"}]}
+{"id": "none_quantum", "query": {"text": "quantum entanglement teleportation"}, "expected": []}
+{"id": "none_helm", "query": {"text": "helm chart values for istio"}, "expected": []}
+{"id": "none_adr_99", "query": {"identifiers": ["ADR-99"]}, "expected": []}
+{"id": "none_scoped", "query": {"text": "card network tokenization", "sources": ["observability.md"]}, "expected": []}

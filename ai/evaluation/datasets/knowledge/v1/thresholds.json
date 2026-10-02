@@ -1,0 +1,9 @@
+{
+  "top1_accuracy": 0.95,
+  "recall_at_k": 0.9524,
+  "citation_accuracy": 1.0,
+  "scope_accuracy": 1.0,
+  "empty_accuracy": 1.0,
+  "false_evidence": 0,
+  "duplicates": 0
+}

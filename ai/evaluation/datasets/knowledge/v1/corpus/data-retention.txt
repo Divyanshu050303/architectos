@@ -1,0 +1,7 @@
+Data retention policy.
+
+Application logs are kept for 30 days and then deleted.
+
+Database backups are kept for 90 days.
+
+Personal data is deleted within 30 days of a verified GDPR erasure request.
