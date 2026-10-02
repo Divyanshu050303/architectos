@@ -254,7 +254,7 @@ checked by the architecture workflow; viewers read. Audit entries (`discovery_ru
 
 ## How drift detection consumes discovery results
 
-Discovery exposes stable contracts for a later Drift Detection engine, without implementing it:
+The [Drift Detection Engine](drift-engine.md) consumes these stable contracts:
 
 - **Result identity**: `fingerprint` (the whole result: equal for identical inputs and versions) and
   `sourcesFingerprint` (the inputs alone: each artifact's path and content hash).
