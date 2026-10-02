@@ -34,6 +34,11 @@ PRICE = {
     "effectiveFrom": "2026-09-01",
     "source": "user_input",
 }
+MIGRATION_REQUEST = {
+    "architectureId": "01a0de60-a784-7244-8ecc-62afb5352f47",
+    "sourceRevision": 1,
+    "target": {"revision": 2},
+}
 VALID_BODIES: dict[str, dict[str, object]] = {
     "create_pricing_snapshot_api_v1_organizations__organization_id__pricing_snapshots_post": {
         "name": "Prices",
@@ -131,6 +136,18 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     },
     "link_decision_revision_api_v1_projects__project_id__decisions__decision_id__resulting_revision_post": {
         "revision": 2
+    },
+    "create_plan_api_v1_projects__project_id__migration_plans_post": MIGRATION_REQUEST,
+    "regenerate_plan_api_v1_projects__project_id__migration_plans__plan_id__regenerate_post": {
+        "request": MIGRATION_REQUEST,
+        "replaceReviewed": False,
+    },
+    "approve_plan_api_v1_projects__project_id__migration_plans__plan_id__versions__version__approve_post": {
+        "fingerprint": "0" * 64
+    },
+    "reject_plan_api_v1_projects__project_id__migration_plans__plan_id__versions__version__reject_post": {
+        "fingerprint": "0" * 64,
+        "comment": "No.",
     },
     "run_simulation_api_v1_projects__project_id__architectures__architecture_id__simulations_post": {
         "scenario": {"name": "Sweep", "workload": {"growth": "2"}},

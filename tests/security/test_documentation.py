@@ -16,6 +16,7 @@ from core.domain.cost import errors as cost_errors
 from core.domain.decisions import errors as decision_errors
 from core.domain.errors import DomainError
 from core.domain.evolution import errors as evolution_errors
+from core.domain.migrations import errors as migration_errors
 from core.domain.observability import errors as observability_errors
 from core.domain.projects import errors as project_errors
 from core.domain.reliability import errors as reliability_errors
@@ -45,6 +46,7 @@ API_DOCS = "".join(
         "simulations.md",
         "evolution.md",
         "decisions.md",
+        "migration-plans.md",
         "components.md",
     )
 )
@@ -68,10 +70,10 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
     # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability, 6 simulation, 6
-    # evolution and 8 decision endpoints (GET /validation/rules, /capacity/models, /cost/models,
-    # /reliability/models, /security/analyzers, /observability/analyzers, /simulation/catalog and
-    # /evolution/catalog are not project-scoped)
-    assert len(served) == 88
+    # evolution, 8 decision and 14 migration plan endpoints (GET /validation/rules, /capacity/models,
+    # /cost/models, /reliability/models, /security/analyzers, /observability/analyzers,
+    # /simulation/catalog and /evolution/catalog are not project-scoped)
+    assert len(served) == 102
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -113,6 +115,12 @@ def test_every_error_code_is_documented() -> None:
             decision_errors.InvalidDecision,
             decision_errors.DecisionNotFound,
             decision_errors.InvalidDecisionTransition,
+            migration_errors.InvalidMigrationRequest,
+            migration_errors.MigrationPlanNotFound,
+            migration_errors.InvalidPlanTransition,
+            migration_errors.PlanVersionMismatch,
+            migration_errors.StaleMigrationPlan,
+            migration_errors.ReviewedPlanNotReplaced,
             component_errors.ComponentNotFound,
         )
     }
@@ -123,7 +131,8 @@ def test_every_audit_action_is_documented() -> None:
     actions = {
         a.value
         for a in AuditAction
-        if a.value.split(".")[0] in {"project", "requirement", "requirement_set", "architecture", "decision"}
+        if a.value.split(".")[0]
+        in {"project", "requirement", "requirement_set", "architecture", "decision", "migration_plan"}
     }
     assert {a for a in actions if a not in API_DOCS} == set()
 
@@ -150,11 +159,14 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-017-deterministic-simulation.md",
         "ADR-018-deterministic-evolution.md",
         "ADR-019-component-catalog.md",
+        "ADR-020-deterministic-migration-planning.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text
         assert "## Consequences" in text
     assert (DOCS / "frontend" / "projects-requirements-contract.md").exists()
+    assert (DOCS / "frontend" / "migration-contract.md").exists()
+    assert (DOCS / "architecture" / "migration-planning-engine.md").exists()
     assert (DOCS / "requirements-engine.md").exists()
     assert (DOCS / "frontend" / "architecture-contract.md").exists()
     assert (DOCS / "frontend" / "validation-contract.md").exists()

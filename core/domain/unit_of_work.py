@@ -15,6 +15,7 @@ from core.domain.cost.repository import CostAnalysisRepository, PricingSnapshotR
 from core.domain.decisions.repository import DecisionRepository
 from core.domain.evolution.repository import EvolutionRepository
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
+from core.domain.migrations.repository import MigrationPlanRepository
 from core.domain.observability.repository import ObservabilityAnalysisRepository
 from core.domain.organizations.repository import (
     InvitationRepository,
@@ -102,6 +103,9 @@ class UnitOfWork(Protocol):
 
     @property
     def decisions(self) -> DecisionRepository: ...
+
+    @property
+    def migrations(self) -> MigrationPlanRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

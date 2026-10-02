@@ -28,6 +28,7 @@ from core.domain.identity.password_service import PasswordService, ResetSettings
 from core.domain.identity.passwords import PasswordHasher, PasswordPolicy
 from core.domain.identity.session_service import SessionService, SessionSettings
 from core.domain.identity.user_service import UserService
+from core.domain.migrations.migration_service import MigrationPlanService
 from core.domain.notifications import Mailer
 from core.domain.observability.observability_service import ObservabilityService
 from core.domain.organizations.invitation_service import InvitationService, InvitationSettings
@@ -388,6 +389,18 @@ def get_decision_service(
 
 
 DecisionServiceDep = Annotated[DecisionService, Depends(get_decision_service)]
+
+
+def get_migration_plan_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> MigrationPlanService:
+    # One planner per process, built at startup (see apps/api/main.py): it is pure and stateless.
+    return MigrationPlanService(
+        SqlAlchemyUnitOfWork(db, client), request.app.state.migration_engine, clock=clock
+    )
+
+
+MigrationPlanServiceDep = Annotated[MigrationPlanService, Depends(get_migration_plan_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:

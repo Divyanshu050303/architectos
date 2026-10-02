@@ -50,6 +50,7 @@ class Operation:
             .replace("{evolution_analysis_id}", str(uuid.uuid4()))
             .replace("{candidate_id}", "evo_" + "0" * 20)
             .replace("{decision_id}", str(uuid.uuid4()))
+            .replace("{plan_id}", str(uuid.uuid4()))
             .replace("{snapshot_id}", str(uuid.uuid4()))
             .replace("{invitation_token}", "A" * 43)
             .replace("{directory}", "messaging")

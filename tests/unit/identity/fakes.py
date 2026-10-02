@@ -50,6 +50,8 @@ from core.domain.identity.entities import (
 )
 from core.domain.identity.enums import SessionRevocationReason, UserStatus
 from core.domain.identity.errors import EmailAlreadyRegistered
+from core.domain.migrations.entities import MigrationPlanVersion
+from core.domain.migrations.values import PlanStatus
 from core.domain.observability.queries import (
     ObservabilityAnalysisQuery,
     ObservabilityComponentQuery,
@@ -1423,6 +1425,61 @@ class FakeDecisionRepository:
         return sorted(found, key=lambda d: d.number)[:limit]
 
 
+class FakeMigrationPlanRepository:
+    def __init__(self) -> None:
+        self.versions: dict[uuid.UUID, MigrationPlanVersion] = {}
+
+    async def add(self, version: MigrationPlanVersion) -> MigrationPlanVersion:
+        self.versions[version.id] = version
+        return version
+
+    async def update_review(self, version: MigrationPlanVersion) -> MigrationPlanVersion:
+        assert version.id in self.versions
+        self.versions[version.id] = version
+        return version
+
+    async def get(
+        self,
+        project_id: uuid.UUID,
+        plan_id: uuid.UUID,
+        version: int | None = None,
+        *,
+        for_update: bool = False,
+    ) -> MigrationPlanVersion | None:
+        found = [
+            v
+            for v in self.versions.values()
+            if v.project_id == project_id
+            and v.plan_id == plan_id
+            and (version is None or v.version == version)
+        ]
+        return max(found, key=lambda v: v.version, default=None)
+
+    async def history(self, project_id: uuid.UUID, plan_id: uuid.UUID) -> list[MigrationPlanVersion]:
+        found = [v for v in self.versions.values() if v.project_id == project_id and v.plan_id == plan_id]
+        return sorted(found, key=lambda v: v.version)
+
+    async def list_latest(
+        self,
+        project_id: uuid.UUID,
+        *,
+        architecture_id: uuid.UUID | None = None,
+        status: PlanStatus | None = None,
+        after: tuple[datetime, uuid.UUID] | None = None,
+        limit: int = 50,
+    ) -> list[MigrationPlanVersion]:
+        found = [
+            v
+            for v in self.versions.values()
+            if v.project_id == project_id
+            and v.status is not PlanStatus.SUPERSEDED
+            and (architecture_id is None or v.request.architecture_id == architecture_id)
+            and (status is None or v.status is status)
+            and (after is None or (v.created_at, v.id) < after)
+        ]
+        return sorted(found, key=lambda v: (v.created_at, v.id), reverse=True)[:limit]
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1448,6 +1505,7 @@ class FakeUnitOfWork:
         self._simulations = FakeSimulationRepository()
         self._evolution = FakeEvolutionRepository()
         self._decisions = FakeDecisionRepository()
+        self._migrations = FakeMigrationPlanRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1542,6 +1600,10 @@ class FakeUnitOfWork:
     @property
     def decisions(self) -> FakeDecisionRepository:
         return self._decisions
+
+    @property
+    def migrations(self) -> FakeMigrationPlanRepository:
+        return self._migrations
 
     async def __aenter__(self) -> Self:
         return self
