@@ -12,6 +12,11 @@ output limit is not; nor is a proposal whose *content* is invalid (that is refus
 or re-asked). Every call counts against the run's budget, and no call starts without the time and
 tokens left to make it.
 
+**What the model may not write.** Output text with a URL, an IP address or anything the knowledge
+engine's redaction rules would redact (an assignment to a secret-looking name, a password in a URL, a
+bearer token, a private key) is refused as a whole — never cleaned and kept — and the rejection names
+where, never what.
+
 **What is kept.** The prompt version, the model, the usage and a SHA-256 and size of the parsed
 output (canonical JSON). Never the prompt, the context or the output.
 """
@@ -59,6 +64,7 @@ from core.domain.architecture_agent.requests import AgentUsage, Budget
 from core.domain.architecture_agent.results import Rejection
 from core.domain.architecture_agent.runs import RawOutput
 from core.domain.architecture_agent.values import KEY, Basis, FailureCode
+from engines.knowledge.redaction import redact
 
 PROMPT_VERSION = "architecture-proposal-v1"
 DATA_TAG = "agent_data"
@@ -70,6 +76,8 @@ MODEL_BASES = (Basis.PROPOSED, Basis.ASSUMPTION, Basis.RETRIEVED, Basis.UNKNOWN,
 # Pricing mappings come from a person's pricing snapshot, never from a model.
 PROPOSABLE = {name: spec for name, spec in NODE_PROPERTIES.items() if not name.startswith("pricing")}
 _TAG = re.compile(rf"<(/?){DATA_TAG}", re.IGNORECASE)
+_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://", re.IGNORECASE)
+_IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 
 
 def _lines(specs: Iterable[PropertySpec], applies: Callable[[PropertySpec], str]) -> list[str]:
@@ -329,12 +337,43 @@ def _cited(proposal: Proposal, context: ProposalContext) -> list[Rejection]:
     return found
 
 
+def _strings(value: object, path: str) -> Iterable[tuple[str, str]]:
+    if isinstance(value, str):
+        yield path, value
+    elif isinstance(value, dict):
+        for name, item in value.items():
+            yield from _strings(item, f"{path}.{name}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _strings(item, f"{path}[{index}]")
+
+
+def unsafe(data: object) -> list[Rejection]:
+    """Text the model may not write: URLs, IP addresses, credentials. Named by where, never what."""
+    found: list[Rejection] = []
+    for path, text in _strings(data, "$"):
+        if _URL.search(text):
+            found.append(Rejection("url_in_output", path[:200], "Output text may not contain a URL."))
+        if _IPV4.search(text):
+            found.append(
+                Rejection("address_in_output", path[:200], "Output text may not contain an IP address.")
+            )
+        if redact(text)[1]:
+            found.append(
+                Rejection("secret_in_output", path[:200], "Output text may not contain a credential.")
+            )
+    return found[:100]
+
+
 def parse(data: object, context: ProposalContext) -> Parsed:
     """The output → a ``Proposal``, or why not. Nothing is repaired; rejection details never echo
     the output's text (paths are the schema's names and indexes)."""
     shape = problems(data, SCHEMA)
     if shape or not isinstance(data, dict):
         return Parsed(None, True, tuple(Rejection("schema_mismatch", p, d) for p, d in shape))
+    refused = unsafe(data)
+    if refused:
+        return Parsed(None, rejections=tuple(refused))
     found: list[Rejection] = []
     nodes = _each(data["nodes"], "$.nodes", lambda n, p: _node(n, p, found), found)
     connections = _each(data.get("connections", []), "$.connections", lambda c, _: _connection(c), found)

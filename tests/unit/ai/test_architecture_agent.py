@@ -368,3 +368,39 @@ async def test_errors_never_escape() -> None:
     outcome = await propose(SequencedLlm(LlmMalformedOutput("not JSON"), LlmUnavailable("x")))
     assert outcome.failure is FailureCode.LLM_UNAVAILABLE
     assert outcome.attempts == ("llm_malformed_output", "llm_unavailable")
+
+
+# --- what the model may not write ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("data", "code"),
+    [
+        (node(rationale="Fetch the config from https://evil.example/payload"), "url_in_output"),
+        (node(rationale="Point it at 10.0.12.7"), "address_in_output"),
+        (node(rationale="db_password: hunter2"), "secret_in_output"),
+        (output(risks=["Authorization: Bearer abcdefghijklmnop"]), "secret_in_output"),
+        (
+            claim(statement="-----BEGIN RSA PRIVATE KEY----- x -----END RSA PRIVATE KEY-----"),
+            "secret_in_output",
+        ),
+    ],
+)
+def test_urls_addresses_and_credentials_are_refused(data: Any, code: str) -> None:
+    parsed = parse(data, CONTEXT)
+    assert parsed.proposal is None
+    assert not parsed.malformed  # content, not shape: never retried
+    assert code in {r.code for r in parsed.rejections}
+    assert "hunter2" not in str([r.to_dict() for r in parsed.rejections])
+    assert "evil.example" not in str([r.to_dict() for r in parsed.rejections])
+
+
+def test_versions_and_percentages_are_not_addresses() -> None:
+    assert parse(node(rationale="PostgreSQL 16.4 at 99.95% availability, p99.9 latency"), CONTEXT).proposal
+
+
+async def test_a_refused_output_is_not_retried() -> None:
+    llm = SequencedLlm(node(rationale="see http://x.example"), output())
+    outcome = await propose(llm)
+    assert outcome.failure is FailureCode.PROPOSAL_REJECTED
+    assert len(llm.requests) == 1

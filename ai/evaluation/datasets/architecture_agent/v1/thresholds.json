@@ -1,0 +1,10 @@
+{
+  "outcome_accuracy": 1.0,
+  "rejection_accuracy": 1.0,
+  "injection_containment": 1.0,
+  "citation_integrity": 1.0,
+  "unsafe_candidates": 0,
+  "unverified_provenance": 0,
+  "calls_over_budget": 0,
+  "stored_leaks": 0
+}
