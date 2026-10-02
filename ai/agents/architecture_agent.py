@@ -22,6 +22,7 @@ import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 
 from ai.llm.client import LlmError, StructuredLlm, StructuredRequest
@@ -30,9 +31,11 @@ from core.architecture_ir.component import NodeKind
 from core.architecture_ir.configuration import (
     CONNECTION_PROPERTIES,
     NODE_PROPERTIES,
+    PROPERTY_KEY,
     PropertySpec,
 )
 from core.architecture_ir.dependency import ConnectionKind
+from core.architecture_ir.values import MAX_NAME_LENGTH
 from core.domain.architecture_agent.errors import InvalidAgentRecord
 from core.domain.architecture_agent.ports import ProposalContext, ProposerOutcome
 from core.domain.architecture_agent.proposals import (
@@ -107,6 +110,8 @@ Rules:
   proposed: your design choice; assumption: taken as true to proceed;
   retrieved: what a cited passage says (cite it in "evidence");
   unknown: the input is insufficient; unsupported: asked for, but not representable here.
+- "confidence" (0 to 1, on the proposal, each node, connection and claim): how sure you are that it
+  follows from the input as given. It is not how good the design is, and it is never verification.
 - Node and connection ids: lower-case letters, digits and hyphens, unique, e.g. "orders-api".
   A connection's source and target are node ids of this proposal.
 - Configuration: only the properties listed below, for the kinds listed, with values of their type.
@@ -139,17 +144,20 @@ def _object(required: list[str], properties: dict[str, Any]) -> dict[str, Any]:
 
 
 def _schema() -> dict[str, Any]:
+    confidence = {"type": "number", "minimum": 0, "maximum": 1}
     element_id = {"type": "string", "pattern": KEY.pattern}
     refs = _array({"type": "string", "pattern": REQUIREMENT_REF.pattern}, MAX_REFS)
     evidence = _array({"type": "string", "pattern": KEY.pattern}, MAX_REFS)
     value = {"anyOf": [_string(200), {"type": "number"}, {"type": "boolean"}, _array(_string(200), 50)]}
-    setting = _object(["property", "value"], {"property": _string(64), "value": value})
+    name = {"type": "string", "pattern": PROPERTY_KEY.pattern}
+    setting = _object(["property", "value"], {"property": name, "value": value})
     node = _object(
-        ["id", "kind", "name", "rationale"],
+        ["id", "kind", "name", "rationale", "confidence"],
         {
             "id": element_id,
+            "confidence": confidence,
             "kind": {"type": "string", "enum": [k.value for k in NodeKind]},
-            "name": _string(200),
+            "name": _string(MAX_NAME_LENGTH),
             "rationale": _string(MAX_RATIONALE),
             "component": _string(128),
             "technology": _string(128),
@@ -159,9 +167,10 @@ def _schema() -> dict[str, Any]:
         },
     )
     connection = _object(
-        ["id", "source", "target", "kind", "rationale"],
+        ["id", "source", "target", "kind", "rationale", "confidence"],
         {
             "id": element_id,
+            "confidence": confidence,
             "source": element_id,
             "target": element_id,
             "kind": {"type": "string", "enum": [k.value for k in ConnectionKind]},
@@ -184,18 +193,20 @@ def _schema() -> dict[str, Any]:
         },
     )
     claim = _object(
-        ["statement", "basis"],
+        ["statement", "basis", "confidence"],
         {
             "statement": _string(MAX_STATEMENT),
+            "confidence": confidence,
             "basis": {"type": "string", "enum": [b.value for b in MODEL_BASES]},
             "requirement_refs": refs,
             "evidence": evidence,
         },
     )
     return _object(
-        ["name", "summary", "nodes"],
+        ["name", "summary", "confidence", "nodes"],
         {
-            "name": _string(200),
+            "name": _string(MAX_NAME_LENGTH),
+            "confidence": confidence,
             "summary": _string(MAX_RATIONALE),
             "nodes": {"type": "array", "minItems": 1, "maxItems": MAX_NODES, "items": node},
             "connections": _array(connection, MAX_CONNECTIONS),
@@ -232,6 +243,11 @@ class Parsed:
     rejections: tuple[Rejection, ...] = ()
 
 
+def _confidence(value: float | int) -> Decimal:
+    """The model's stated number, to the IR's three places (the schema has bounded it to 0..1)."""
+    return Decimal(repr(value)).quantize(Decimal("0.001"), rounding=ROUND_HALF_EVEN)
+
+
 def _tuple(item: dict[str, Any], name: str) -> tuple[str, ...]:
     return tuple(item.get(name, ()))
 
@@ -266,14 +282,14 @@ def _node(n: dict[str, Any], path: str, found: list[Rejection]) -> ProposedNode:
     return ProposedNode(
         n["id"], n["kind"], n["name"], n["rationale"], n.get("component"), n.get("technology"),
         _configuration(n.get("configuration", []), path, found),
-        _tuple(n, "requirement_refs"), _tuple(n, "evidence"),
+        _tuple(n, "requirement_refs"), _tuple(n, "evidence"), _confidence(n["confidence"]),
     )  # fmt: skip
 
 
 def _connection(c: dict[str, Any]) -> ProposedConnection:
     return ProposedConnection(
         c["id"], c["source"], c["target"], c["kind"], c["rationale"], c.get("protocol"),
-        _tuple(c, "requirement_refs"), _tuple(c, "evidence"),
+        _tuple(c, "requirement_refs"), _tuple(c, "evidence"), _confidence(c["confidence"]),
     )  # fmt: skip
 
 
@@ -285,7 +301,10 @@ def _decision(d: dict[str, Any]) -> DesignDecision:
 
 
 def _claim(c: dict[str, Any]) -> Claim:
-    return Claim(c["statement"], Basis(c["basis"]), _tuple(c, "requirement_refs"), _tuple(c, "evidence"))
+    return Claim(
+        c["statement"], Basis(c["basis"]), _tuple(c, "requirement_refs"), _tuple(c, "evidence"),
+        _confidence(c["confidence"]),
+    )  # fmt: skip
 
 
 def _cited(proposal: Proposal, context: ProposalContext) -> list[Rejection]:
@@ -328,7 +347,7 @@ def parse(data: object, context: ProposalContext) -> Parsed:
         "$",
         lambda d, _: Proposal(
             d["name"], d["summary"], tuple(nodes), tuple(connections), tuple(decisions), tuple(claims),
-            tuple(d.get("risks", ())), tuple(d.get("questions", ())),
+            tuple(d.get("risks", ())), tuple(d.get("questions", ())), _confidence(d["confidence"]),
         ),
         found,
     )  # fmt: skip

@@ -1,6 +1,7 @@
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 
@@ -43,6 +44,7 @@ from core.domain.architecture_agent.values import (
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 USER = uuid.uuid4()
 SET = uuid.uuid4()
+SURE = Decimal("0.8")
 
 
 def a_request(**overrides: object) -> AgentRequest:
@@ -62,14 +64,20 @@ def a_run(**overrides: object) -> AgentRun:
 
 
 def a_proposal() -> Proposal:
-    api = ProposedNode("api", "service", "Orders API", "Serves orders", requirement_refs=("REQ-1",))
-    db = ProposedNode("db", "database", "Orders DB", "Stores orders")
-    link = ProposedConnection("api-db", "api", "db", "sync", "Reads and writes orders", protocol="tcp")
+    api = ProposedNode(
+        "api", "service", "Orders API", "Serves orders", requirement_refs=("REQ-1",), confidence=SURE
+    )
+    db = ProposedNode("db", "database", "Orders DB", "Stores orders", confidence=SURE)
+    link = ProposedConnection(
+        "api-db", "api", "db", "sync", "Reads and writes orders", protocol="tcp", confidence=SURE
+    )
     decision = DesignDecision(
         "Storage", "A relational database", "Orders are relational", ("A document store",)
     )
     claim = Claim("Orders must survive a node loss", Basis.ASSUMPTION, ("REQ-1",))
-    return Proposal("Orders", "A service and its database", (api, db), (link,), (decision,), (claim,))
+    return Proposal(
+        "Orders", "A service and its database", (api, db), (link,), (decision,), (claim,), confidence=SURE
+    )
 
 
 def a_candidate() -> Candidate:
@@ -203,11 +211,14 @@ def test_a_retrieved_claim_must_cite_its_passage() -> None:
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: Proposal("x", "y", ()),
-        lambda: ProposedNode("bad id!", "service", "n", "r"),
-        lambda: ProposedNode("a", "service", "n", "r", requirement_refs=("REQ-0",)),
-        lambda: ProposedNode("a", "service", "n", "r", configuration={"x": object()}),
-        lambda: ProposedConnection("c", "a", "b", "sync", "r", requirement_refs=("req-1",)),
+        lambda: Proposal("x", "y", (), confidence=SURE),
+        lambda: ProposedNode("a", "service", "n", "r"),  # no confidence
+        lambda: ProposedNode("a", "service", "n", "r", confidence=Decimal("1.5")),
+        lambda: ProposedNode("a", "service", "n", "r", confidence=Decimal("0.1234")),
+        lambda: ProposedNode("bad id!", "service", "n", "r", confidence=SURE),
+        lambda: ProposedNode("a", "service", "n", "r", requirement_refs=("REQ-0",), confidence=SURE),
+        lambda: ProposedNode("a", "service", "n", "r", configuration={"x": object()}, confidence=SURE),
+        lambda: ProposedConnection("c", "a", "b", "sync", "r", requirement_refs=("req-1",), confidence=SURE),
         lambda: DesignDecision("t", "c", "r", alternatives=tuple("abc" for _ in range(31))),
         lambda: Claim("s", "proposed"),  # type: ignore[arg-type]
     ],
@@ -218,9 +229,9 @@ def test_malformed_proposals_are_refused(build: object) -> None:
 
 
 def test_proposal_size_is_bounded() -> None:
-    nodes = tuple(ProposedNode(f"n{i}", "service", "n", "r") for i in range(61))
+    nodes = tuple(ProposedNode(f"n{i}", "service", "n", "r", confidence=SURE) for i in range(61))
     with pytest.raises(InvalidAgentRecord):
-        Proposal("x", "y", nodes)
+        Proposal("x", "y", nodes, confidence=SURE)
 
 
 # --- questions and answers ----------------------------------------------------------------------

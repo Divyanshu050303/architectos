@@ -18,8 +18,10 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
+from core.architecture_ir.values import MAX_NAME_LENGTH
 from core.domain.discovery.values import json_value
 
 from .values import KEY, Basis, QuestionKind, check, digest, items, key, text, texts
@@ -42,6 +44,16 @@ def _refs(values: object, name: str) -> str | None:
     return None if all(isinstance(v, str) and REQUIREMENT_REF.fullmatch(v) for v in values) else name
 
 
+def _confidence(value: object, name: str, *, required: bool = True) -> str | None:
+    """The model's own statement of how sure it is (0 to 1, at most 3 places) — never verification."""
+    if value is None:
+        return name if required else None
+    if not isinstance(value, Decimal) or not value.is_finite() or not 0 <= value <= 1:
+        return name
+    exponent = value.as_tuple().exponent
+    return None if isinstance(exponent, int) and exponent >= -3 else name
+
+
 def _evidence(values: object, name: str) -> str | None:
     """Passage ids (``kch_…``) the statement cites — whether they were retrieved is checked later."""
     if not isinstance(values, tuple) or len(values) > MAX_REFS:
@@ -55,11 +67,13 @@ class Claim:
     basis: Basis
     requirement_refs: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    confidence: Decimal | None = None  # the model's, for its own claims; none for a person's
 
     def __post_init__(self) -> None:
         check(
             [
                 text(self.statement, "claim.statement", MAX_STATEMENT),
+                _confidence(self.confidence, "claim.confidence", required=False),
                 None if isinstance(self.basis, Basis) else "claim.basis",
                 _refs(self.requirement_refs, "claim.requirement_refs"),
                 _evidence(self.evidence, "claim.evidence"),
@@ -74,6 +88,7 @@ class Claim:
             "basis": self.basis.value,
             "requirement_refs": list(self.requirement_refs),
             "evidence": list(self.evidence),
+            "confidence": str(self.confidence) if self.confidence is not None else None,
         }
 
 
@@ -88,13 +103,15 @@ class ProposedNode:
     configuration: dict[str, Any] | None = None  # checked against the IR's configuration schema
     requirement_refs: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    confidence: Decimal | None = None  # the model's own: required (the IR requires one on a proposal)
 
     def __post_init__(self) -> None:
         check(
             [
                 key(self.id, "node.id"),
+                _confidence(self.confidence, "node.confidence"),
                 text(self.kind, "node.kind", 64),
-                text(self.name, "node.name", 200),
+                text(self.name, "node.name", MAX_NAME_LENGTH),
                 text(self.rationale, "node.rationale", MAX_RATIONALE),
                 text(self.component, "node.component", 128, required=False),
                 text(self.technology, "node.technology", 128, required=False),
@@ -115,11 +132,13 @@ class ProposedConnection:
     protocol: str | None = None
     requirement_refs: tuple[str, ...] = ()
     evidence: tuple[str, ...] = ()
+    confidence: Decimal | None = None  # required
 
     def __post_init__(self) -> None:
         check(
             [
                 key(self.id, "connection.id"),
+                _confidence(self.confidence, "connection.confidence"),
                 key(self.source, "connection.source"),
                 key(self.target, "connection.target"),
                 text(self.kind, "connection.kind", 64),
@@ -169,11 +188,13 @@ class Proposal:
     claims: tuple[Claim, ...] = ()  # facts it relies on, assumptions, unknowns, unsupported asks
     risks: tuple[str, ...] = ()
     questions: tuple[str, ...] = ()  # what it could not resolve from the context
+    confidence: Decimal | None = None  # required: the model's own, for the proposal as a whole
 
     def __post_init__(self) -> None:
         check(
             [
-                text(self.name, "proposal.name", 200),
+                text(self.name, "proposal.name", MAX_NAME_LENGTH),
+                _confidence(self.confidence, "proposal.confidence"),
                 text(self.summary, "proposal.summary", MAX_RATIONALE),
                 items(self.nodes, ProposedNode, "proposal.nodes", MAX_NODES),
                 "proposal.nodes" if not self.nodes else None,

@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from typing import Any
 
 import jsonschema
@@ -44,6 +45,7 @@ def output(**overrides: Any) -> dict[str, Any]:
     data: dict[str, Any] = {
         "name": "Orders",
         "summary": "An API in front of a relational database.",
+        "confidence": 0.7,
         "nodes": [
             {
                 "id": "orders-api",
@@ -53,8 +55,15 @@ def output(**overrides: Any) -> dict[str, Any]:
                 "technology": "python",
                 "configuration": [{"property": "replicas", "value": 2}],
                 "requirement_refs": ["REQ-1"],
+                "confidence": 0.9,
             },
-            {"id": "orders-db", "kind": "database", "name": "Orders DB", "rationale": "Stores orders"},
+            {
+                "id": "orders-db",
+                "kind": "database",
+                "name": "Orders DB",
+                "rationale": "Stores orders",
+                "confidence": 0.85,
+            },
         ],
         "connections": [
             {
@@ -64,12 +73,18 @@ def output(**overrides: Any) -> dict[str, Any]:
                 "kind": "data_access",
                 "rationale": "Reads and writes orders",
                 "protocol": "postgresql",
+                "confidence": 0.9,
             }
         ],
         "decisions": [{"title": "Storage", "choice": "Relational", "rationale": "Orders are relational"}],
         "claims": [
-            {"statement": "Orders run in two zones", "basis": "retrieved", "evidence": ["kch_runbook"]},
-            {"statement": "Peak traffic is not stated", "basis": "unknown"},
+            {
+                "statement": "Orders run in two zones",
+                "basis": "retrieved",
+                "evidence": ["kch_runbook"],
+                "confidence": 0.8,
+            },
+            {"statement": "Peak traffic is not stated", "basis": "unknown", "confidence": 1},
         ],
         "risks": ["A single database"],
         "questions": ["What is the peak order rate?"],
@@ -78,11 +93,13 @@ def output(**overrides: Any) -> dict[str, Any]:
 
 
 def claim(**fields: Any) -> dict[str, Any]:
-    return output(claims=[{"statement": "s", "basis": "proposed"} | fields])
+    return output(claims=[{"statement": "s", "basis": "proposed", "confidence": 0.5} | fields])
 
 
 def node(**fields: Any) -> dict[str, Any]:
-    return output(nodes=[{"id": "a", "kind": "service", "name": "n", "rationale": "r"} | fields])
+    return output(
+        nodes=[{"id": "a", "kind": "service", "name": "n", "rationale": "r", "confidence": 0.5} | fields]
+    )
 
 
 class SequencedLlm:
@@ -177,6 +194,8 @@ def test_a_valid_output_becomes_a_proposal() -> None:
     assert db.configuration is None
     assert parsed.proposal.claims_of(Basis.RETRIEVED)[0].evidence == ("kch_runbook",)
     assert parsed.proposal.claims_of(Basis.UNKNOWN)[0].statement == "Peak traffic is not stated"
+    assert api.confidence == Decimal("0.900")
+    assert parsed.proposal.confidence == Decimal("0.700")
 
 
 @pytest.mark.parametrize(
@@ -191,6 +210,8 @@ def test_a_valid_output_becomes_a_proposal() -> None:
         claim(basis="estimate"),
         output(summary=""),
         output(risks=["x" * 1001]),
+        output(confidence=1.5),
+        node(confidence=None),
     ],
 )
 def test_outputs_off_the_schema_are_malformed(data: Any) -> None:
