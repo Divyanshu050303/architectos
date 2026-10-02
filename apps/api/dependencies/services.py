@@ -14,6 +14,7 @@ from apps.api.metrics import LogMetrics
 from apps.api.middleware.rate_limit import RateLimiter, RateLimits
 from apps.api.middleware.request_id import current_request_id
 from core.domain.architecture.architecture_service import ArchitectureService
+from core.domain.architecture_agent.agent_service import ArchitectureAgentService
 from core.domain.audit.audit_service import AuditService
 from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
@@ -438,6 +439,28 @@ def get_knowledge_service(
 
 
 KnowledgeServiceDep = Annotated[KnowledgeService, Depends(get_knowledge_service)]
+
+
+def get_agent_service(
+    request: Request,
+    db: DbSession,
+    client: Client,
+    clock: Annotated[Clock, Depends(get_clock)],
+    knowledge: KnowledgeServiceDep,
+    architectures: ArchitectureServiceDep,
+) -> ArchitectureAgentService:
+    # One pipeline per process, built at startup (see apps/api/main.py). Knowledge is read through the
+    # knowledge service (the retriever port, authorized there); revisions through the architecture workflow.
+    return ArchitectureAgentService(
+        SqlAlchemyUnitOfWork(db, client),
+        request.app.state.agent_pipeline,
+        knowledge,
+        architectures,
+        clock=clock,
+    )
+
+
+AgentServiceDep = Annotated[ArchitectureAgentService, Depends(get_agent_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:

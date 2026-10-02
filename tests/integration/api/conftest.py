@@ -20,6 +20,8 @@ from core.domain.clock import Clock
 from tests.integration.conftest import joined_session
 from tests.unit.identity.fakes import FakeClock
 
+from .agent_support import scripted_pipeline
+
 if TYPE_CHECKING:
     from .requirement_support import World
 
@@ -73,6 +75,7 @@ def app(
 ) -> FastAPI:
     app = create_app(settings)
     app.state.email_transport = outbox
+    app.state.agent_pipeline = scripted_pipeline(app)  # a scripted model: no provider is called
 
     def test_clock() -> Clock:
         return clock

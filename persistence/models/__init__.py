@@ -1,6 +1,7 @@
 """SQLAlchemy table models. Importing this package registers every table on ``Base.metadata``."""
 
 from .architecture import ArchitectureLayoutRecord, ArchitectureRecord, ArchitectureRevisionRecord
+from .architecture_agent import AgentRunRecord
 from .audit_log import AuditLogRecord
 from .base import Base
 from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, CapacityComponentRecord
@@ -40,6 +41,7 @@ from .user import UserRecord
 from .validation import ValidationFindingRecord, ValidationRunRecord
 
 __all__ = [
+    "AgentRunRecord",
     "ArchitectureLayoutRecord",
     "ArchitectureRecord",
     "ArchitectureRevisionRecord",

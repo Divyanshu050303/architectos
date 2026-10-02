@@ -17,6 +17,7 @@ from apps.api.middleware.request_id import HEADER as REQUEST_ID_HEADER
 from apps.api.middleware.request_id import RequestIdMiddleware
 from apps.api.middleware.security_headers import SecurityHeadersMiddleware
 from apps.api.routes import (
+    architecture_agent,
     architectures,
     auth,
     capacity,
@@ -42,6 +43,8 @@ from apps.api.routes import (
     users,
     validations,
 )
+from engines.architecture_agent.factory import build_pipeline
+from engines.architecture_agent.orchestrator import AgentEngines
 from engines.capacity.service import DeterministicCapacityEngine
 from engines.constraints.service import DeterministicConstraintEngine
 from engines.cost.service import DeterministicCostEngine
@@ -78,18 +81,8 @@ def _rate_limiter(settings: Settings) -> RateLimiter:
     return InMemoryRateLimiter()
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or get_settings()
-    app = FastAPI(
-        title="ArchitectOS API",
-        version="0.1.0",
-        lifespan=lifespan,
-        docs_url="/api/docs" if settings.docs_enabled else None,
-        redoc_url=None,
-        openapi_url="/api/openapi.json" if settings.docs_enabled else None,
-    )
-    app.state.settings = settings
-    app.state.rate_limiter = _rate_limiter(settings)
+def _build_engines(app: FastAPI, settings: Settings) -> None:
+    """One instance of each engine per process, on ``app.state``: pure, read-only after startup."""
     app.state.requirements_engine = build_engine(
         provider=settings.requirements_llm_provider,
         api_key=settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None,
@@ -113,6 +106,34 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.discovery_engine = DeterministicDiscoveryEngine(app.state.component_catalog)
     app.state.drift_engine = DeterministicDriftEngine(app.state.component_catalog)
     app.state.knowledge_engine = DeterministicKnowledgeEngine()
+    app.state.agent_pipeline = build_pipeline(
+        provider=settings.architecture_agent_llm_provider,
+        api_key=settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None,
+        model=settings.architecture_agent_llm_model,
+        timeout_seconds=settings.architecture_agent_llm_timeout_seconds,
+        engines=AgentEngines(
+            app.state.validation_engine,
+            app.state.reliability_engine,
+            app.state.security_engine,
+            app.state.observability_engine,
+        ),
+        catalog=app.state.component_catalog,
+    )
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+    app = FastAPI(
+        title="ArchitectOS API",
+        version="0.1.0",
+        lifespan=lifespan,
+        docs_url="/api/docs" if settings.docs_enabled else None,
+        redoc_url=None,
+        openapi_url="/api/openapi.json" if settings.docs_enabled else None,
+    )
+    app.state.settings = settings
+    app.state.rate_limiter = _rate_limiter(settings)
+    _build_engines(app, settings)
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -174,4 +195,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(discovery.router, prefix=API_PREFIX)
     app.include_router(drift.router, prefix=API_PREFIX)
     app.include_router(knowledge.router, prefix=API_PREFIX)
+    app.include_router(architecture_agent.router, prefix=API_PREFIX)
     return app

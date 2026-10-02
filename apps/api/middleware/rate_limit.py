@@ -125,6 +125,8 @@ POLICIES: dict[str, dict[str, Rule]] = {
     "run_observability_analysis": {"user": Rule(120, timedelta(hours=1))},
     "run_simulation": {"user": Rule(120, timedelta(hours=1))},
     "run_evolution_analysis": {"user": Rule(60, timedelta(hours=1))},
+    # Each pass (a new run, or answers that resume one) may call a language model, at most twice.
+    "run_architecture_agent": {"user": Rule(30, timedelta(hours=1)), "ip": Rule(60, timedelta(hours=1))},
     # Stores nothing: generous for checking a configuration while editing, bounded against scripts.
     "evaluate_component_configuration": {"user": Rule(600, timedelta(hours=1))},
     "create_invitation": {"user": Rule(50, timedelta(hours=1))},

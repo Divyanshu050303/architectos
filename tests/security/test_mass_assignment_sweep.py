@@ -44,6 +44,7 @@ DISCOVERY_ARTIFACT = {
     "content": "name: shop\nservices:\n  db:\n    image: postgres:16\n",
 }
 _DISCOVERY_RUN = "_api_v1_projects__project_id__discovery_runs__run_id__"
+_AGENT_RUN = "_api_v1_projects__project_id__architecture_agent_runs__run_id__"
 _IDENTITY_MAPPINGS = "_api_v1_projects__project_id__architectures__architecture_id__identity_mappings_"
 VALID_BODIES: dict[str, dict[str, object]] = {
     "run_discovery_api_v1_projects__project_id__discovery_runs_post": {"artifacts": [DISCOVERY_ARTIFACT]},
@@ -68,6 +69,13 @@ VALID_BODIES: dict[str, dict[str, object]] = {
         "content": "# A"
     },
     "search_knowledge_api_v1_projects__project_id__knowledge_search_post": {"text": "replica"},
+    "start_agent_run_api_v1_projects__project_id__architecture_agent_runs_post": {
+        "requirementSetId": str(uuid.uuid4()),
+        "objective": "An order service",
+    },
+    f"answer_agent_run{_AGENT_RUN}answers_post": {"answers": [{"questionId": "aq_x", "answer": "Yes"}]},
+    f"reject_agent_candidate{_AGENT_RUN}reject_post": {"reason": "Too large"},
+    f"accept_agent_candidate{_AGENT_RUN}accept_post": {"candidateContentHash": "0" * 64},
     f"confirm_identity_mapping{_IDENTITY_MAPPINGS}post": {
         "baselineId": "db",
         "discoveredKey": "compose:shop/service/db",

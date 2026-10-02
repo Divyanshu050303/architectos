@@ -51,6 +51,7 @@ _DECISION = "_api_v1_projects__project_id__decisions__decision_id__"
 _PLAN = "_api_v1_projects__project_id__migration_plans__plan_id__"
 _PLAN_VERSION = _PLAN + "versions__version__"
 _DISCOVERY = "_api_v1_projects__project_id__discovery_runs__run_id__"
+_AGENT = "_api_v1_projects__project_id__architecture_agent_runs__run_id__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 _KNOWLEDGE = "_api_v1_projects__project_id__knowledge_sources__source_id__"
@@ -89,6 +90,10 @@ class Target:
     drift_analysis_id: str = ""
     drift_item_id: str = ""
     knowledge_source_id: str = ""  # set by with_knowledge
+    agent_set_id: str = ""  # set by with_agent_set
+    agent_run_id: str = ""  # set by with_agent_waiting
+    agent_question_ids: tuple[str, ...] = ()  # its blocking questions
+    agent_candidate_hash: str = ""  # set by with_agent_candidate
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -340,6 +345,55 @@ KNOWLEDGE_REQUEST = {
 }
 
 
+async def with_agent_set(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """A requirement set pinning the project's requirement (traffic only: availability is a gap)."""
+    created = await client.post(
+        f"/api/v1/projects/{target.project_id}/requirement-sets", json={}, headers=auth
+    )
+    assert created.status_code == 201, created.text
+    target.agent_set_id = str(created.json()["id"])
+
+
+def agent_request(target: Target) -> dict[str, Any]:
+    """Canaries in the person's own words: the audit log must record none of them."""
+    return {
+        "requirementSetId": target.agent_set_id,
+        "objective": CANARY_STATEMENT,
+        "constraints": [CANARY_REASON],
+    }
+
+
+async def with_agent_waiting(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An agent run waiting for answers (no requirement states availability)."""
+    await with_agent_set(client, auth, target)
+    run = await client.post(
+        f"/api/v1/projects/{target.project_id}/architecture-agent-runs",
+        json=agent_request(target),
+        headers=auth,
+    )
+    assert run.status_code == 201, run.text
+    assert run.json()["status"] == "awaiting_clarification", run.text
+    target.agent_run_id = str(run.json()["id"])
+    target.agent_question_ids = tuple(q["id"] for q in run.json()["questions"] if q["blocking"])
+
+
+def agent_answers(target: Target) -> dict[str, Any]:
+    return {"answers": [{"questionId": q, "answer": CANARY_REASON} for q in target.agent_question_ids]}
+
+
+async def with_agent_candidate(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """An agent run whose candidate awaits a person's decision."""
+    await with_agent_waiting(client, auth, target)
+    answered = await client.post(
+        f"/api/v1/projects/{target.project_id}/architecture-agent-runs/{target.agent_run_id}/answers",
+        json=agent_answers(target),
+        headers=auth,
+    )
+    assert answered.status_code == 200, answered.text
+    assert answered.json()["status"] == "candidate_ready", answered.text
+    target.agent_candidate_hash = answered.json()["candidate"]["contentHash"]
+
+
 async def with_knowledge(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
     """An indexed knowledge document."""
     registered = await client.post(
@@ -586,6 +640,24 @@ PLANS: dict[str, Plan] = {
     f"archive_knowledge_source{_KNOWLEDGE}archive_post": Plan(
         {"knowledge_source.archived"}, "knowledge", None, with_knowledge
     ),
+    "start_agent_run_api_v1_projects__project_id__architecture_agent_runs_post": Plan(
+        {"agent_run.created"}, "created", agent_request, with_agent_set
+    ),
+    f"answer_agent_run{_AGENT}answers_post": Plan(
+        {"agent_run.answered"}, "agent_run", agent_answers, with_agent_waiting
+    ),
+    f"cancel_agent_run{_AGENT}cancel_post": Plan(
+        {"agent_run.cancelled"}, "agent_run", None, with_agent_waiting
+    ),
+    f"reject_agent_candidate{_AGENT}reject_post": Plan(
+        {"agent_run.rejected"}, "agent_run", {"reason": CANARY_REASON}, with_agent_candidate
+    ),
+    f"accept_agent_candidate{_AGENT}accept_post": Plan(
+        {"agent_run.accepted", "architecture.created"},
+        {"agent_run.accepted": "agent_run", "architecture.created": "accepted_architecture"},
+        lambda target: {"candidateContentHash": target.agent_candidate_hash, "name": CANARY_TITLE},
+        with_agent_candidate,
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -619,6 +691,7 @@ def test_every_project_scoped_audit_action_is_exercised() -> None:
         "drift_item",
         "drift_identity",
         "knowledge_source",
+        "agent_run",
     }
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
@@ -635,6 +708,7 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
         "drift_item": target.drift_item_id,
         "drift_architecture": target.drift_architecture_id,
         "knowledge": target.knowledge_source_id,
+        "agent_run": target.agent_run_id,
     }
     match resource:
         case "promoted":
@@ -712,6 +786,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             "decision_id": target.decision_id,
             "plan_id": target.plan_id,
             **({"run_id": target.discovery_run_id} if target.discovery_run_id else {}),
+            **({"run_id": target.agent_run_id} if target.agent_run_id else {}),
             **({"item_id": target.drift_item_id} if target.drift_item_id else {}),
             **({"source_id": target.knowledge_source_id} if target.knowledge_source_id else {}),
         }
@@ -735,7 +810,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
                 assert canary not in text, (operation_id, entry)
 
 
-async def test_read_only_endpoints_write_nothing(
+async def test_read_only_endpoints_write_nothing(  # noqa: PLR0915 - one sweep over every read
     app: FastAPI, client: AsyncClient, outbox: InMemoryTransport
 ) -> None:
     auth = await signed_in(client, outbox, "ada@example.com")
@@ -807,6 +882,8 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     knowledge = await knowledge_ids(client, auth, target)  # an indexed document in the main project
+    agent = await fresh_target(client, auth, org_id)
+    await with_agent_waiting(client, auth, agent)  # its own project: a run waiting for answers
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -854,6 +931,8 @@ async def test_read_only_endpoints_write_nothing(
                 "finding_id": drift_findings.json()["findings"][0]["id"],
                 "item_id": drifted.drift_item_id,
             }
+        if "/architecture-agent-runs" in op.path:
+            values = ids | {"project_id": agent.project_id, "run_id": agent.agent_run_id}
         body = READ_BODIES.get(op.operation_id)
         response = await client.request(op.method, op.url(**values), json=body, headers=auth)
         assert response.is_success, (op.operation_id, response.text)

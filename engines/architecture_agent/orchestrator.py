@@ -33,14 +33,18 @@ Nothing here reads or writes storage: the service gives the inputs and stores th
 import logging
 import time
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 
-from core.architecture_ir.model import ArchitectureIR
 from core.architecture_ir.versioning import IR_SCHEMA_VERSION
 from core.domain.architecture_agent.errors import InvalidAgentTransition
-from core.domain.architecture_agent.ports import ArchitectureProposer, ProposalContext, ProposerOutcome
+from core.domain.architecture_agent.ports import (
+    ArchitectureProposer,
+    PassInputs,
+    ProposalContext,
+    ProposerOutcome,
+)
 from core.domain.architecture_agent.proposals import ClarificationQuestion, Proposal
 from core.domain.architecture_agent.requests import AgentUsage
 from core.domain.architecture_agent.results import Candidate, EngineReport, Rejection
@@ -48,14 +52,11 @@ from core.domain.architecture_agent.runs import AgentRun, RunFailure
 from core.domain.architecture_agent.values import FailureCode, QuestionKind, RunStatus, Stage
 from core.domain.clock import utc_now
 from core.domain.components.repository import ComponentCatalog
-from core.domain.knowledge.retrieval import Passage, RetrievalQuery, RetrievalResult
+from core.domain.knowledge.retrieval import Passage, RetrievalResult
 from core.domain.observability.analyses import ObservabilityAnalysisRequest
 from core.domain.observability.ports import ObservabilityEngine
-from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.reliability.analyses import ReliabilityAnalysisRequest
 from core.domain.reliability.ports import ReliabilityEngine
-from core.domain.requirements.entities import Requirement
-from core.domain.requirements.planning import PlanningInputV2
 from core.domain.security.analyses import SecurityAnalysisRequest
 from core.domain.security.ports import SecurityEngine
 from core.domain.validation.options import RevisionInfo, ValidationConfig
@@ -79,8 +80,6 @@ FAILURE_MESSAGES = {
     FailureCode.ENGINE_ERROR: "The validation engine could not check the candidate, so it is not presented.",
 }
 
-Retrieve = Callable[[RetrievalQuery], Awaitable[RetrievalResult]]
-
 
 @dataclass(frozen=True, slots=True)
 class AgentEngines:
@@ -88,17 +87,6 @@ class AgentEngines:
     reliability: ReliabilityEngine
     security: SecurityEngine
     observability: ObservabilityEngine
-
-
-@dataclass(frozen=True, slots=True)
-class PassInputs:
-    """What the service loaded for this pass (all of the run's project, all authorized)."""
-
-    planning_input: PlanningInputV2  # the requirement set, pinned
-    requirements: tuple[Requirement, ...]  # the same pinned versions, for the engines
-    policy: ArchitecturePolicy
-    retrieve: Retrieve  # the knowledge retriever, bound to the project and the requesting person
-    base: ArchitectureIR | None = None  # the revision an iteration starts from
 
 
 def _counted(run: AgentRun, *, retrievals: int = 0, engines: int = 0) -> AgentRun:
@@ -120,6 +108,10 @@ class ArchitectureAgentPipeline:
         self._catalog = catalog
         self._clock = clock
         self._monotonic = monotonic
+
+    @property
+    def configured(self) -> bool:
+        return getattr(self._proposer, "configured", True)
 
     def _fail(
         self, run: AgentRun, code: FailureCode, stage: Stage, rejections: tuple[Rejection, ...] = ()

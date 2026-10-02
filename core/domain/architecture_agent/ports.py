@@ -6,13 +6,20 @@ change the instructions. The outcome never raises for a model failure — it say
 much was used, and (when there was output) the SHA-256 and size of that output; never the output.
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Protocol
+
+from core.architecture_ir.model import ArchitectureIR
+from core.domain.knowledge.retrieval import RetrievalQuery, RetrievalResult
+from core.domain.projects.policies import ArchitecturePolicy
+from core.domain.requirements.entities import Requirement
+from core.domain.requirements.planning import PlanningInputV2
 
 from .proposals import Proposal
 from .requests import AgentUsage, Budget
 from .results import Rejection
-from .runs import RawOutput
+from .runs import AgentRun, RawOutput
 from .values import FailureCode, check, code, items, text, texts
 
 MAX_SECTIONS = 20
@@ -82,4 +89,29 @@ class ArchitectureProposer(Protocol):
     ) -> ProposerOutcome:
         """At most ``budget.max_model_calls - spent.model_calls`` calls, within ``remaining_seconds``.
         Never raises for a model failure: the outcome says what failed."""
+        ...
+
+
+Retrieve = Callable[[RetrievalQuery], Awaitable[RetrievalResult]]
+
+
+@dataclass(frozen=True, slots=True)
+class PassInputs:
+    """What the service loaded for one pass (all of the run's project, all authorized)."""
+
+    planning_input: PlanningInputV2  # the requirement set, pinned
+    requirements: tuple[Requirement, ...]  # the same pinned versions, for the engines
+    policy: ArchitecturePolicy
+    retrieve: Retrieve  # the knowledge retriever, bound to the project and the requesting person
+    base: ArchitectureIR | None = None  # the revision an iteration starts from
+
+
+class AgentPipeline(Protocol):
+    @property
+    def configured(self) -> bool:
+        """Whether a language model is configured (without one, every run fails ``llm_unavailable``)."""
+        ...
+
+    async def advance(self, run: AgentRun, inputs: PassInputs) -> AgentRun:
+        """One pass, from ``queued`` (or ``running`` after answers) to waiting, ready or failed."""
         ...

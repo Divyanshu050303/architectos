@@ -20,6 +20,10 @@ from core.domain.architecture.entities import (
 )
 from core.domain.architecture.errors import ArchitectureNameTaken
 from core.domain.architecture.versions import ArchitectureRevision, NewRevision
+from core.domain.architecture_agent.records import run_document, run_from
+from core.domain.architecture_agent.repository import RunListing as AgentRunListing
+from core.domain.architecture_agent.runs import AgentRun
+from core.domain.architecture_agent.values import RunStatus as AgentRunStatus
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.capacity.analyses import AnalysisReport, CapacityAnalysis
 from core.domain.capacity.queries import AnalysisQuery, BottleneckQuery, ComponentQuery
@@ -1826,6 +1830,54 @@ class FakeKnowledgeRepository:
         return self._candidate(source, indexed, chunk_id)
 
 
+class FakeAgentRunRepository:
+    """Runs kept as the database keeps them: written and read through the same record documents."""
+
+    def __init__(self) -> None:
+        self.rows: dict[uuid.UUID, dict[str, Any]] = {}
+
+    async def add(self, run: AgentRun) -> AgentRun:
+        self.rows[run.id] = run_document(run)
+        return run
+
+    async def save(self, run: AgentRun) -> AgentRun:
+        if run.id not in self.rows:
+            raise LookupError(run.id)
+        self.rows[run.id] = run_document(run)
+        return run
+
+    async def get(
+        self, project_id: uuid.UUID, run_id: uuid.UUID, *, for_update: bool = False
+    ) -> AgentRun | None:
+        row = self.rows.get(run_id)
+        return run_from(row) if row is not None and row["project_id"] == project_id else None
+
+    async def list(
+        self,
+        project_id: uuid.UUID,
+        *,
+        status: AgentRunStatus | None = None,
+        after: tuple[datetime, uuid.UUID] | None = None,
+        limit: int = 50,
+    ) -> list[AgentRunListing]:
+        runs = [run_from(r) for r in self.rows.values() if r["project_id"] == project_id]
+        runs = [r for r in runs if status is None or r.status is status]
+        runs.sort(key=lambda r: (r.requested_at, r.id), reverse=True)
+        if after is not None:
+            runs = [r for r in runs if (r.requested_at, r.id) < after]
+        return [
+            AgentRunListing(
+                r.id, r.request.requirement_set_id,
+                r.request.base.architecture_id if r.request.base else None,
+                r.request.base.number if r.request.base else None, r.status, r.stage, r.model,
+                r.failure.code if r.failure else None, r.candidate.content_hash if r.candidate else None,
+                r.accepted.architecture_id if r.accepted else None, r.accepted.number if r.accepted else None,
+                r.requested_by_user_id, r.requested_at, r.completed_at,
+            )
+            for r in runs[:limit]
+        ]  # fmt: skip
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1855,6 +1907,7 @@ class FakeUnitOfWork:
         self._discoveries = FakeDiscoveryRunRepository()
         self._drift = FakeDriftRepository()
         self._knowledge = FakeKnowledgeRepository()
+        self._agent_runs = FakeAgentRunRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1965,6 +2018,10 @@ class FakeUnitOfWork:
     @property
     def knowledge(self) -> FakeKnowledgeRepository:
         return self._knowledge
+
+    @property
+    def agent_runs(self) -> FakeAgentRunRepository:
+        return self._agent_runs
 
     async def __aenter__(self) -> Self:
         return self

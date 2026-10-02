@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     requirements_llm_timeout_seconds: float = Field(default=20, gt=0, le=120)
     requirements_llm_max_output_tokens: int = Field(default=4000, ge=256, le=16_000)
 
+    # Architecture agent: proposals from a language model, off unless configured. Without a model a run
+    # fails ``llm_unavailable`` (it never falls back to anything presented as a proposal).
+    architecture_agent_llm_provider: Literal["none", "anthropic"] = "none"
+    architecture_agent_llm_model: str = "claude-sonnet-5"
+    architecture_agent_llm_timeout_seconds: float = Field(default=60, gt=0, le=300)
+
     @field_validator("cors_allowed_origins", "avatar_url_allowed_hosts", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -115,6 +121,8 @@ class Settings(BaseSettings):
     def _production_guards(self) -> Self:
         if self.requirements_llm_provider == "anthropic" and self.anthropic_api_key is None:
             raise ValueError("REQUIREMENTS_LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY")
+        if self.architecture_agent_llm_provider == "anthropic" and self.anthropic_api_key is None:
+            raise ValueError("ARCHITECTURE_AGENT_LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY")
         if self.cookie_samesite == "none" and not self.cookie_secure:
             raise ValueError("COOKIE_SAMESITE=none requires COOKIE_SECURE=true")
         if self.environment != "production":

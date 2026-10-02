@@ -281,6 +281,14 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/archive"),
     ("GET", "/api/v1/projects/{project_id}/knowledge-sources/{source_id}/passages/{chunk_id}"),
     ("POST", "/api/v1/projects/{project_id}/knowledge/search"),
+    # Architecture agent: runs, answers, and a person's decision.
+    ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs"),
+    ("GET", "/api/v1/projects/{project_id}/architecture-agent-runs"),
+    ("GET", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/answers"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/cancel"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/reject"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/accept"),
 }
 
 

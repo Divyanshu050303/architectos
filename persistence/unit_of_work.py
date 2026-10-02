@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from core.domain.client import ClientInfo
 from persistence.models import EmailVerificationTokenRecord, PasswordResetTokenRecord
+from persistence.repositories.architecture_agent import SqlAlchemyAgentRunRepository
 from persistence.repositories.architectures import SqlAlchemyArchitectureRepository
 from persistence.repositories.audit_logs import SqlAlchemyAuditRepository
 from persistence.repositories.capacity import SqlAlchemyCapacityAnalysisRepository
@@ -73,6 +74,7 @@ class SqlAlchemyUnitOfWork:
         self.discoveries = SqlAlchemyDiscoveryRunRepository(session)
         self.drift = SqlAlchemyDriftRepository(session)
         self.knowledge = SqlAlchemyKnowledgeRepository(session)
+        self.agent_runs = SqlAlchemyAgentRunRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

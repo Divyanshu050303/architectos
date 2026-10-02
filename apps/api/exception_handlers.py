@@ -35,6 +35,12 @@ from core.domain.architecture.errors import (
     InvalidLayout,
     InvalidRevision,
 )
+from core.domain.architecture_agent.errors import (
+    AgentRunNotFound,
+    CandidateNotAcceptable,
+    InvalidAgentRequest,
+    InvalidAgentTransition,
+)
 from core.domain.audit.errors import InvalidCursor
 from core.domain.capacity.errors import (
     CapacityAnalysisNotFound,
@@ -286,6 +292,10 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidKnowledgeTransition: 409,
     ProposalNotAcceptable: 409,
     AcceptedRunNotDeleted: 409,
+    InvalidAgentRequest: 422,
+    AgentRunNotFound: 404,
+    InvalidAgentTransition: 409,
+    CandidateNotAcceptable: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

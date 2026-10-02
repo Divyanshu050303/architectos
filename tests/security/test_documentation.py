@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from core.architecture_ir import commands as ir_commands
 from core.architecture_ir import errors as ir_errors
 from core.domain.architecture import errors as architecture_errors
+from core.domain.architecture_agent import errors as agent_errors
 from core.domain.audit.entities import AuditAction
 from core.domain.capacity import errors as capacity_errors
 from core.domain.components import errors as component_errors
@@ -53,6 +54,7 @@ API_DOCS = "".join(
         "discovery.md",
         "drift.md",
         "knowledge.md",
+        "architecture-agent.md",
         "components.md",
     )
 )
@@ -76,11 +78,12 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     documented = {(method, shape(path)) for method, path in ENDPOINT.findall(API_DOCS)}
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
     # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability, 6 simulation, 6
-    # evolution, 8 decision, 14 migration plan, 10 discovery, 10 drift and 9 knowledge endpoints
+    # evolution, 8 decision, 14 migration plan, 10 discovery, 10 drift, 9 knowledge and 7 architecture
+    # agent endpoints
     # (GET /validation/rules,
     # /capacity/models, /cost/models, /reliability/models, /security/analyzers,
     # /observability/analyzers, /simulation/catalog and /evolution/catalog are not project-scoped)
-    assert len(served) == 131
+    assert len(served) == 138
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -144,6 +147,10 @@ def test_every_error_code_is_documented() -> None:
             knowledge_errors.KnowledgeChunkNotFound,
             knowledge_errors.IngestionRunNotFound,
             knowledge_errors.InvalidKnowledgeTransition,
+            agent_errors.InvalidAgentRequest,
+            agent_errors.AgentRunNotFound,
+            agent_errors.InvalidAgentTransition,
+            agent_errors.CandidateNotAcceptable,
             component_errors.ComponentNotFound,
         )
     }
@@ -167,6 +174,7 @@ def test_every_audit_action_is_documented() -> None:
             "drift_item",
             "drift_identity",
             "knowledge_source",
+            "agent_run",
         }
     }
     assert {a for a in actions if a not in API_DOCS} == set()

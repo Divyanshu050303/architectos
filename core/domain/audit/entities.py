@@ -80,6 +80,11 @@ class AuditAction(StrEnum):
     KNOWLEDGE_SOURCE_REGISTERED = "knowledge_source.registered"  # a document or record made searchable
     KNOWLEDGE_SOURCE_INGESTED = "knowledge_source.ingested"  # read again: indexed, unchanged or failed
     KNOWLEDGE_SOURCE_ARCHIVED = "knowledge_source.archived"  # no longer searched; its versions are kept
+    AGENT_RUN_CREATED = "agent_run.created"  # the architecture agent ran: waiting, a candidate, or failed
+    AGENT_RUN_ANSWERED = "agent_run.answered"  # a person answered its questions; the run went on
+    AGENT_RUN_CANCELLED = "agent_run.cancelled"
+    AGENT_RUN_REJECTED = "agent_run.rejected"  # a person rejected the candidate
+    AGENT_RUN_ACCEPTED = "agent_run.accepted"  # a person accepted the candidate as a revision
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

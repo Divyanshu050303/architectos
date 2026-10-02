@@ -46,6 +46,7 @@ class Permission(StrEnum):
     ARCHITECTURE_SIMULATE = "architecture.simulate"
     ARCHITECTURE_EVOLVE = "architecture.evolve"
     ARCHITECTURE_DISCOVER = "architecture.discover"  # run discoveries and review their proposals
+    ARCHITECTURE_GENERATE = "architecture.generate"  # run the architecture agent, answer, accept or reject
     ARCHITECTURE_DRIFT = "architecture.drift"  # run drift analyses, review drift items, confirm identities
 
     KNOWLEDGE_READ = "knowledge.read"  # search project knowledge, read sources, passages and ingestions
@@ -81,6 +82,7 @@ _MEMBER = _VIEWER | {
     Permission.ARCHITECTURE_EVOLVE,
     Permission.ARCHITECTURE_DISCOVER,
     Permission.ARCHITECTURE_DRIFT,
+    Permission.ARCHITECTURE_GENERATE,
     Permission.KNOWLEDGE_MANAGE,
     Permission.MIGRATION_PLAN,
 }

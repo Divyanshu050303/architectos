@@ -7,6 +7,7 @@ import pytest
 from ai.agents.architecture_agent import ArchitectureProposalAgent
 from ai.llm.client import LlmTimeout, LlmUnavailable
 from core.domain.architecture_agent.errors import InvalidAgentTransition
+from core.domain.architecture_agent.ports import PassInputs
 from core.domain.architecture_agent.proposals import Answer
 from core.domain.architecture_agent.requests import AgentRequest, Budget
 from core.domain.architecture_agent.runs import AgentRun
@@ -23,7 +24,7 @@ from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.requirements.entities import NewRequirement, Requirement
 from core.domain.requirements.enums import RequirementPriority, RequirementStatus, RequirementType
 from core.domain.requirements.planning import build_planning_input
-from engines.architecture_agent.orchestrator import AgentEngines, ArchitectureAgentPipeline, PassInputs
+from engines.architecture_agent.orchestrator import AgentEngines, ArchitectureAgentPipeline
 from engines.architecture_agent.reports import failed_report, not_evaluated_reports, validation_blocking
 from engines.observability.service import DeterministicObservabilityEngine
 from engines.reliability.service import DeterministicReliabilityEngine
