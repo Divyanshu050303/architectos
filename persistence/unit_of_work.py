@@ -11,6 +11,7 @@ from persistence.repositories.capacity import SqlAlchemyCapacityAnalysisReposito
 from persistence.repositories.cost import SqlAlchemyCostAnalysisRepository
 from persistence.repositories.decisions import SqlAlchemyDecisionRepository
 from persistence.repositories.discovery import SqlAlchemyDiscoveryRunRepository
+from persistence.repositories.drift import SqlAlchemyDriftRepository
 from persistence.repositories.evolution import SqlAlchemyEvolutionRepository
 from persistence.repositories.invitations import SqlAlchemyInvitationRepository
 from persistence.repositories.migrations import SqlAlchemyMigrationPlanRepository
@@ -69,6 +70,7 @@ class SqlAlchemyUnitOfWork:
         self.decisions = SqlAlchemyDecisionRepository(session)
         self.migrations = SqlAlchemyMigrationPlanRepository(session)
         self.discoveries = SqlAlchemyDiscoveryRunRepository(session)
+        self.drift = SqlAlchemyDriftRepository(session)
 
     async def __aenter__(self) -> Self:
         self._transaction = await self._session.begin()

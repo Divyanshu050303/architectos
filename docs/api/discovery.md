@@ -22,7 +22,7 @@ earlier revisions are never changed, and nothing is accepted automatically.
 | `POST /projects/{projectId}/discovery-runs/{runId}/accept` | `architecture.discover` + `architecture.create` or `architecture.update` | `AcceptRequest` | `201 Accepted` | `404 discovery_run_not_found, architecture_not_found`, `409 discovery_proposal_not_acceptable, architecture_version_conflict, invalid_discovery_transition, project_archived, architecture_archived`, `422 invalid_discovery_request, invalid_architecture` |
 | `GET /projects/{projectId}/discovery-runs/{runId}/comparison` | `architecture.read` | | `200 RunComparison` | `404 discovery_run_not_found`, `409 invalid_discovery_transition` |
 | `GET /projects/{projectId}/discovery-runs/{runId}/baseline-comparison` | `architecture.read` | | `200 BaselineComparison` | `404 discovery_run_not_found, architecture_not_found, architecture_revision_not_found`, `409 invalid_discovery_transition`, `422 invalid_discovery_request` |
-| `DELETE /projects/{projectId}/discovery-runs/{runId}` | `architecture.discover` | | `204` | `404 discovery_run_not_found`, `409 accepted_discovery_run, project_archived` |
+| `DELETE /projects/{projectId}/discovery-runs/{runId}` | `architecture.discover` | | `204` | `404 discovery_run_not_found`, `409 accepted_discovery_run, discovery_run_in_use, project_archived` |
 
 On every endpoint: `404 project_not_found` outside your organizations and `403 permission_denied`
 without the permission. A run of another project or organization is `404 discovery_run_not_found`,

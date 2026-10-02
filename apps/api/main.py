@@ -24,6 +24,7 @@ from apps.api.routes import (
     cost,
     decisions,
     discovery,
+    drift,
     evolution,
     invitations,
     migration_plans,
@@ -44,6 +45,7 @@ from engines.capacity.service import DeterministicCapacityEngine
 from engines.constraints.service import DeterministicConstraintEngine
 from engines.cost.service import DeterministicCostEngine
 from engines.discovery.engine import DeterministicDiscoveryEngine
+from engines.drift.engine import DeterministicDriftEngine
 from engines.evolution.service import DeterministicEvolutionEngine
 from engines.migration.service import MigrationEngine
 from engines.observability.service import DeterministicObservabilityEngine
@@ -104,6 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.evolution_engine = DeterministicEvolutionEngine()
     app.state.migration_engine = MigrationEngine()
     app.state.discovery_engine = DeterministicDiscoveryEngine(app.state.component_catalog)
+    app.state.drift_engine = DeterministicDriftEngine(app.state.component_catalog)
     app.state.email_transport = SmtpTransport(
         host=settings.smtp_host,
         port=settings.smtp_port,
@@ -161,4 +164,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(decisions.router, prefix=API_PREFIX)
     app.include_router(migration_plans.router, prefix=API_PREFIX)
     app.include_router(discovery.router, prefix=API_PREFIX)
+    app.include_router(drift.router, prefix=API_PREFIX)
     return app

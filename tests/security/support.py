@@ -55,6 +55,9 @@ class Operation:
             .replace("{invitation_token}", "A" * 43)
             .replace("{directory}", "messaging")
             .replace("{entry}", "aws-sqs")
+            .replace("{drift_analysis_id}", str(uuid.uuid4()))
+            .replace("{finding_id}", "dft_" + "0" * 20)
+            .replace("{item_id}", str(uuid.uuid4()))
         ) + _query(url, values)
 
 

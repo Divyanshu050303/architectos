@@ -14,6 +14,7 @@ from core.domain.capacity.repository import CapacityAnalysisRepository
 from core.domain.cost.repository import CostAnalysisRepository, PricingSnapshotRepository
 from core.domain.decisions.repository import DecisionRepository
 from core.domain.discovery.repository import DiscoveryRunRepository
+from core.domain.drift.repository import DriftRepository
 from core.domain.evolution.repository import EvolutionRepository
 from core.domain.identity.repository import SessionRepository, SingleUseTokenRepository, UserRepository
 from core.domain.migrations.repository import MigrationPlanRepository
@@ -110,6 +111,9 @@ class UnitOfWork(Protocol):
 
     @property
     def discoveries(self) -> DiscoveryRunRepository: ...
+
+    @property
+    def drift(self) -> DriftRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

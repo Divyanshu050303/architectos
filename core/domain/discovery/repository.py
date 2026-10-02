@@ -33,6 +33,12 @@ class DiscoveryRunRepository(Protocol):
         """The project's runs, newest first, without their results."""
         ...
 
+    async def accepted_for(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID
+    ) -> tuple[DiscoveryRun, ...]:
+        """The runs whose proposal was accepted into the architecture (oldest first)."""
+        ...
+
     async def delete(self, project_id: uuid.UUID, run_id: uuid.UUID) -> None:
         """Remove a run that no acceptance refers to (the caller checked)."""
         ...

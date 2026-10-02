@@ -10,6 +10,7 @@ from collections.abc import Mapping
 
 from core.domain.components.repository import ComponentCatalog
 from core.domain.drift.analyses import DriftRequest, DriftResult
+from core.domain.drift.ports import DriftInputs
 from core.domain.drift.values import Compatibility
 from core.domain.migrations.evidence import AnalysisEvidence
 
@@ -57,6 +58,15 @@ class DeterministicDriftEngine:
             _versions(),
             request.policy,
         )
+
+    def run(self, inputs: DriftInputs) -> DriftResult:
+        """The ``DriftEngine`` port: the comparison of exactly these inputs."""
+        baseline = BaselineInput(
+            inputs.baseline, inputs.baseline_ir, inputs.baseline_created_at, inputs.latest_revision,
+            inputs.baseline_source,
+        )  # fmt: skip
+        observed = ObservedInput(inputs.observed, inputs.observed_result, inputs.observed_at)
+        return self.analyze(inputs.request, baseline, observed, inputs.mappings, inputs.evidence)
 
     def versions(self) -> Mapping[str, int]:
         return _versions()

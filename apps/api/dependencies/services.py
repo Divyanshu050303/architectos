@@ -23,6 +23,7 @@ from core.domain.cost.cost_service import CostService
 from core.domain.cost.snapshots import PricingService
 from core.domain.decisions.decision_service import DecisionService
 from core.domain.discovery.discovery_service import DiscoveryService
+from core.domain.drift.drift_service import DriftService
 from core.domain.evolution.evolution_service import EvolutionService
 from core.domain.identity.auth_service import AuthService, VerificationSettings
 from core.domain.identity.password_service import PasswordService, ResetSettings
@@ -412,6 +413,15 @@ def get_discovery_service(
 
 
 DiscoveryServiceDep = Annotated[DiscoveryService, Depends(get_discovery_service)]
+
+
+def get_drift_service(
+    request: Request, db: DbSession, client: Client, clock: Annotated[Clock, Depends(get_clock)]
+) -> DriftService:
+    return DriftService(SqlAlchemyUnitOfWork(db, client), request.app.state.drift_engine, clock=clock)
+
+
+DriftServiceDep = Annotated[DriftService, Depends(get_drift_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:

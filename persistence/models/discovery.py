@@ -18,6 +18,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    UniqueConstraint,
     Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -60,6 +61,7 @@ class DiscoveryRunRecord(UuidPrimaryKey, Timestamps, Base):
     acceptances: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
 
     __table_args__ = (
+        UniqueConstraint("id", "project_id"),  # target of drift analyses' same-project foreign keys
         ForeignKeyConstraint(
             ["baseline_architecture_id", "project_id"],
             ["architectures.id", "architectures.project_id"],

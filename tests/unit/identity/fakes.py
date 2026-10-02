@@ -38,6 +38,11 @@ from core.domain.cost.results import LineItem
 from core.domain.decisions.entities import Decision, DecisionStatus
 from core.domain.discovery.runs import DiscoveryRun, RunListing
 from core.domain.discovery.values import RunStatus
+from core.domain.drift.analyses import DriftAnalysis
+from core.domain.drift.identity import IdentityMapping
+from core.domain.drift.items import DriftItem
+from core.domain.drift.values import AnalysisStatus as DriftStatus
+from core.domain.drift.values import ReviewStatus
 from core.domain.evolution.candidates import Candidate
 from core.domain.evolution.queries import CandidateQuery, EvolutionQuery
 from core.domain.evolution.reports import EvolutionReport
@@ -1538,10 +1543,121 @@ class FakeDiscoveryRunRepository:
             for r in ordered
         ]
 
+    async def accepted_for(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID
+    ) -> tuple[DiscoveryRun, ...]:
+        found = [
+            r
+            for r in self.runs.values()
+            if r.project_id == project_id and any(a.architecture_id == architecture_id for a in r.acceptances)
+        ]
+        return tuple(sorted(found, key=lambda r: (r.requested_at, r.id)))
+
     async def delete(self, project_id: uuid.UUID, run_id: uuid.UUID) -> None:
         found = self.runs.get(run_id)
         if found is not None and found.project_id == project_id:
             del self.runs[run_id]
+
+
+class FakeDriftRepository:
+    def __init__(self) -> None:
+        self.analyses: dict[uuid.UUID, DriftAnalysis] = {}
+        self.items: dict[uuid.UUID, DriftItem] = {}
+        self.identity: list[tuple[uuid.UUID, IdentityMapping]] = []
+
+    async def add_analysis(self, analysis: DriftAnalysis) -> DriftAnalysis:
+        assert analysis.id not in self.analyses  # append-only
+        self.analyses[analysis.id] = analysis
+        return analysis
+
+    async def get_analysis(self, project_id: uuid.UUID, analysis_id: uuid.UUID) -> DriftAnalysis | None:
+        found = self.analyses.get(analysis_id)
+        return found if found is not None and found.project_id == project_id else None
+
+    async def list_analyses(
+        self,
+        project_id: uuid.UUID,
+        *,
+        architecture_id: uuid.UUID | None = None,
+        status: DriftStatus | None = None,
+        after: tuple[datetime, uuid.UUID] | None = None,
+        limit: int = 50,
+    ) -> list[DriftAnalysis]:
+        found = [
+            a
+            for a in self.analyses.values()
+            if a.project_id == project_id
+            and (architecture_id is None or a.request.architecture_id == architecture_id)
+            and (status is None or a.status is status)
+            and (after is None or (a.requested_at, a.id) < after)
+        ]
+        return sorted(found, key=lambda a: (a.requested_at, a.id), reverse=True)[:limit]
+
+    async def uses_discovery_run(self, project_id: uuid.UUID, run_id: uuid.UUID) -> bool:
+        return any(
+            a.project_id == project_id and a.request.discovery_run_id == run_id
+            for a in self.analyses.values()
+        )
+
+    async def add_items(self, items: tuple[DriftItem, ...]) -> None:
+        for item in items:
+            assert item.id not in self.items
+            assert not any(
+                i.architecture_id == item.architecture_id and i.key == item.key for i in self.items.values()
+            )
+            self.items[item.id] = item
+
+    async def save_item(self, item: DriftItem) -> DriftItem:
+        stored = self.items[item.id]
+        assert (stored.key, stored.first_analysis_id) == (item.key, item.first_analysis_id)
+        assert item.history[: len(stored.history)] == stored.history  # the history only grows
+        self.items[item.id] = item
+        return item
+
+    async def get_item(
+        self, project_id: uuid.UUID, item_id: uuid.UUID, *, for_update: bool = False
+    ) -> DriftItem | None:
+        found = self.items.get(item_id)
+        return found if found is not None and found.project_id == project_id else None
+
+    async def items_of(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID, *, for_update: bool = False
+    ) -> list[DriftItem]:
+        return sorted(
+            (
+                i
+                for i in self.items.values()
+                if i.project_id == project_id and i.architecture_id == architecture_id
+            ),
+            key=lambda i: i.id,
+        )
+
+    async def list_items(
+        self,
+        project_id: uuid.UUID,
+        *,
+        architecture_id: uuid.UUID | None = None,
+        status: ReviewStatus | None = None,
+        after: uuid.UUID | None = None,
+        limit: int = 50,
+    ) -> list[DriftItem]:
+        found = [
+            i
+            for i in self.items.values()
+            if i.project_id == project_id
+            and (architecture_id is None or i.architecture_id == architecture_id)
+            and (status is None or i.status is status)
+            and (after is None or i.id > after)
+        ]
+        return sorted(found, key=lambda i: i.id)[:limit]
+
+    async def add_mapping(self, project_id: uuid.UUID, mapping: IdentityMapping) -> IdentityMapping:
+        self.identity.append((project_id, mapping))
+        return mapping
+
+    async def mappings(self, project_id: uuid.UUID, architecture_id: uuid.UUID) -> list[IdentityMapping]:
+        found = [m for p, m in self.identity if p == project_id and m.architecture_id == architecture_id]
+        return sorted(found, key=lambda m: m.confirmed_at)
 
 
 class FakeUnitOfWork:
@@ -1571,6 +1687,7 @@ class FakeUnitOfWork:
         self._decisions = FakeDecisionRepository()
         self._migrations = FakeMigrationPlanRepository()
         self._discoveries = FakeDiscoveryRunRepository()
+        self._drift = FakeDriftRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -1673,6 +1790,10 @@ class FakeUnitOfWork:
     @property
     def discoveries(self) -> FakeDiscoveryRunRepository:
         return self._discoveries
+
+    @property
+    def drift(self) -> FakeDriftRepository:
+        return self._drift
 
     async def __aenter__(self) -> Self:
         return self

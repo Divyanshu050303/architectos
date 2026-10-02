@@ -156,5 +156,16 @@ class SqlAlchemyDiscoveryRunRepository:
             for row in rows
         ]
 
+    async def accepted_for(
+        self, project_id: uuid.UUID, architecture_id: uuid.UUID
+    ) -> tuple[DiscoveryRun, ...]:
+        accepted = [{"architecture_id": str(architecture_id)}]
+        records = await self._session.scalars(
+            select(R)
+            .where(R.project_id == project_id, R.acceptances.contains(accepted))
+            .order_by(R.requested_at, R.id)
+        )
+        return tuple(to_run(r) for r in records)
+
     async def delete(self, project_id: uuid.UUID, run_id: uuid.UUID) -> None:
         await self._session.execute(delete(R).where(R.project_id == project_id, R.id == run_id))

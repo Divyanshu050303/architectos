@@ -56,10 +56,18 @@ from core.domain.cost.errors import (
 from core.domain.decisions.errors import DecisionNotFound, InvalidDecision, InvalidDecisionTransition
 from core.domain.discovery.errors import (
     AcceptedRunNotDeleted,
+    DiscoveryRunInUse,
     DiscoveryRunNotFound,
     InvalidDiscoveryRequest,
     InvalidDiscoveryTransition,
     ProposalNotAcceptable,
+)
+from core.domain.drift.errors import (
+    DriftAnalysisNotFound,
+    DriftItemNotFound,
+    InvalidDriftRequest,
+    InvalidDriftTransition,
+    InvalidReviewAction,
 )
 from core.domain.errors import DomainError
 from core.domain.evolution.errors import CandidateNotFound, EvolutionAnalysisNotFound, InvalidEvolutionRequest
@@ -256,6 +264,12 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     InvalidDiscoveryRequest: 422,
     DiscoveryRunNotFound: 404,
     InvalidDiscoveryTransition: 409,
+    DiscoveryRunInUse: 409,
+    InvalidDriftRequest: 422,
+    DriftAnalysisNotFound: 404,
+    DriftItemNotFound: 404,
+    InvalidDriftTransition: 409,
+    InvalidReviewAction: 409,
     ProposalNotAcceptable: 409,
     AcceptedRunNotDeleted: 409,
 }

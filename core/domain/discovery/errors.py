@@ -44,3 +44,10 @@ class AcceptedRunNotDeleted(DomainError):
 
     code = "accepted_discovery_run"
     message = "A discovery run whose proposal was accepted cannot be deleted."
+
+
+class DiscoveryRunInUse(DomainError):
+    """A run a drift analysis compared is that analysis's evidence: it is kept."""
+
+    code = "discovery_run_in_use"
+    message = "A discovery run a drift analysis compared cannot be deleted."

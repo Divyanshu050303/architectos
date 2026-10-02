@@ -44,6 +44,7 @@ from core.domain.unit_of_work import UnitOfWork
 from .comparison import BaselineComparison, ResultComparison, compare_results, compare_with_baseline
 from .errors import (
     AcceptedRunNotDeleted,
+    DiscoveryRunInUse,
     DiscoveryRunNotFound,
     InvalidDiscoveryRequest,
     InvalidDiscoveryResult,
@@ -317,6 +318,8 @@ class DiscoveryService:
             found = await _run(uow, project_id, run_id, for_update=True)
             if found.acceptances:
                 raise AcceptedRunNotDeleted
+            if await uow.drift.uses_discovery_run(project_id, run_id):
+                raise DiscoveryRunInUse
             await uow.discoveries.delete(project_id, run_id)
             await _audit(uow, access, AuditAction.DISCOVERY_RUN_DELETED, user_id, found)
 

@@ -79,6 +79,9 @@ class Target:
     fingerprint: str = ""  # of that version
     discovery_run_id: str = ""  # set by with_discovery
     proposal_hash: str = ""  # of that run's proposal
+    drift_architecture_id: str = ""  # set by with_drift: accepted from that run
+    drift_analysis_id: str = ""
+    drift_item_id: str = ""
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -270,6 +273,54 @@ async def with_discovery(client: AsyncClient, auth: dict[str, str], target: Targ
     )
     assert proposal.status_code == 200, proposal.text
     target.proposal_hash = str(proposal.json()["contentHash"])
+
+
+async def with_drift_baseline(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """The discovery's proposal accepted as an architecture: a baseline drift can be detected against."""
+    await with_discovery(client, auth, target)
+    accepted = await client.post(
+        f"/api/v1/projects/{target.project_id}/discovery-runs/{target.discovery_run_id}/accept",
+        json={"proposalContentHash": target.proposal_hash, "name": CANARY_TITLE},
+        headers=auth,
+    )
+    assert accepted.status_code == 201, accepted.text
+    target.drift_architecture_id = str(accepted.json()["architectureId"])
+
+
+def drift_request(target: Target) -> dict[str, Any]:
+    return {
+        "architectureId": target.drift_architecture_id,
+        "baselineRevision": 1,
+        "discoveryRunId": target.discovery_run_id,
+        "label": "Audited drift",
+    }
+
+
+async def with_drift(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """A drift analysis against a later discovery that adds a cache: one item to review."""
+    await with_drift_baseline(client, auth, target)
+    changed = DISCOVERY_REQUEST | {
+        "artifacts": [
+            {
+                "path": "compose.yaml",
+                "content": DISCOVERY_REQUEST["artifacts"][0]["content"]  # type: ignore[index]
+                + "  cache:\n    image: redis:7\n",
+            }
+        ]
+    }
+    run = await client.post(
+        f"/api/v1/projects/{target.project_id}/discovery-runs", json=changed, headers=auth
+    )
+    assert run.status_code == 201, run.text
+    analysis = await client.post(
+        f"/api/v1/projects/{target.project_id}/drift-analyses",
+        json=drift_request(target) | {"discoveryRunId": run.json()["id"]},
+        headers=auth,
+    )
+    assert analysis.status_code == 201, analysis.text
+    target.drift_analysis_id = str(analysis.json()["id"])
+    listed = await client.get(f"/api/v1/projects/{target.project_id}/drift-items", headers=auth)
+    target.drift_item_id = str(listed.json()["items"][0]["id"])
 
 
 @dataclass(frozen=True)
@@ -470,6 +521,18 @@ PLANS: dict[str, Plan] = {
     f"delete_discovery_run{_DISCOVERY}delete": Plan(
         {"discovery_run.deleted"}, "discovery", None, with_discovery
     ),
+    "run_drift_analysis_api_v1_projects__project_id__drift_analyses_post": Plan(
+        {"drift_analysis.created"}, "created", drift_request, with_drift_baseline
+    ),
+    "review_drift_item_api_v1_projects__project_id__drift_items__item_id__review_post": Plan(
+        {"drift_item.reviewed"}, "drift_item", {"action": "note", "note": CANARY_REASON}, with_drift
+    ),
+    f"confirm_identity_mapping{_ARCH}identity_mappings_post": Plan(
+        {"drift_identity.confirmed"},
+        "drift_architecture",
+        {"baselineId": "compose:shop/service/db", "discoveredKey": "compose:shop/service/db"},
+        with_drift_baseline,
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -499,6 +562,9 @@ def test_every_project_scoped_audit_action_is_exercised() -> None:
         "decision",
         "migration_plan",
         "discovery_run",
+        "drift_analysis",
+        "drift_item",
+        "drift_identity",
     }
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
@@ -512,6 +578,8 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
         "decision": target.decision_id,
         "plan": target.plan_id,
         "discovery": target.discovery_run_id,
+        "drift_item": target.drift_item_id,
+        "drift_architecture": target.drift_architecture_id,
     }
     match resource:
         case "promoted":
@@ -578,16 +646,18 @@ async def test_every_mutation_is_audited_without_requirement_text(
         before = {entry["id"] for entry in await audit_entries(client, auth, org_id)}
 
         op = operations[operation_id]
-        url = op.url(
-            organization_id=org_id,
-            project_id=target.project_id,
-            requirement_id=target.requirement_id,
-            analysis_id=target.analysis_id,
-            architecture_id=target.architecture_id,
-            decision_id=target.decision_id,
-            plan_id=target.plan_id,
+        values = {
+            "organization_id": org_id,
+            "project_id": target.project_id,
+            "requirement_id": target.requirement_id,
+            "analysis_id": target.analysis_id,
+            "architecture_id": target.drift_architecture_id or target.architecture_id,
+            "decision_id": target.decision_id,
+            "plan_id": target.plan_id,
             **({"run_id": target.discovery_run_id} if target.discovery_run_id else {}),
-        )
+            **({"item_id": target.drift_item_id} if target.drift_item_id else {}),
+        }
+        url = op.url(**values)
         body = plan.body(target) if callable(plan.body) else plan.body
         response = await client.request(op.method, url, json=body, headers=auth)
         assert response.is_success, (operation_id, response.text)
@@ -672,6 +742,12 @@ async def test_read_only_endpoints_write_nothing(
         headers=auth,
     )
     assert compared.status_code == 201, compared.text
+    drifted = await fresh_target(client, auth, org_id)
+    await with_drift(client, auth, drifted)  # its own project: an accepted architecture, one item
+    drift_findings = await client.get(
+        f"/api/v1/projects/{drifted.project_id}/drift-analyses/{drifted.drift_analysis_id}/findings",
+        headers=auth,
+    )
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -710,6 +786,14 @@ async def test_read_only_endpoints_write_nothing(
             values = ids | {"project_id": planned.project_id, "plan_id": planned.plan_id}
         if "/discovery-runs" in op.path:  # the run with a baseline, compared with the other run
             values = ids | {"run_id": compared.json()["id"], "other_run_id": discovered.discovery_run_id}
+        if "/drift-" in op.path or "/identity-mappings" in op.path:
+            values = ids | {
+                "project_id": drifted.project_id,
+                "architecture_id": drifted.drift_architecture_id,
+                "drift_analysis_id": drifted.drift_analysis_id,
+                "finding_id": drift_findings.json()["findings"][0]["id"],
+                "item_id": drifted.drift_item_id,
+            }
         response = await client.request(op.method, op.url(**values), headers=auth)
         assert response.is_success, (op.operation_id, response.text)
 

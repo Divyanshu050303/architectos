@@ -252,7 +252,8 @@ async def test_a_runs_result_never_changes_and_an_unaccepted_run_can_be_deleted(
     run = await discover(client, world, ("compose.yaml", COMPOSE))
     for statement, message in (
         ("UPDATE discovery_runs SET label = 'x' WHERE id = :id", "only the decisions and acceptances"),
-        ("TRUNCATE discovery_runs", "cannot be truncated"),
+        # CASCADE: the drift analyses' foreign key would refuse it first; the guards still do.
+        ("TRUNCATE discovery_runs CASCADE", "cannot be truncated|append-only"),
     ):
         with pytest.raises(DBAPIError, match=message):
             async with db.begin_nested():

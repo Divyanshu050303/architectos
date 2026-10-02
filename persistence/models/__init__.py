@@ -7,6 +7,7 @@ from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, Capacity
 from .cost import CostAnalysisRecord, CostLineItemRecord
 from .decision import DecisionRecord
 from .discovery import DiscoveryRunRecord
+from .drift import DriftAnalysisRecord, DriftIdentityMappingRecord, DriftItemRecord
 from .email_verification_token import EmailVerificationTokenRecord
 from .evolution import EvolutionAnalysisRecord, EvolutionCandidateRecord
 from .invitation import InvitationRecord
@@ -44,6 +45,9 @@ __all__ = [
     "CostLineItemRecord",
     "DecisionRecord",
     "DiscoveryRunRecord",
+    "DriftAnalysisRecord",
+    "DriftIdentityMappingRecord",
+    "DriftItemRecord",
     "EmailVerificationTokenRecord",
     "EvolutionAnalysisRecord",
     "EvolutionCandidateRecord",

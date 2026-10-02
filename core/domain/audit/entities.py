@@ -74,6 +74,9 @@ class AuditAction(StrEnum):
     DISCOVERY_RUN_REVIEWED = "discovery_run.reviewed"  # a person decided about one candidate
     DISCOVERY_RUN_ACCEPTED = "discovery_run.accepted"  # a person accepted the proposal as a revision
     DISCOVERY_RUN_DELETED = "discovery_run.deleted"
+    DRIFT_ANALYSIS_CREATED = "drift_analysis.created"  # a baseline revision compared with a discovery run
+    DRIFT_ITEM_REVIEWED = "drift_item.reviewed"  # a person acted on a drift item (never the architecture)
+    DRIFT_IDENTITY_CONFIRMED = "drift_identity.confirmed"  # a person confirmed (or retracted) an identity
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.
