@@ -89,6 +89,7 @@ class Classification(StrEnum):
 class ElementType(StrEnum):
     NODE = "node"
     CONNECTION = "connection"
+    SCOPE = "scope"  # the comparison itself: an incompatible input, an artifact outside coverage
 
 
 class MatchMethod(StrEnum):

@@ -224,6 +224,8 @@ def _nodes(
         if match.matched and node is not None and entity is not None:
             found += _node_differences(node, entity, match.method)
         elif match.method is M.AMBIGUOUS:
+            if match.baseline_id is None and match.discovered_key in by_id:
+                continue  # the baseline node with this id states the same ambiguity, with its candidates
             found.append(
                 Difference(
                     F.UNRESOLVED_DIFFERENCE, E.NODE, f"node:{match.baseline_id or match.discovered_key}",
