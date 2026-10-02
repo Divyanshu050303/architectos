@@ -1,11 +1,13 @@
 """Docker Compose files, as declared — what Compose would be asked to run, never what runs.
 
 Read: each service's image, a declared build (never built), ports as written, ``deploy.replicas``,
-resource limits, a declared health check, networks, the names of environment variables (values
+resource limits and reservations, a declared health check, labels, networks, the names of
+environment variables (values
 never kept; a connection string contributes its host as a reference), and its explicit references:
 ``depends_on``, ``links`` and named volumes. Top-level named volumes and networks are read as
 entities. ``${VARIABLES}`` are never expanded (reported); ``extends`` and ``include`` need other
-files and are reported as unsupported.
+files and are reported as unsupported. Any other field present is reported by name
+(``uninterpreted_fields``) — never silently dropped, never its value.
 """
 
 from typing import Any
@@ -20,6 +22,30 @@ EXTRACTOR = "docker_compose@1"
 
 def _mapping(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+READ_TOP = frozenset({"name", "version", "services", "volumes", "networks", "include"})
+READ_SERVICE = frozenset(
+    {
+        "image", "build", "ports", "deploy", "healthcheck", "networks", "environment", "depends_on",
+        "links", "volumes", "extends", "labels",
+    }
+)  # fmt: skip
+READ_DEPLOY = frozenset({"replicas", "resources"})
+READ_RESOURCES = frozenset({"limits", "reservations"})
+
+
+def _unread(value: Any, read: frozenset[str], prefix: str) -> list[str]:
+    return [f"{prefix}{k}" for k in value if str(k) not in read] if isinstance(value, dict) else []
+
+
+def _labels(value: Any) -> dict[str, Any] | None:
+    """Labels as a mapping, from either form (``a=b`` items or a mapping)."""
+    if isinstance(value, dict):
+        return {str(k): v for k, v in value.items()}
+    if isinstance(value, list):
+        return {k: v for k, _, v in (str(i).partition("=") for i in value)}
+    return None
 
 
 def service_key(project: str | None, kind: str, name: str) -> str:
@@ -68,6 +94,14 @@ class _Service:
         self.runtime(self.data)
         self.environment(self.data)
         self.references(self.data)
+        self.prop("labels", "labels", _labels(self.data.get("labels")))
+        deploy = _mapping(self.data.get("deploy"))
+        unread = [
+            *_unread(self.data, READ_SERVICE, ""),
+            *_unread(deploy, READ_DEPLOY, "deploy."),
+            *_unread(_mapping(deploy.get("resources")), READ_RESOURCES, "deploy.resources."),
+        ]
+        self.emit.uninterpreted(self.key, self.base, unread)
         if "extends" in self.data:
             message = f"Service {self.name} extends another definition, which is not read."
             self.emit.unsupported(self.key, f"{self.base}.extends", "extends_not_read", message)
@@ -87,10 +121,12 @@ class _Service:
         deploy = _mapping(data.get("deploy"))
         if isinstance(deploy.get("replicas"), int):
             self.prop("replicas", "deploy.replicas", deploy["replicas"])
-        limits = _mapping(_mapping(deploy.get("resources")).get("limits"))
-        if limits.get("cpus") is not None:
-            self.prop("cpu_limit", "deploy.resources.limits.cpus", str(limits["cpus"]))
-        self.prop("memory_limit", "deploy.resources.limits.memory", limits.get("memory"))
+        resources = _mapping(deploy.get("resources"))
+        for level, suffix in (("limits", "limit"), ("reservations", "request")):
+            amounts = _mapping(resources.get(level))
+            if amounts.get("cpus") is not None:
+                self.prop(f"cpu_{suffix}", f"deploy.resources.{level}.cpus", str(amounts["cpus"]))
+            self.prop(f"memory_{suffix}", f"deploy.resources.{level}.memory", amounts.get("memory"))
         if "healthcheck" in data:
             self.prop("health_check", "healthcheck", not bool(_mapping(data["healthcheck"]).get("disable")))
         networks = data.get("networks")
@@ -138,6 +174,7 @@ class ComposeAdapter:
         for kind in ("volumes", "networks"):
             for name in _mapping(data.get(kind)):
                 emit.entity(service_key(project, kind[:-1], str(name)), f"{kind}.{name}")
+        emit.uninterpreted(artifact_key(path), None, _unread(data, READ_TOP, ""))
         if "include" in data:
             emit.unsupported(
                 artifact_key(path), "include", "include_not_read", "Included Compose files are not read."

@@ -43,6 +43,7 @@ from .loading import Document, Parsed, parse
 MAX_FINDINGS_PER_ARTIFACT = 5000
 MAX_KEPT_TEXT = 2000
 MAX_KEPT_ITEMS = 100
+UNINTERPRETED = "uninterpreted_fields"  # a property: the names of fields present but not interpreted
 HOST = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,62})(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,62}))*$")
 HOST_PORT = re.compile(r"^([A-Za-z0-9][A-Za-z0-9.-]{0,252}):([0-9]{1,5})$")
 TEMPLATE = re.compile(r"\{\{.*?\}\}", re.DOTALL)
@@ -167,6 +168,20 @@ class Emitter:
         )
         self.diagnostics.append(Diagnostic(code, Severity.WARNING, message, location))
 
+    def uninterpreted(self, key: str, pointer: str | None, fields: list[str]) -> None:
+        """The names of fields that are present but not interpreted — visible, never their values."""
+        if not fields:
+            return
+        names = sorted(set(fields))[:MAX_KEPT_ITEMS]
+        more = len(set(fields)) - len(names)
+        message = f"Not interpreted: {', '.join(names)}" + (f" (and {more} more)." if more else ".")
+        self._add(
+            Finding(
+                FindingType.PROPERTY, key, self.at(pointer), Verification.UNSUPPORTED, self.extractor,
+                property=UNINTERPRETED, value=names, warnings=(message,),
+            )
+        )  # fmt: skip
+
     def diagnose(self, code: str, severity: Severity, message: str, pointer: str | None) -> None:
         self.diagnostics.append(Diagnostic(code, severity, message, self.at(pointer)))
 
@@ -247,7 +262,7 @@ def _read(
     status = ArtifactStatus.FAILED if failed else ArtifactStatus.PARTIAL if partial else ArtifactStatus.PARSED
     record = SourceArtifact(
         path, artifact.content_hash, artifact.size_bytes, status,
-        adapter.source_type, version, len(parsed.documents),
+        adapter.source_type, version, len(parsed.documents), f"{adapter.source_type.value}@{adapter.version}",
     )  # fmt: skip
     return record, findings, notes, adapter
 

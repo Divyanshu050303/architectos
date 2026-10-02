@@ -13,7 +13,8 @@ establish them:
   networks are ``volume`` and ``network``.
 - Terraform (``terraform-kinds@1``): a table of unambiguous managed resource types (a managed
   database, cache, queue, bucket, load balancer, API gateway, CDN); networks, security and identity
-  resources are ``network`` or ``configuration``; any other type is a component of unknown kind.
+  resources are ``network`` or ``configuration``, as are the utility providers' (``random_``,
+  ``null_``, ``time_``, ``tls_``, …); any other type is a component of unknown kind.
 - Architecture JSON (``architecture-json@1``): the node kind the document states.
 
 **Conflicts are reported, not resolved**: a resource declared in two places is reported
@@ -34,7 +35,11 @@ from .adapters import Extraction
 
 NORMALIZATION_VERSION = 1
 R, K = EntityRole, NodeKind
-MULTI = frozenset({"image", "init_image", "ports", "environment_variable", "volume_claim", "hosts"})
+MULTI = frozenset(
+    {"image", "init_image", "ports", "environment_variable", "volume_claim", "hosts", "uninterpreted_fields"}
+)
+# Terraform's utility providers: values computed for the configuration, not parts of the architecture
+TERRAFORM_UTILITIES = ("random_", "null_", "time_", "tls_", "local_", "archive_", "terraform_data")
 COMPOSE_PARTS = 3  # project/kind/name
 
 KUBERNETES: dict[str, tuple[EntityRole, NodeKind | None]] = {
@@ -168,6 +173,8 @@ def _classify(source: SourceType, resource_type: str, kind_value: Any) -> tuple[
     if source is SourceType.TERRAFORM_JSON:
         bare = resource_type.removeprefix("data.")
         role = next((r for r, types in TERRAFORM_ROLES.items() if bare in types), R.COMPONENT)
+        if bare.startswith(TERRAFORM_UTILITIES):
+            role = R.CONFIGURATION
         kind = next((k for k, types in TERRAFORM_KINDS.items() if bare in types), None)
         return role, kind if role is R.COMPONENT else None
     try:

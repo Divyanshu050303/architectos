@@ -95,6 +95,7 @@ class SourceArtifact:
     source_type: SourceType | None = None  # None: no adapter recognizes it
     format_version: str | None = None  # e.g. a Compose "version", a Terraform format_version
     documents: int = 0  # YAML documents (or 1 for JSON)
+    extractor: str | None = None  # the adapter and its version that read it, e.g. "kubernetes@1"
 
     def __post_init__(self) -> None:
         hashed = isinstance(self.content_hash, str) and FINGERPRINT.fullmatch(self.content_hash)
@@ -110,6 +111,7 @@ class SourceArtifact:
                 else "artifact.source_type",
                 text(self.format_version, "artifact.format_version", 64, required=False),
                 count(self.documents, "artifact.documents"),
+                text(self.extractor, "artifact.extractor", 64, required=False),
                 "artifact.source_type" if read and self.source_type is None else None,
             ]
         )
@@ -123,6 +125,7 @@ class SourceArtifact:
             "source_type": self.source_type.value if self.source_type else None,
             "format_version": self.format_version,
             "documents": self.documents,
+            "extractor": self.extractor,
         }
 
 
@@ -274,11 +277,15 @@ class PropertyMapping:
     value: Any = None
     valid: bool = True
     problem: str | None = None  # why the value cannot be used
+    source_value: Any = None  # the value as written, before any conversion
+    transformation: str | None = None  # the conversion applied, e.g. "kubernetes-cpu: 250m -> 0.25"
 
     def __post_init__(self) -> None:
         check(
             [
                 text(self.source_property, "configuration.source_property", MAX_REFERENCE),
+                json_value(self.source_value, "configuration.source_value"),
+                text(self.transformation, "configuration.transformation", required=False),
                 code(self.property, "configuration.property"),
                 text(self.rule, "configuration.rule", 64),
                 None if isinstance(self.verification, Verification) else "configuration.verification",
@@ -300,6 +307,8 @@ class PropertyMapping:
             "value": self.value,
             "valid": self.valid,
             "problem": self.problem,
+            "source_value": self.source_value,
+            "transformation": self.transformation,
         }
 
 
@@ -379,6 +388,7 @@ class CandidateRelationship:
     kind: ConnectionKind | None = None  # only when the source's semantics establish it
     finding_ids: tuple[str, ...] = ()
     reason: str | None = None  # why it is unresolved, or what the kind rests on
+    rule: str | None = None  # the resolution rule and its version, e.g. "discovery-relationships@1"
 
     def __post_init__(self) -> None:
         resolved = self.status is RelationshipStatus.RESOLVED
@@ -393,6 +403,7 @@ class CandidateRelationship:
                 texts(self.finding_ids, "relationship.finding_ids", 64),
                 None if self.finding_ids else "relationship.finding_ids",
                 text(self.reason, "relationship.reason", required=False),
+                text(self.rule, "relationship.rule", 64, required=False),
                 "relationship.target" if resolved != (self.target is not None) else None,
                 "relationship.reason" if not resolved and not self.reason else None,
                 "relationship.target" if self.target is not None and self.target == self.source else None,
@@ -416,4 +427,5 @@ class CandidateRelationship:
             "kind": self.kind.value if self.kind else None,
             "finding_ids": list(self.finding_ids),
             "reason": self.reason,
+            "rule": self.rule,
         }

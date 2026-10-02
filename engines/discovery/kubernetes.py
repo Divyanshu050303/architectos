@@ -3,7 +3,8 @@
 Read, as declared in the manifest — the **desired state**, never the running cluster:
 
 - workloads (Deployment, StatefulSet, DaemonSet, ReplicaSet, Job, CronJob, Pod): replicas, container
-  images, ports, resource requests and limits, pod labels, the service account, the names of
+  images, ports, resource requests and limits, a declared health check (a liveness, readiness or
+  startup probe — not that it passes), pod labels, the service account, the names of
   environment variables (values never kept; a connection string contributes its host as a
   reference), and explicit references to ConfigMaps, Secrets and PersistentVolumeClaims;
 - Services: type, ports, the selector (a reference to the workloads it selects), an ExternalName;
@@ -11,7 +12,9 @@ Read, as declared in the manifest — the **desired state**, never the running c
 - ConfigMaps and Secrets: their key names only — never their values;
 - PersistentVolumeClaims: requested storage, storage class, access modes.
 
-Any other kind is reported as unsupported. Values holding templates (``{{ }}``) are reported:
+Every object records its apiVersion. A field present but not interpreted is reported by name
+(``uninterpreted_fields``) — never silently dropped, never its value. Any other kind is reported as
+unsupported. Values holding templates (``{{ }}``) are reported:
 templates are never rendered.
 """
 
@@ -27,6 +30,25 @@ WORKLOADS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "ReplicaSet", "
 READ = WORKLOADS | {"Service", "Ingress", "ConfigMap", "Secret", "PersistentVolumeClaim"}
 SCALED = frozenset({"Deployment", "StatefulSet", "ReplicaSet"})
 EXTRACTOR = "kubernetes@1"
+PROBES = ("livenessProbe", "readinessProbe", "startupProbe")
+# The fields each part of an object is read for; any other field present is reported, by name.
+READ_OBJECT = frozenset({"apiVersion", "kind", "metadata", "spec"})
+READ_KEYS = frozenset({"data", "stringData", "binaryData", "type"})
+READ_METADATA = frozenset({"name", "namespace", "labels"})
+READ_SPEC = {
+    "Service": frozenset({"type", "ports", "selector", "externalName"}),
+    "Ingress": frozenset({"ingressClassName", "rules", "defaultBackend"}),
+    "PersistentVolumeClaim": frozenset({"resources", "storageClassName", "accessModes"}),
+    "Pod": frozenset({"containers", "initContainers", "volumes", "serviceAccountName"}),
+    "CronJob": frozenset({"jobTemplate"}),
+}
+READ_WORKLOAD = frozenset({"replicas", "template", "volumeClaimTemplates"})
+READ_POD = READ_SPEC["Pod"]
+READ_CONTAINER = frozenset({"name", "image", "ports", "resources", "env", "envFrom", *PROBES})
+
+
+def _unread(value: Any, read: frozenset[str], prefix: str) -> list[str]:
+    return [f"{prefix}{k}" for k in value if str(k) not in read] if isinstance(value, dict) else []
 
 
 def entity_key(kind: str, name: str, namespace: str | None) -> str:
@@ -58,6 +80,7 @@ class _Object:
         self.name = name if isinstance(name, str) else None
         self.namespace = namespace if isinstance(namespace, str) else None
         self.key = entity_key(self.kind, self.name, self.namespace) if self.name else ""
+        self.unread: list[str] = []
 
     def at(self, path: str) -> str:
         return child(self.pointer, path) if self.pointer else path
@@ -83,6 +106,7 @@ class _Object:
         if not self.emit.entity(self.key, self.at("metadata.name")):
             return
         self.prop("kind", "kind", self.kind)
+        self.prop("api_version", "apiVersion", self.data.get("apiVersion"))
         self.prop("namespace", "metadata.namespace", self.namespace)
         if isinstance(self.metadata.get("labels"), dict):
             self.prop("labels", "metadata.labels", self.metadata["labels"])
@@ -95,6 +119,13 @@ class _Object:
             "PersistentVolumeClaim": self.claim,
         }
         readers.get(self.kind, self.workload)(spec)
+        keys = READ_KEYS if self.kind in {"ConfigMap", "Secret"} else frozenset()
+        self.unread.extend(_unread(self.data, READ_OBJECT | keys, ""))
+        self.unread.extend(_unread(self.metadata, READ_METADATA, "metadata."))
+        if self.kind != "Pod":  # a Pod's spec is its pod spec, reported with it
+            read = READ_SPEC.get(self.kind, READ_WORKLOAD if self.kind in WORKLOADS else frozenset())
+            self.unread.extend(_unread(spec, read, "spec."))
+        self.emit.uninterpreted(self.key, self.at("metadata.name"), self.unread)
 
     # --- kinds -----------------------------------------------------------------------------------
 
@@ -104,6 +135,8 @@ class _Object:
         pod, path = _pod_spec(self.kind, spec)
         if pod is None:
             return
+        self.unread.extend(_unread(pod, READ_POD, f"{path}."))
+        self.probes(pod, path)
         if self.kind != "Pod":
             labels = _mapping(_mapping(spec.get("template")).get("metadata")).get("labels")
             if isinstance(labels, dict):
@@ -122,10 +155,24 @@ class _Object:
             if isinstance(name, str):
                 self.prop("volume_claim", f"spec.volumeClaimTemplates[{index}].metadata.name", name)
 
+    def probes(self, pod: dict[str, Any], path: str) -> None:
+        """A declared health check: a liveness, readiness or startup probe on any container — whether
+        it passes is not known."""
+        probed = [
+            f"{path}.containers[{i}].{probe}"
+            for i, c in enumerate(pod.get("containers") or [])
+            if isinstance(c, dict)
+            for probe in PROBES
+            if isinstance(c.get(probe), dict)
+        ]
+        if probed:
+            self.prop("health_check", probed[0], True)
+
     def container(self, container: dict[str, Any], path: str, *, init: bool) -> None:
         self.prop("init_image" if init else "image", f"{path}.image", container.get("image"))
-        ports = [p.get("containerPort") for p in container.get("ports") or [] if isinstance(p, dict)]
-        if ports:
+        self.unread.extend(_unread(container, READ_CONTAINER, f"{path}."))
+        if isinstance(container.get("ports"), list):  # an empty list is declared, unlike an absent one
+            ports = [p.get("containerPort") for p in container["ports"] if isinstance(p, dict)]
             self.prop("ports", f"{path}.ports", [p for p in ports if isinstance(p, int)])
         resources = _mapping(container.get("resources"))
         for level, suffix in (("requests", "request"), ("limits", "limit")):
@@ -169,8 +216,8 @@ class _Object:
 
     def service(self, spec: dict[str, Any]) -> None:
         self.prop("service_type", "spec.type", spec.get("type"))
-        ports = [p.get("port") for p in spec.get("ports") or [] if isinstance(p, dict)]
-        if ports:
+        if isinstance(spec.get("ports"), list):
+            ports = [p.get("port") for p in spec["ports"] if isinstance(p, dict)]
             self.prop("ports", "spec.ports", [p for p in ports if isinstance(p, int)])
         selector = spec.get("selector")
         if isinstance(selector, dict) and selector and all(isinstance(v, str) for v in selector.values()):

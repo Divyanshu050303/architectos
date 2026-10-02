@@ -10,7 +10,7 @@ import pytest
 from core.architecture_ir.component import NodeKind
 from core.architecture_ir.serialization import to_dict
 from core.domain.discovery.findings import CandidateEntity
-from core.domain.discovery.values import MappingStatus, Verification
+from core.domain.discovery.values import EntityRole, MappingStatus, Verification
 from engines.discovery.mapping import (
     CATALOG_RULE,
     DOCKER_BYTES,
@@ -22,7 +22,7 @@ from engines.discovery.mapping import (
 )
 from engines.discovery.normalize import normalize
 from persistence.component_catalog import default_catalog
-from tests.unit.discovery.test_discovery_sources import COMPOSE, DEPLOYMENT, SHOWN, TERRAFORM, read
+from tests.unit.discovery.test_discovery_sources import COMPOSE, DEPLOYMENT, PROBED, SHOWN, TERRAFORM, read
 from tests.unit.migration.test_migration_changes import SOURCE_IR
 
 M = MappingStatus
@@ -217,3 +217,42 @@ def test_mapping_is_deterministic() -> None:
         normalize(read(("k8s/shop.yaml", DEPLOYMENT), ("compose.yaml", COMPOSE))).entities, CATALOG
     )
     assert [c.to_dict() for c in first] == [c.to_dict() for c in again]
+
+
+def test_each_mapping_keeps_the_value_as_written_and_the_conversion() -> None:
+    api = mapped(("k8s/shop.yaml", DEPLOYMENT))["kubernetes:shop/deployment/api"]
+    cpu = next(c for c in api.configuration if c.property == "cpu_request_cores")
+    assert (cpu.source_value, cpu.value) == ("250m", "0.25")
+    assert cpu.transformation == "Kubernetes CPU quantity to cores (m = 1/1000)"
+    replicas = next(c for c in api.configuration if c.property == "replicas")
+    assert (replicas.source_value, replicas.transformation) == (3, None)  # nothing converted
+
+
+def test_probes_and_reservations_map_to_ir_properties() -> None:
+    web = mapped(("k8s/web.yaml", PROBED))["kubernetes:shop/deployment/web"]
+    assert configuration(web)["health_check"] is True
+    compose = (
+        "name: shop\nservices:\n  api:\n    image: redis:7\n"
+        "    deploy: {resources: {reservations: {cpus: '0.25', memory: 128M}}}\n"
+    )
+    api = mapped(("compose.yaml", compose))["compose:shop/service/api"]
+    assert configuration(api) == {"cpu_request_cores": "0.25", "memory_request_bytes": 128 * 2**20}
+
+
+def test_an_uncovered_provider_is_unsupported_and_utilities_are_not_components() -> None:
+    body = {
+        "resource": {
+            "cloudflare_record": {"www": {"name": "www"}},
+            "aws_kinesis_stream": {"events": {"name": "events"}},
+            "random_password": {"db": {"length": 32}},
+        }
+    }
+    found = mapped(("x.tf.json", json.dumps(body)))
+    record = found["terraform:cloudflare_record.www"].mapping
+    assert (record.status, record.reason) == (
+        M.UNSUPPORTED,
+        "The cloudflare provider is not covered by discovery-catalog@1.",
+    )
+    assert found["terraform:aws_kinesis_stream.events"].mapping.status is M.UNMAPPED  # covered: no component
+    password = found["terraform:random_password.db"]
+    assert (password.role, password.kind) == (EntityRole.CONFIGURATION, None)

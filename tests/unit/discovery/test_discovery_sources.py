@@ -284,3 +284,92 @@ def test_extraction_is_deterministic() -> None:
     again = read(("compose.yaml", COMPOSE), ("k8s/shop.yaml", DEPLOYMENT))
     assert [f.to_dict() for f in first.findings] == [f.to_dict() for f in again.findings]
     assert first.extractors == {"docker_compose": 1, "kubernetes": 1}
+
+
+# --- coverage: nothing present is silently dropped -------------------------------------------------
+
+PROBED = """\
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: shop, annotations: {owner: team-a}}
+spec:
+  replicas: 2
+  strategy: {type: RollingUpdate}
+  template:
+    spec:
+      nodeSelector: {disk: ssd}
+      containers:
+        - name: web
+          image: nginx:1.27
+          command: ["nginx"]
+          ports: []
+          readinessProbe: {httpGet: {path: /healthz, port: 80}}
+"""
+
+
+def test_uninterpreted_fields_are_named_never_dropped() -> None:
+    extraction = read(("k8s/web.yaml", PROBED))
+    values = properties(extraction, "kubernetes:shop/deployment/web")
+    assert values["uninterpreted_fields"] == [
+        "metadata.annotations",
+        "spec.strategy",
+        "spec.template.spec.containers[0].command",
+        "spec.template.spec.nodeSelector",
+    ]  # names only — never "team-a" or "ssd"
+    unread = next(
+        f for f in found(extraction, "kubernetes:shop/deployment/web") if f.property == "uninterpreted_fields"
+    )
+    assert unread.verification is Verification.UNSUPPORTED
+    assert unread.warnings
+    assert extraction.artifacts[0].status is ArtifactStatus.PARSED  # visible, not a failure to read
+
+
+def test_kubernetes_probes_api_version_and_declared_empty_ports() -> None:
+    values = properties(read(("k8s/web.yaml", PROBED)), "kubernetes:shop/deployment/web")
+    assert values["health_check"] is True  # declared — that it passes is not known
+    assert values["api_version"] == "apps/v1"
+    assert values["ports"] == []  # declared empty, unlike absent
+
+
+def test_compose_reservations_labels_and_unread_fields() -> None:
+    compose = """\
+name: shop
+x-common: {restart: always}
+services:
+  api:
+    image: acme/api
+    restart: always
+    labels: ["tier=backend"]
+    deploy: {mode: replicated, resources: {reservations: {cpus: "0.25", memory: 128M}}}
+"""
+    extraction = read(("compose.yaml", compose))
+    values = properties(extraction, "compose:shop/service/api")
+    assert (values["cpu_request"], values["memory_request"]) == ("0.25", "128M")
+    assert values["labels"] == {"tier": "backend"}
+    assert values["uninterpreted_fields"] == ["deploy.mode", "restart"]
+    top = [
+        f
+        for f in extraction.findings
+        if f.property == "uninterpreted_fields" and f.entity.startswith("artifact")
+    ]
+    assert [f.value for f in top] == [["x-common"]]
+
+
+def test_terraform_tags_and_nested_blocks() -> None:
+    body = {
+        "resource": {
+            "aws_s3_bucket": {
+                "logs": {
+                    "bucket": "acme-logs",
+                    "tags": {"team": "platform"},
+                    "versioning": {"enabled": True},
+                    "lifecycle": {"prevent_destroy": True},
+                }
+            }
+        }
+    }
+    extraction = read(("s3.tf.json", json.dumps(body)))
+    values = properties(extraction, "terraform:aws_s3_bucket.logs")
+    assert values["tags"] == {"team": "platform"}
+    assert values["uninterpreted_fields"] == ["versioning"]  # lifecycle is a meta-argument
+    assert extraction.artifacts[0].extractor == "terraform_json@1"

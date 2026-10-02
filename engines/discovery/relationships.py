@@ -176,7 +176,7 @@ def relationships(
             kind, reason = _kind(source, finding, target)
         relationship = CandidateRelationship(
             source.key, finding.target, finding.location, RESOLVED if target else UNRESOLVED,
-            target, kind, (finding.id,), reason,
+            target, kind, (finding.id,), reason, RULE,
         )  # fmt: skip
         earlier = found.get(relationship.id)
         if earlier is not None:

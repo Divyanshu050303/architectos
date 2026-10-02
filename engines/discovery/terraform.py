@@ -3,7 +3,7 @@
 planned, applied, evaluated or interpolated.
 
 - **Configuration**: each ``resource`` and ``data`` block becomes an entity (``terraform:<address>``)
-  with its scalar attributes as written — an interpolation (``${aws_db_instance.main.address}``)
+  with its scalar attributes and tags as written — an interpolation (``${aws_db_instance.main.address}``)
   stays text, and the addresses it names are explicit references, as are ``depends_on`` entries.
   ``module`` calls (their source is not supplied), provisioners and connection blocks are reported
   as unsupported.
@@ -11,7 +11,8 @@ planned, applied, evaluated or interpolated.
   child modules, becomes an entity with its scalar attribute values; attributes Terraform marks
   sensitive are redacted; the configuration's expression references are explicit references.
 
-Attributes whose names look like secrets are always redacted.
+Nested blocks and collections are reported by name (``uninterpreted_fields``), never silently
+dropped. Attributes whose names look like secrets are always redacted.
 """
 
 import re
@@ -32,6 +33,7 @@ INTERPOLATION = re.compile(r"\$\{([^}]*)\}")
 ADDRESS = re.compile(r"\b((?:data\.)?[a-z][a-z0-9_]*\.[A-Za-z_][A-Za-z0-9_-]*)")
 INDEX = re.compile(r"\[\"?([A-Za-z0-9_.-]+)\"?\]")
 MAX_MODULE_DEPTH = 8
+TAGS = frozenset({"tags", "labels"})  # a mapping of scalars, kept as written (AWS tags, GCP labels)
 NOT_RESOURCES = ("var.", "local.", "module.", "path.", "count.", "each.", "self.", "terraform.")
 
 
@@ -101,6 +103,7 @@ class _Configuration:
         if not self.emit.entity(key, path):
             return
         self.emit.property(key, "resource_type", "type", kind, path)
+        unread: list[str] = []
         for name, value in body.items():
             where = f"{path}.{name}"
             if name in {"provisioner", "connection"}:
@@ -115,8 +118,13 @@ class _Configuration:
                 self.emit.property(key, name, name, value if isinstance(value, str | int) else None, where)
             elif isinstance(value, str | int | float | bool) and name not in META:
                 self.emit.property(key, _name(name), name, value, where)
+            elif name in TAGS and isinstance(value, dict):
+                self.emit.property(key, "tags", name, value, where)
+            elif name not in META:
+                unread.append(name)  # a nested block or a collection: named, not interpreted
             for target in references(value):
                 self.emit.reference(key, target, where, name)
+        self.emit.uninterpreted(key, path, unread)
 
 
 class _Shown:
@@ -152,10 +160,16 @@ class _Shown:
         mode = "data." if resource.get("mode") == "data" else ""
         self.keys.setdefault(f"{mode}{kind}.{resource.get('name')}", key)
         sensitive = _mapping(resource.get("sensitive_values"))
+        unread: list[str] = []
         for name, value in _mapping(resource.get("values")).items():
+            where = f"{path}.values.{name}"
             if isinstance(value, str | int | float | bool):
-                where = f"{path}.values.{name}"
                 self.emit.property(key, _name(name), name, value, where, secret=sensitive.get(name) is True)
+            elif name in TAGS and isinstance(value, dict) and not sensitive.get(name):  # none sensitive
+                self.emit.property(key, "tags", name, value, where)
+            elif value is not None:
+                unread.append(name)
+        self.emit.uninterpreted(key, f"{path}.values", unread)
 
     def expressions(self, module: dict[str, Any]) -> None:
         for index, resource in enumerate(module.get("resources") or []):

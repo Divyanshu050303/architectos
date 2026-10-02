@@ -10,7 +10,7 @@ from core.architecture_ir.serialization import to_dict
 from core.domain.discovery.findings import CandidateRelationship
 from core.domain.discovery.values import RelationshipStatus
 from engines.discovery.normalize import normalize
-from engines.discovery.relationships import DEPENDS_ON, relationships
+from engines.discovery.relationships import DEPENDS_ON, RULE, relationships
 from tests.unit.discovery.test_discovery_normalize import JOBS
 from tests.unit.discovery.test_discovery_sources import COMPOSE, DEPLOYMENT, TERRAFORM, read
 from tests.unit.migration.test_migration_changes import SOURCE_IR
@@ -144,3 +144,9 @@ def test_every_relationship_cites_its_finding_and_is_deterministic() -> None:
     assert all(set(r.finding_ids) <= ids for r in first)
     again = discovered(("compose.yaml", COMPOSE), ("k8s/shop.yaml", DEPLOYMENT))
     assert [r.to_dict() for r in first] == [r.to_dict() for r in again]
+
+
+def test_every_relationship_records_its_resolution_rule() -> None:
+    found = discovered(("k8s/shop.yaml", DEPLOYMENT), ("compose.yaml", COMPOSE))
+    assert found
+    assert {r.rule for r in found} == {RULE}

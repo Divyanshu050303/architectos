@@ -14,6 +14,8 @@ configuration, by deterministic, versioned rules.
   service built from source, or an image the rules do not know, is ``unmapped``.
 - Architecture JSON: the component the document declares (``exact_match``), else its technology.
 - Supporting resources (routing, configuration, volumes, networks) are not components.
+- A Terraform type of a provider the tables do not cover (not ``aws``, ``google`` or ``azurerm``) is
+  ``unsupported``: the rules cannot say, rather than "no component".
 
 When the source does not establish a kind and the catalog component describes exactly one, that kind
 is adopted (rule ``discovery-catalog@1``, inferred); a kind the source states that the component does
@@ -22,7 +24,8 @@ not describe leaves the entity unmapped, with the reason.
 **Configuration** (``discovery-configuration@1``): replicas, CPU and memory requests and limits (exact
 unit conversions: Kubernetes quantities, Docker byte units), a declared health check, an instance class
 and allocated storage (GiB, as AWS documents it) — each checked by the IR's own property specification,
-and against the entity's kind when known. A value that fails, cannot be converted, or is declared more
+and against the entity's kind when known; each keeps the value as written and the unit conversion
+applied. A value that fails, cannot be converted, or is declared more
 than once (several containers, several files) is kept as a mapping with no value, marked invalid, with
 the reason — no total or default is invented. A secret value is never mapped.
 """
@@ -107,6 +110,7 @@ ENGINES = {
 ENGINE_TYPES = frozenset(
     {"aws_db_instance", "aws_rds_cluster", "aws_elasticache_cluster", "aws_elasticache_replication_group"}
 )
+COVERED_PROVIDERS = ("aws_", "google_", "azurerm_")  # the providers the Terraform tables cover
 CLOUD_SQL = {"POSTGRES": "databases/postgresql", "MYSQL": "databases/mysql"}
 VERSION = re.compile(r"^v?([0-9]+(?:\.[0-9]+){0,3})(?:-[A-Za-z0-9.]+)?$")
 QUANTITY = re.compile(r"^([0-9]+(?:\.[0-9]+)?)([A-Za-z]*)$")
@@ -184,6 +188,9 @@ def _terraform(entity: NormalizedEntity, catalog: _Index) -> ComponentMapping:  
         return _mapping(
             M.UNMAPPED, reason="The Cloud SQL database_version is not stated, or not in the catalog."
         )
+    provider = kind.split("_", 1)[0]
+    if f"{provider}_" not in COVERED_PROVIDERS:
+        return _mapping(M.UNSUPPORTED, reason=f"The {provider} provider is not covered by {CATALOG_RULE}.")
     return _mapping(M.UNMAPPED, reason=f"No catalog component for {kind}.")
 
 
@@ -267,27 +274,33 @@ def byte_count(value: Any, units: dict[str, int]) -> int | None:
     return int(total) if total is not None and total == total.to_integral_value() else None
 
 
-def _converted(source: SourceType, name: str, value: Any) -> tuple[str, Any] | None:  # noqa: PLR0911
-    """(IR property, IR value — None when it cannot be converted) of a source property, or None when no
-    rule maps it."""
+Conversion = tuple[str, Any, str | None]  # (IR property, IR value or None, the unit conversion)
+
+
+def _converted(source: SourceType, name: str, value: Any) -> Conversion | None:  # noqa: PLR0911
+    """The IR property and value of a source property — the value None when it cannot be converted —
+    and the unit conversion applied; None when no rule maps it."""
     match source:
-        case SourceType.ARCHITECTURE_JSON:
-            return (name.removeprefix("configuration."), value) if name.startswith("configuration.") else None
+        case SourceType.ARCHITECTURE_JSON if name.startswith("configuration."):
+            return name.removeprefix("configuration."), value, None
         case SourceType.TERRAFORM_JSON if name in TERRAFORM_PROPERTIES:
             target = TERRAFORM_PROPERTIES[name]
             if target != "storage_bytes":
-                return target, value if isinstance(value, str) and "${" not in value else None
+                return target, value if isinstance(value, str) and "${" not in value else None, None
             whole = isinstance(value, int) and not isinstance(value, bool)
-            return target, value * GIB if whole else None
+            return target, value * GIB if whole else None, "GiB to bytes (x 2^30)"
         case SourceType.KUBERNETES | SourceType.DOCKER_COMPOSE if name in {"replicas", "health_check"}:
-            return name, value
+            return name, value, None
+        case SourceType.KUBERNETES if name.startswith("cpu") and name in RESOURCES:
+            return RESOURCES[name], kubernetes_cpu(value), "Kubernetes CPU quantity to cores (m = 1/1000)"
         case SourceType.KUBERNETES if name in RESOURCES:
-            amount = kubernetes_cpu(value) if name.startswith("cpu") else byte_count(value, KUBERNETES_BYTES)
-            return RESOURCES[name], amount
+            amount = byte_count(value, KUBERNETES_BYTES)
+            return RESOURCES[name], amount, "Kubernetes quantity to bytes (k/M/G = 10^3n, Ki/Mi/Gi = 2^10n)"
+        case SourceType.DOCKER_COMPOSE if name.startswith("cpu") and name in RESOURCES:
+            return RESOURCES[name], _decimal(str(value)), None
         case SourceType.DOCKER_COMPOSE if name in RESOURCES:
-            if name.startswith("cpu"):
-                return RESOURCES[name], _decimal(str(value))
-            return RESOURCES[name], byte_count(str(value).lower(), DOCKER_BYTES)
+            amount = byte_count(str(value).lower(), DOCKER_BYTES)
+            return RESOURCES[name], amount, "Docker byte value to bytes (k/m/g = 2^10n)"
     return None
 
 
@@ -325,12 +338,13 @@ def property_mappings(entity: NormalizedEntity, kind: NodeKind | None) -> tuple[
         converted = _converted(entity.source_type, name, first.value)
         if converted is None or converted[0] not in NODE_PROPERTIES:
             continue
-        target, value = converted
+        target, value, conversion = converted
         problem = _problem(target, value, values, kind)
         found.append(
             PropertyMapping(
                 first.source_property, target, CONFIGURATION_RULE, first.verification, first.finding_id,
                 None if problem else _ir_value(value), valid=problem is None, problem=problem,
+                source_value=first.value, transformation=conversion,
             )
         )  # fmt: skip
     return tuple(found)
