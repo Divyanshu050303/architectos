@@ -82,7 +82,7 @@ def _provenance(source: SourceType, reference: str, *, inferred: bool = False) -
     )
 
 
-def _ir_value(mapping: PropertyMapping) -> Any:
+def ir_value(mapping: PropertyMapping) -> Any:
     """A mapped value in the IR's in-memory form: exact decimals as Decimal, lists as tuples."""
     spec = NODE_PROPERTIES[mapping.property]
     if spec.type is ValueType.DECIMAL and isinstance(mapping.value, str | int):
@@ -228,7 +228,7 @@ class _Builder:
             if not mapping.valid or mapping.value is None:
                 continue  # an invalid or conflicting value stays out (its problem is on the candidate)
             inferred = mapping.verification is not Verification.OBSERVED
-            values[mapping.property] = _ir_value(mapping)
+            values[mapping.property] = ir_value(mapping)
             fields[f"configuration.{mapping.property}"] = _provenance(
                 entity.source_type, entity.location.reference, inferred=inferred
             )
