@@ -24,7 +24,7 @@ catalog, so a proposal is reproduced exactly from a stored result:
 Nothing here writes an architecture: accepting a proposal is a separate, explicit act.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from decimal import Decimal
 from typing import Any
 
@@ -96,6 +96,20 @@ def _origin(fields: Mapping[str, Provenance], inferred: bool) -> Verification:
     if REVIEWER in fields.values():
         return Verification.USER_PROVIDED
     return Verification.INFERRED if inferred else Verification.OBSERVED
+
+
+def service_routes(
+    relationships: Iterable[CandidateRelationship], entities: Mapping[str, CandidateEntity]
+) -> dict[str, str]:
+    """Each routing entity (a Kubernetes Service) with the one workload its selector resolves to: a
+    reference to the Service is followed to it."""
+    return {
+        r.source: r.target
+        for r in relationships
+        if r.target is not None
+        and r.reference.startswith("selector:")
+        and entities[r.source].role is EntityRole.ROUTING
+    }
 
 
 class _Builder:
@@ -225,13 +239,7 @@ class _Builder:
     def connections(
         self, relationships: tuple[CandidateRelationship, ...], entities: Mapping[str, CandidateEntity]
     ) -> list[Connection]:
-        routes = {
-            r.source: r.target
-            for r in relationships
-            if r.target is not None
-            and r.reference.startswith("selector:")
-            and entities[r.source].role is EntityRole.ROUTING
-        }
+        routes = service_routes(relationships, entities)
         seen: dict[tuple[str, str, str], str] = {}
         found = [self.connection(r, entities, routes, seen) for r in relationships]
         return [c for c in found if c is not None]
