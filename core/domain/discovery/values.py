@@ -109,6 +109,17 @@ class RelationshipStatus(StrEnum):
     UNRESOLVED = "unresolved"  # the referenced entity is absent, or not uniquely identified
 
 
+class ElementKind(StrEnum):
+    NODE = "node"  # from a candidate entity
+    CONNECTION = "connection"  # from a candidate relationship
+
+
+class ElementStatus(StrEnum):
+    INCLUDED = "included"  # in the proposed architecture
+    NEEDS_REVIEW = "needs_review"  # representable once a person states what the source does not
+    EXCLUDED = "excluded"  # kept out, with the reason: supporting, unresolved, rejected, invalid
+
+
 class Decision(StrEnum):
     PENDING = "pending"
     ACCEPTED = "accepted"

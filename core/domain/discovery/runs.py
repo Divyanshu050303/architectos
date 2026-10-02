@@ -12,7 +12,9 @@ the architecture revision a later comparison is made against.
 error.
 
 **Review** is per item and recorded: a person accepts, rejects or ignores each candidate entity and
-relationship, and resolves an ambiguous mapping by choosing one of its candidates. Decisions are
+relationship, resolves an ambiguous mapping by choosing one of its candidates, and may state what the
+source does not establish — an entity's node kind, a relationship's connection kind (never
+overriding what the source states). What a reviewer states is ``user_provided``. Decisions are
 history (the latest per item applies). Accepting a proposal is recorded with the architecture and
 revision it created — created through the architecture workflow, never written here.
 """
@@ -24,6 +26,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
+
+from core.architecture_ir.component import NodeKind
+from core.architecture_ir.dependency import ConnectionKind
 
 from .errors import InvalidDiscoveryRequest, InvalidDiscoveryTransition
 from .results import DiscoveryResult
@@ -142,8 +147,9 @@ class SubjectType(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ReviewDecision:
-    """A person's decision about one candidate: who, when, what — and for an entity, optionally the
-    catalog component they chose."""
+    """A person's decision about one candidate: who, when, what — and, when accepting, optionally what
+    the source does not establish: an entity's catalog component or node kind, a relationship's
+    connection kind."""
 
     subject_type: SubjectType
     subject: str  # an entity key or a relationship id
@@ -152,6 +158,8 @@ class ReviewDecision:
     at: datetime
     component_id: str | None = None
     comment: str | None = None
+    node_kind: NodeKind | None = None
+    connection_kind: ConnectionKind | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.subject_type, SubjectType):
@@ -163,6 +171,13 @@ class ReviewDecision:
         chosen = self.subject_type is SubjectType.ENTITY and self.decision is Decision.ACCEPTED
         if self.component_id is not None and not chosen:
             raise _invalid("component_id", "only_for_an_accepted_entity")
+        if self.node_kind is not None and (not chosen or not isinstance(self.node_kind, NodeKind)):
+            raise _invalid("node_kind", "only_for_an_accepted_entity")
+        accepted = self.subject_type is SubjectType.RELATIONSHIP and self.decision is Decision.ACCEPTED
+        if self.connection_kind is not None and (
+            not accepted or not isinstance(self.connection_kind, ConnectionKind)
+        ):
+            raise _invalid("connection_kind", "only_for_an_accepted_relationship")
         if self.comment is not None and not _text(self.comment, MAX_COMMENT):
             raise _invalid("comment", "invalid_text")
 
@@ -175,6 +190,8 @@ class ReviewDecision:
             "at": self.at.isoformat(),
             "component_id": self.component_id,
             "comment": self.comment,
+            "node_kind": self.node_kind.value if self.node_kind else None,
+            "connection_kind": self.connection_kind.value if self.connection_kind else None,
         }
 
 
@@ -269,8 +286,14 @@ class DiscoveryRun:
                 and decision.component_id not in mapping.candidates
             ):
                 raise _invalid("component_id", "not_a_candidate")  # resolved among its candidates only
-        elif not any(r.id == decision.subject for r in result.relationships):
-            raise _invalid("subject", "not_in_this_run")
+            if decision.node_kind is not None and entity.kind is not None:
+                raise _invalid("node_kind", "stated_by_the_source")  # never overrides the source
+        else:
+            relationship = next((r for r in result.relationships if r.id == decision.subject), None)
+            if relationship is None:
+                raise _invalid("subject", "not_in_this_run")
+            if decision.connection_kind is not None and relationship.kind is not None:
+                raise _invalid("connection_kind", "stated_by_the_source")
         return replace(self, decisions=(*self.decisions, decision))
 
     def decision_for(self, subject: str) -> ReviewDecision | None:

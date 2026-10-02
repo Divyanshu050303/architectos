@@ -30,3 +30,10 @@ class InvalidDiscoveryTransition(DomainError):
 
     code = "invalid_discovery_transition"
     message = "The discovery run cannot move to that status from its current status."
+
+
+class ProposalNotAcceptable(DomainError):
+    """``details`` = {"reason": "nothing_to_accept" | "structurally_invalid"}."""
+
+    code = "discovery_proposal_not_acceptable"
+    message = "The discovery proposal cannot be accepted as it is."
