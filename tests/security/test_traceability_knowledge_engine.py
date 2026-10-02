@@ -236,6 +236,11 @@ def test_no_embedding_provider_is_configured_and_results_say_so() -> None:
     assert result.limitations[0] == SEMANTIC_NOT_CONFIGURED
 
 
+# The architecture agent is the retriever's consumer: it may use the port and its result types —
+# never the knowledge engine, its repository or its tables.
+RETRIEVAL_BOUNDARY = frozenset({"core.domain.knowledge.ports", "core.domain.knowledge.retrieval"})
+
+
 def test_no_other_engine_depends_on_knowledge() -> None:
     allowed = {"core/domain/unit_of_work.py"}  # the unit of work names every repository
     for package in ("core/domain", "engines"):
@@ -243,7 +248,10 @@ def test_no_other_engine_depends_on_knowledge() -> None:
             relative = path.relative_to(ROOT).as_posix()
             if "/knowledge/" in relative or relative in allowed:
                 continue
-            assert not [n for n in _imports(tree) if ".knowledge" in n], relative
+            knowledge = [n for n in _imports(tree) if ".knowledge" in n]
+            if "architecture_agent/" in relative:
+                knowledge = [n for n in knowledge if n not in RETRIEVAL_BOUNDARY]
+            assert not knowledge, relative
 
 
 def test_there_is_no_agent_answer_crawl_or_mutation_endpoint() -> None:
