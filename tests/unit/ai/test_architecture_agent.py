@@ -12,7 +12,6 @@ from ai.agents.architecture_agent import (
     SYSTEM_PROMPT,
     ArchitectureProposalAgent,
     parse,
-    raw_output,
     user_content,
 )
 from ai.llm.client import (
@@ -26,6 +25,7 @@ from ai.llm.client import (
     StructuredResponse,
     Usage,
 )
+from ai.llm.guard import raw_output
 from core.domain.architecture_agent.ports import ContextSection, ProposalContext, ProposerOutcome
 from core.domain.architecture_agent.requests import AgentUsage, Budget
 from core.domain.architecture_agent.values import Basis, FailureCode

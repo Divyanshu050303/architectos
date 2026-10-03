@@ -21,9 +21,6 @@ where, never what.
 output (canonical JSON). Never the prompt, the context or the output.
 """
 
-import hashlib
-import json
-import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -31,6 +28,7 @@ from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 
 from ai.llm.client import LlmError, StructuredLlm, StructuredRequest
+from ai.llm.guard import DATA_TAG, delimited, raw_output, unsafe
 from ai.llm.structured_output import problems, relaxed
 from core.architecture_ir.component import NodeKind
 from core.architecture_ir.configuration import (
@@ -64,10 +62,8 @@ from core.domain.architecture_agent.requests import AgentUsage, Budget
 from core.domain.architecture_agent.results import Rejection
 from core.domain.architecture_agent.runs import RawOutput
 from core.domain.architecture_agent.values import KEY, Basis, FailureCode
-from engines.knowledge.redaction import redact
 
 PROMPT_VERSION = "architecture-proposal-v1"
-DATA_TAG = "agent_data"
 MAX_ATTEMPTS = 2  # the call, and at most one retry
 MIN_CALL_SECONDS = 5.0  # no call is started with less time than this left
 # What the model may say a statement rests on. "user_provided" comes only from a person (the request
@@ -75,9 +71,6 @@ MIN_CALL_SECONDS = 5.0  # no call is started with less time than this left
 MODEL_BASES = (Basis.PROPOSED, Basis.ASSUMPTION, Basis.RETRIEVED, Basis.UNKNOWN, Basis.UNSUPPORTED)
 # Pricing mappings come from a person's pricing snapshot, never from a model.
 PROPOSABLE = {name: spec for name, spec in NODE_PROPERTIES.items() if not name.startswith("pricing")}
-_TAG = re.compile(rf"<(/?){DATA_TAG}", re.IGNORECASE)
-_URL = re.compile(r"\b[a-z][a-z0-9+.-]*://", re.IGNORECASE)
-_IPV4 = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 
 
 def _lines(specs: Iterable[PropertySpec], applies: Callable[[PropertySpec], str]) -> list[str]:
@@ -232,16 +225,7 @@ PROVIDER_SCHEMA = relaxed(SCHEMA)
 
 def user_content(context: ProposalContext) -> str:
     """Each section as delimited data; nothing inside a section can open or close one."""
-    return "\n\n".join(
-        f'<{DATA_TAG} section="{s.name}">\n{_TAG.sub(r"&lt;\1" + DATA_TAG, s.body)}\n</{DATA_TAG}>'
-        for s in context.sections
-    )
-
-
-def raw_output(data: object) -> RawOutput:
-    """What is kept of the output: the SHA-256 and size of its canonical JSON."""
-    canonical = json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
-    return RawOutput(hashlib.sha256(canonical).hexdigest(), len(canonical))
+    return delimited((s.name, s.body) for s in context.sections)
 
 
 @dataclass(frozen=True, slots=True)
@@ -335,34 +319,6 @@ def _cited(proposal: Proposal, context: ProposalContext) -> list[Rejection]:
         if any(e not in known_passages for e in evidence):
             found.append(Rejection("unknown_passage", path, "Cites a passage the context did not list."))
     return found
-
-
-def _strings(value: object, path: str) -> Iterable[tuple[str, str]]:
-    if isinstance(value, str):
-        yield path, value
-    elif isinstance(value, dict):
-        for name, item in value.items():
-            yield from _strings(item, f"{path}.{name}")
-    elif isinstance(value, list):
-        for index, item in enumerate(value):
-            yield from _strings(item, f"{path}[{index}]")
-
-
-def unsafe(data: object) -> list[Rejection]:
-    """Text the model may not write: URLs, IP addresses, credentials. Named by where, never what."""
-    found: list[Rejection] = []
-    for path, text in _strings(data, "$"):
-        if _URL.search(text):
-            found.append(Rejection("url_in_output", path[:200], "Output text may not contain a URL."))
-        if _IPV4.search(text):
-            found.append(
-                Rejection("address_in_output", path[:200], "Output text may not contain an IP address.")
-            )
-        if redact(text)[1]:
-            found.append(
-                Rejection("secret_in_output", path[:200], "Output text may not contain a credential.")
-            )
-    return found[:100]
 
 
 def parse(data: object, context: ProposalContext) -> Parsed:

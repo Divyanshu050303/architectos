@@ -43,7 +43,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from ai.agents.architecture_agent import DATA_TAG, SYSTEM_PROMPT, ArchitectureProposalAgent
+from ai.agents.architecture_agent import SYSTEM_PROMPT, ArchitectureProposalAgent
 from ai.llm.client import (
     LlmError,
     LlmMalformedOutput,
@@ -55,6 +55,7 @@ from ai.llm.client import (
     StructuredResponse,
     Usage,
 )
+from ai.llm.guard import DATA_TAG
 from core.architecture_ir.provenance import ProvenanceSource
 from core.architecture_ir.serialization import content_hash, from_dict, to_dict
 from core.domain.architecture_agent.ports import PassInputs
