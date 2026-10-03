@@ -378,7 +378,16 @@ class Analyze:
             log.exception("workflow analysis could not run", extra={"engine": engine})
             failed = s.candidate.with_report(failed_report(engine))
             note = f"The {engine} engine could not analyze this candidate."
-            return StepOutcome(FAILED, usage=usage, error="engine_error", note=note, candidates=(failed,))
+            ordinal = s.candidate.ordinal
+            said = f"The {engine} engine could not analyze candidate {ordinal}; it is reported as failed."
+            return StepOutcome(
+                FAILED,
+                usage=usage,
+                error="engine_error",
+                note=note,
+                candidates=(failed,),
+                limitations=(said,),
+            )
         outputs = {"findings": len(report.findings), "engine": engine}
         return StepOutcome(DONE, outputs, usage, candidates=(s.candidate.with_report(report),))
 
@@ -520,14 +529,24 @@ class Compare:
         return StepOutcome(DONE, outputs)
 
 
+NOT_RUN = (
+    ("capacity_analysis_id", "Capacity was not analyzed: no capacity analysis (workload) was named."),
+    ("cost_analysis_id", "Cost was not analyzed: no cost analysis (pricing) was named."),
+    ("scenario", "Nothing was simulated: no scenario was named."),
+)
+
+
 class PrepareReview:
     async def execute(self, context: StepContext) -> StepOutcome:
         chosen = reviewable(context.candidates)
         selected = CandidateStatus.SELECTED_FOR_REVIEW
         moved = tuple(c if c.status is selected else c.moved(selected) for c in chosen)
+        goal = context.workflow.goal
+        not_run = tuple(said for name, said in NOT_RUN if getattr(goal, name) is None)  # said, never zero
         return StepOutcome(
-            DONE, {"selected": len(moved)}, candidates=moved, selected=tuple(c.id for c in moved)
-        )
+            DONE, {"selected": len(moved)}, candidates=moved, selected=tuple(c.id for c in moved),
+            limitations=not_run,
+        )  # fmt: skip
 
 
 def build_executors(

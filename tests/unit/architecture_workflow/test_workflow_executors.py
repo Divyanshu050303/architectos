@@ -176,6 +176,10 @@ async def test_a_goal_becomes_a_validated_analyzed_candidate_for_review() -> Non
     assert reviewed.selected == (first.id,)
     assert reviewed.usage.llm_calls == 1
     assert reviewed.usage.candidates == 1
+    said = " ".join(reviewed.limitations)  # what was not run is said, never reported as nothing found
+    assert "Capacity was not analyzed" in said
+    assert "Cost was not analyzed" in said
+    assert "Nothing was simulated" in said
     compared = next(s for s in store.steps if s.action is Action.COMPARE_CANDIDATES)
     assert compared.status is StepStatus.SKIPPED  # a first design has nothing to compare with
 
