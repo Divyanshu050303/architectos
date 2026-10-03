@@ -393,7 +393,7 @@ def step(**overrides: Any) -> WorkflowStep:
     subject = overrides.pop("subject", "c1")
     iteration = overrides.pop("iteration", 0)
     fields: dict[str, Any] = {
-        "key": operation_key(flow_id, iteration, action, subject),
+        "key": operation_key(flow_id, action, subject),
         "workflow_id": flow_id,
         "ordinal": 1,
         "iteration": iteration,
@@ -409,10 +409,10 @@ def step(**overrides: Any) -> WorkflowStep:
 
 def test_an_operation_has_one_stable_identity() -> None:
     flow = uuid.uuid4()
-    same = operation_key(flow, 1, Action.RUN_COST_ANALYSIS, "c2")
-    assert same == operation_key(flow, 1, Action.RUN_COST_ANALYSIS, "c2")
-    assert same != operation_key(flow, 2, Action.RUN_COST_ANALYSIS, "c2")
-    assert same != operation_key(flow, 1, Action.RUN_COST_ANALYSIS, "c3")
+    same = operation_key(flow, Action.RUN_COST_ANALYSIS, "c2")
+    assert same == operation_key(flow, Action.RUN_COST_ANALYSIS, "c2")  # in any round: done once
+    assert same != operation_key(flow, Action.RUN_COST_ANALYSIS, "c3")
+    assert same != operation_key(flow, Action.RUN_SECURITY_ANALYSIS, "c2")
     with pytest.raises(InvalidWorkflowRecord):
         replace(step(workflow_id=flow), key=same)  # a key that is not its own
 

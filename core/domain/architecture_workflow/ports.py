@@ -7,7 +7,14 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
+from core.architecture_ir.model import ArchitectureIR
+from core.domain.architecture_diff.ports import CapacityInputs, CostInputs
+from core.domain.knowledge.retrieval import RetrievalQuery, RetrievalResult
 from core.domain.organizations.permissions import Permission
+from core.domain.projects.policies import ArchitecturePolicy
+from core.domain.requirements.entities import Requirement
+from core.domain.requirements.planning import PlanningInputV2
+from core.domain.simulations.scenarios import Scenario
 
 from .budget import WorkflowUsage
 from .candidates import WorkflowCandidate
@@ -80,4 +87,48 @@ class WorkflowStore(Protocol):
 class PermissionCheck(Protocol):
     async def allowed(self, workflow: ArchitectureWorkflow, permission: Permission) -> bool:
         """Whether the person who started the workflow holds ``permission`` in its project now."""
+        ...
+
+
+# --- what the executors read --------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowInputs:
+    """What the workflow's project gives every stage, read for the person who started it: the pinned
+    requirement set (planning input and the same requirement versions), the policy, the base revision,
+    and the inputs of the analyses the goal named. Absent inputs stay absent — never estimated."""
+
+    planning_input: PlanningInputV2
+    requirements: tuple[Requirement, ...]
+    policy: ArchitecturePolicy = field(default_factory=ArchitecturePolicy)
+    base: ArchitectureIR | None = None
+    base_content_hash: str | None = None
+    capacity: CapacityInputs | None = None
+    cost: CostInputs | None = None
+    scenario: Scenario | None = None
+    missing: tuple[str, ...] = ()  # pinned requirements that can no longer be read
+
+
+class InputsLoader(Protocol):
+    async def load(self, workflow: ArchitectureWorkflow) -> WorkflowInputs: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RequirementAnalysis:
+    analysis_id: uuid.UUID
+    candidates: int  # requirement candidates extracted, for a person to confirm
+    usage: WorkflowUsage = field(default_factory=WorkflowUsage)
+
+
+class RequirementAnalyzer(Protocol):
+    async def analyze(self, workflow: ArchitectureWorkflow) -> RequirementAnalysis:
+        """The goal's own words through the requirements engine, as a stored analysis of the project,
+        for the person who started the workflow."""
+        ...
+
+
+class KnowledgeAccess(Protocol):
+    async def retrieve(self, workflow: ArchitectureWorkflow, query: RetrievalQuery) -> RetrievalResult:
+        """Project knowledge, authorized for the person who started the workflow."""
         ...

@@ -100,7 +100,7 @@ class _Plan:
         self.failed = {k: s for k, s in latest.items() if s.done and s.error is not None}
 
     def key(self, action: Action, subject: str = "") -> str:
-        return operation_key(self.flow.id, self.flow.iteration, action, subject)
+        return operation_key(self.flow.id, action, subject)
 
     def next(
         self,
@@ -159,10 +159,10 @@ def _requirements(plan: _Plan) -> Decision | None:
 def _knowledge(plan: _Plan) -> Decision | None:
     if plan.flow.budget.max_retrievals == 0:
         return None
-    retrieval = operation_key(plan.flow.id, 0, A.RETRIEVE_KNOWLEDGE)
+    retrieval = operation_key(plan.flow.id, A.RETRIEVE_KNOWLEDGE)
     if retrieval in plan.done:
         return None
-    return Next(A.RETRIEVE_KNOWLEDGE, Stage.KNOWLEDGE, retrieval, 0)
+    return Next(A.RETRIEVE_KNOWLEDGE, Stage.KNOWLEDGE, retrieval, plan.flow.iteration)
 
 
 def _generation(plan: _Plan) -> Decision | None:
@@ -190,8 +190,13 @@ def _per_candidate(plan: _Plan) -> Decision | None:
     }
     for candidate in plan.state.candidates:
         subject = str(candidate.id)
-        if candidate.status is CandidateStatus.GENERATED:
-            return plan.next(A.VALIDATE_ARCHITECTURE, Stage.VALIDATION, subject, candidate_id=candidate.id)
+        if candidate.status is CandidateStatus.GENERATED:  # validation could not decide: left unreviewed
+            validate = plan.next(
+                A.VALIDATE_ARCHITECTURE, Stage.VALIDATION, subject, candidate_id=candidate.id
+            )
+            if validate is not None:
+                return validate
+            continue
         if candidate.status not in REVIEWABLE:
             continue
         for action in ANALYSES:

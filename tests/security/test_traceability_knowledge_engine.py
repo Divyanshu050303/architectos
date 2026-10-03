@@ -249,7 +249,10 @@ def test_no_other_engine_depends_on_knowledge() -> None:
             if "/knowledge/" in relative or relative in allowed:
                 continue
             knowledge = [n for n in _imports(tree) if ".knowledge" in n]
-            if "architecture_agent/" in relative or "architecture_diff/" in relative:
+            if any(
+                f"{user}/" in relative
+                for user in ("architecture_agent", "architecture_diff", "architecture_workflow")
+            ):
                 knowledge = [n for n in knowledge if n not in RETRIEVAL_BOUNDARY]
             assert not knowledge, relative
 

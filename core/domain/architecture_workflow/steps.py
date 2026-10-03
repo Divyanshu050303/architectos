@@ -1,7 +1,8 @@
 """A workflow step: one action the controller executed, recorded as the workflow's checkpoint.
 
-- **Operation identity.** A step's ``key`` is derived from the workflow, the iteration, the action and
-  its subject (a candidate, an engine): the same action on the same subject always has the same key.
+- **Operation identity.** A step's ``key`` is derived from the workflow, the action and its subject (a
+  candidate, a finding): the same action on the same subject always has the same key, whatever the
+  round.
   A completed key is never executed again — a retry or a resume after a crash continues after the last
   completed step instead of repeating side effects.
 - **Append-only.** A step is written once, when its action ends: completed (with references to what
@@ -23,9 +24,10 @@ MAX_OUTPUTS = 40
 MAX_ATTEMPTS = 2  # a retryable failure is tried once more, never more
 
 
-def operation_key(workflow_id: uuid.UUID, iteration: int, action: Action, subject: str = "") -> str:
-    """The stable identity of one action on one subject in one iteration of one workflow."""
-    return digest("wst", str(workflow_id), iteration, action.value, subject)
+def operation_key(workflow_id: uuid.UUID, action: Action, subject: str = "") -> str:
+    """The stable identity of one action on one subject of one workflow. The round it ran in is not
+    part of it: a candidate's analysis, or one finding's improvement, is done once — not once a round."""
+    return digest("wst", str(workflow_id), action.value, subject)
 
 
 def _outputs(value: object) -> str | None:
@@ -69,7 +71,7 @@ class WorkflowStep:
                 None if spec is None or self.stage in spec.stages else "step.stage",
                 None
                 if isinstance(self.action, Action)
-                and self.key == operation_key(self.workflow_id, self.iteration, self.action, self.subject)
+                and self.key == operation_key(self.workflow_id, self.action, self.subject)
                 else "step.key",
                 count(self.ordinal, "step.ordinal", minimum=1),
                 count(self.iteration, "step.iteration"),
