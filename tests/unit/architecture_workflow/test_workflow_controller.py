@@ -281,6 +281,14 @@ async def test_a_limit_reached_with_a_valid_candidate_goes_to_review() -> None:
     assert len(script.executed) <= 6  # five actions, then the review
 
 
+async def test_an_unanswered_finding_at_the_iteration_limit_is_said() -> None:
+    store = Store(workflow(budget=WorkflowBudget(max_iterations=0)))
+    reviewed = await run(store, Script())  # the first candidate has a high reliability finding
+    assert reviewed.status is WorkflowStatus.REVIEW_READY
+    assert len(store.candidates) == 1
+    assert any("max_iterations" in note for note in reviewed.limitations)
+
+
 async def test_a_limit_reached_with_nothing_valid_fails() -> None:
     store = Store(workflow(budget=WorkflowBudget(max_tool_calls=3)))
     failed = await run(store, Script(blocking={1: 1}))

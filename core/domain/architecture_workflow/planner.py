@@ -216,10 +216,12 @@ def _addressed(candidates: Sequence[WorkflowCandidate], parent: uuid.UUID) -> se
 
 def _iteration(plan: _Plan) -> Decision | None:
     flow, candidates = plan.flow, plan.state.candidates
-    if not candidates or flow.iteration >= flow.budget.max_iterations:
+    if not candidates:
         return None
     leaf = max(candidates, key=lambda c: c.ordinal)
     if leaf.status is CandidateStatus.REJECTED:
+        if flow.iteration >= flow.budget.max_iterations:
+            return None  # nothing valid and no revision left: no_valid_candidate, said as such
         report = leaf.report("validation")
         rule = report.findings[0].rule if report and report.findings else "validation"
         return plan.next(
@@ -229,6 +231,9 @@ def _iteration(plan: _Plan) -> Decision | None:
         )  # fmt: skip
     if leaf.status not in REVIEWABLE:
         return None
+    # No early stop at the iteration limit for a valid candidate: an improvement still due is planned,
+    # and the budget check turns it into a review that says the limit was reached — an unanswered
+    # finding is never silent.
     addressed = _addressed(candidates, leaf.id)
     for engine in IMPROVABLE_ENGINES:
         report = leaf.report(engine)
