@@ -15,6 +15,9 @@ Each turn:
    (cancelled meanwhile, or another worker holds it) ends the turn with nothing written.
 
 A completed step is never executed again under its key; a retryable failure is attempted once more.
+
+Every recorded step is observable: one structured log entry and metrics with identifiers, codes,
+counts and durations — never a goal, a prompt, retrieved text or a model's output.
 """
 
 import logging
@@ -23,9 +26,11 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import datetime
 
+from core.domain.metrics import Metrics, NullMetrics
+
 from .budget import WorkflowUsage
 from .candidates import WorkflowCandidate
-from .errors import InvalidWorkflowRecord
+from .errors import InvalidWorkflowRecord, InvalidWorkflowTransition
 from .planner import Next, PlanningState, Stop, plan
 from .ports import PermissionCheck, StepContext, StepExecutor, StepOutcome, WorkflowSnapshot, WorkflowStore
 from .steps import MAX_ATTEMPTS, WorkflowStep
@@ -71,11 +76,13 @@ class WorkflowController:
         permissions: PermissionCheck,
         *,
         clock: Callable[[], datetime],
+        metrics: Metrics | None = None,
     ) -> None:
         self._store = store
         self._executors = executors
         self._permissions = permissions
         self._clock = clock
+        self._metrics = metrics or NullMetrics()
 
     async def advance(
         self, workflow_id: uuid.UUID, *, max_turns: int = MAX_TURNS
@@ -103,6 +110,17 @@ class WorkflowController:
     ) -> ArchitectureWorkflow | None:
         failed = snapshot.workflow.fail(code, message, self._clock())
         committed = await self._store.commit(snapshot.workflow, failed, (), None)
+        if committed:
+            self._metrics.increment("workflow.failed", code=code.value)
+            log.info(
+                "workflow stopped",
+                extra={
+                    "workflow_id": str(failed.id), "project_id": str(failed.project_id),
+                    "status": failed.status.value, "stage": failed.stage.value, "failure": code.value,
+                    "iteration": failed.iteration, "llm_calls": failed.usage.llm_calls,
+                    "tool_calls": failed.usage.tool_calls,
+                },
+            )  # fmt: skip
         return failed if committed else None
 
     async def _turn(self, snapshot: WorkflowSnapshot) -> ArchitectureWorkflow | None:
@@ -126,16 +144,54 @@ class WorkflowController:
         # reports, only when the registry says the action may be retried.
         outage = outcome.error == INFRASTRUCTURE_ERROR
         retryable = failed and outcome.retryable and (spec.retryable or outage) and attempt < MAX_ATTEMPTS
-        step = WorkflowStep(
-            decision.key, flow.id, len(snapshot.steps) + 1, decision.iteration, decision.action,
-            decision.stage, outcome.status, now, max(now, self._clock()), decision.subject, attempt,
-            decision.candidate_id, dict(outcome.outputs), outcome.usage, outcome.error, retryable,
-            outcome.note,
-        )  # fmt: skip
-        moved = self._apply(staged, decision, outcome, step)
-        candidates = _kept(snapshot, outcome)
+        try:
+            step = WorkflowStep(
+                decision.key, flow.id, len(snapshot.steps) + 1, decision.iteration, decision.action,
+                decision.stage, outcome.status, now, max(now, self._clock()), decision.subject, attempt,
+                decision.candidate_id, dict(outcome.outputs), outcome.usage, outcome.error, retryable,
+                outcome.note,
+            )  # fmt: skip
+            moved = self._apply(staged, decision, outcome, step)
+            candidates = _kept(snapshot, outcome)
+        except (InvalidWorkflowRecord, InvalidWorkflowTransition) as refused:
+            # A result that does not hold (e.g. rewriting a candidate's architecture): nothing of it is
+            # kept, and the workflow stops rather than being retried forever.
+            log.error(
+                "workflow step refused",
+                extra={
+                    "workflow_id": str(flow.id),
+                    "action": decision.action.value,
+                    "error_type": refused.code,
+                },
+            )
+            message = "A step produced a result that does not hold; nothing of it was kept."
+            return await self._stop(snapshot, FailureCode.ENGINE_ERROR, message)
         committed = await self._store.commit(flow, moved, candidates, step)
+        if committed:
+            self._observe(moved, step)
         return moved if committed else None
+
+    def _observe(self, workflow: ArchitectureWorkflow, step: WorkflowStep) -> None:
+        """Identifiers, codes, counts and durations only."""
+        duration_ms = round((step.completed_at - step.started_at).total_seconds() * 1000, 1)
+        self._metrics.increment("workflow.steps", action=step.action.value, status=step.status.value)
+        self._metrics.observe("workflow.step_ms", duration_ms, action=step.action.value)
+        if step.attempt > 1:
+            self._metrics.increment("workflow.retries", action=step.action.value)
+        if step.usage.llm_calls:
+            self._metrics.increment("workflow.llm_calls", step.usage.llm_calls, action=step.action.value)
+        log.info(
+            "workflow step",
+            extra={
+                "workflow_id": str(workflow.id), "project_id": str(workflow.project_id),
+                "action": step.action.value, "stage": step.stage.value, "step_status": step.status.value,
+                "attempt": step.attempt, "iteration": step.iteration, "duration_ms": duration_ms,
+                "error": step.error, "llm_calls": step.usage.llm_calls,
+                "input_tokens": step.usage.input_tokens, "output_tokens": step.usage.output_tokens,
+                "status": workflow.status.value,
+                "candidates": workflow.usage.candidates, "tool_calls": workflow.usage.tool_calls,
+            },
+        )  # fmt: skip
 
     async def _execute(self, context: StepContext) -> StepOutcome:
         executor = self._executors.get(context.decision.action)

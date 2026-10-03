@@ -113,7 +113,7 @@ def build_worker(
     queue = PostgresWorkflowStore(
         sessions, owner, lease_seconds=settings.architecture_workflow_lease_seconds, clock=utc_now
     )
-    controller = WorkflowController(queue, executors, access, clock=utc_now)
+    controller = WorkflowController(queue, executors, access, clock=utc_now, metrics=LogMetrics())
     return WorkflowWorker(
         queue,
         controller,
