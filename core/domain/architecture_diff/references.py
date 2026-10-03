@@ -10,7 +10,8 @@ Once resolved, a ``ComparedState`` records exactly what was compared (its conten
 diff names its two sides without copying either architecture.
 
 **Capacity and cost** are compared only on inputs the person names: a stored capacity analysis (its
-workload) and a pricing snapshot. Without them those engines are not evaluated — never estimated.
+workload) and a stored cost analysis (its pricing snapshot, pricing date and operating hours), each
+reused unchanged for both states. Without them those engines are not evaluated — never estimated.
 """
 
 import uuid
@@ -100,7 +101,7 @@ class DiffRequest:
     target: StateRef
     requirement_ids: tuple[uuid.UUID, ...] | None = None  # narrows requirement impact; None: all traced
     capacity_analysis_id: uuid.UUID | None = None  # its workload, for comparing capacity
-    pricing_snapshot_id: uuid.UUID | None = None  # for comparing cost (needs capacity too)
+    cost_analysis_id: uuid.UUID | None = None  # its pricing inputs, for comparing cost
     context: str | None = None  # the person's own words about the change, for the explanation
     explain: bool = False  # ask for the AI interpretation now
 
@@ -113,8 +114,6 @@ class DiffRequest:
             if not _ids(self.requirement_ids):
                 raise _invalid("requirement_ids", "invalid")
             object.__setattr__(self, "requirement_ids", tuple(sorted(set(self.requirement_ids))))
-        if self.pricing_snapshot_id is not None and self.capacity_analysis_id is None:
-            raise _invalid("pricing_snapshot_id", "needs_capacity_analysis")  # cost reads a capacity basis
         if self.context is not None:
             if not isinstance(self.context, str) or len(self.context) > MAX_CONTEXT:
                 raise _invalid("context", "too_long")
@@ -129,7 +128,7 @@ class DiffRequest:
             "target": self.target.to_dict(),
             "requirement_ids": [str(r) for r in scope] if scope is not None else None,
             "capacity_analysis_id": str(self.capacity_analysis_id) if self.capacity_analysis_id else None,
-            "pricing_snapshot_id": str(self.pricing_snapshot_id) if self.pricing_snapshot_id else None,
+            "cost_analysis_id": str(self.cost_analysis_id) if self.cost_analysis_id else None,
             "context": self.context,
             "explain": self.explain,
         }

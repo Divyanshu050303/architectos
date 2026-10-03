@@ -141,7 +141,6 @@ def test_states_are_named_exactly() -> None:
     ("overrides", "field", "reason"),
     [
         ({"target": StateRef.revision(ARCH, 1)}, "target", "same_as_base"),
-        ({"pricing_snapshot_id": uuid.uuid4()}, "pricing_snapshot_id", "needs_capacity_analysis"),
         ({"context": "x" * 2001}, "context", "too_long"),
         ({"requirement_ids": ("not-a-uuid",)}, "requirement_ids", "invalid"),
     ],
