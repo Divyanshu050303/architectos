@@ -78,6 +78,7 @@ anything less than perfect is a regression.
   is accepted. It is for a person's review to judge.
 - **Pattern rules.** The unstated-number check reads digits. A number written in words ("forty") is
   not caught, and counts up to 10 are allowed without appearing in the data. The score check refuses
-  known phrasings ("winner", "rated", "8/10", "40% better"); another phrasing may pass.
+  known phrasings ("winner", "rated", "8/10", "40% better"); another phrasing may pass. An outcome stated
+  as fact ("faster", "more secure", "improves") must cite an engine finding; other wordings may pass.
 - **Engines as they are.** Impact is what the engines report. A risk no engine models is not in the
   diff, and the explanation is not allowed to add it as a fact.

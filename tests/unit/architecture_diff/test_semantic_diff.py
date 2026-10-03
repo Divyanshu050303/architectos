@@ -297,6 +297,20 @@ def test_a_comparison_over_the_limit_is_refused_not_cut(monkeypatch: pytest.Monk
     assert caught.value.details["limit"] == "changes"
 
 
+def test_a_value_too_long_to_show_is_refused_not_cut() -> None:
+    long = configured("payments", {"replicas": 2}, {"notes": ["x" * 900] * 4})
+    with pytest.raises(DiffTooLarge) as caught:
+        semantic_diff(platform(), long)
+    assert caught.value.details["limit"] == "value"
+
+
+def test_too_many_groups_are_refused_not_cut(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(semantic, "MAX_GROUPS", 0)
+    with pytest.raises(DiffTooLarge) as caught:
+        semantic_diff(ArchitectureIR("Shop"), platform())
+    assert caught.value.details["limit"] == "groups"
+
+
 def test_a_realistic_change_set() -> None:
     """The platform scaled, its database exposed and a cache connection removed."""
     base = platform()

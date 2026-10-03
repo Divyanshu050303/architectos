@@ -214,6 +214,7 @@ def test_the_decisions_are_recorded() -> None:
         "ADR-022-deterministic-drift-detection.md",
         "ADR-023-lexical-evidence-retrieval.md",
         "ADR-024-bounded-architecture-agent.md",
+        "ADR-025-grounded-architecture-diff.md",
     ):
         text = (DOCS / "adr" / adr).read_text()
         assert "## Decision" in text

@@ -38,6 +38,9 @@ from core.architecture_ir.serialization import content_hash
 from core.domain.architecture_diff.changes import (
     ARCHITECTURE,
     MAX_CHANGES,
+    MAX_FIELDS,
+    MAX_GROUPS,
+    MAX_VALUE_CHARS,
     Change,
     ChangeGroup,
     FieldDelta,
@@ -161,6 +164,9 @@ def _delta(field: FieldChange) -> FieldDelta:
     if secret:  # reported, never shown — even if a value slipped past the IR diff's redaction
         before = REDACTED if before is not None else None
         after = REDACTED if after is not None else None
+    longest = max(len(repr(before)), len(repr(after)))
+    if longest > MAX_VALUE_CHARS:  # refused, never cut: a cut value would be another value
+        raise DiffTooLarge(details={"limit": "value", "value": longest})
     return FieldDelta(
         field.field,
         before,
@@ -184,8 +190,14 @@ def _endpoints(change: ElementChange, base: ArchitectureIR, target: Architecture
     return (connection.source_id, connection.target_id) if connection else None
 
 
+def _deltas(fields: tuple[FieldChange, ...]) -> tuple[FieldDelta, ...]:
+    if len(fields) > MAX_FIELDS:
+        raise DiffTooLarge(details={"limit": "fields", "value": len(fields)})
+    return tuple(_delta(f) for f in fields)
+
+
 def _change(change: ElementChange, base: ArchitectureIR, target: ArchitectureIR) -> Change:
-    fields = tuple(_delta(f) for f in change.fields)
+    fields = _deltas(change.fields)
     if change.change is ChangeKind.MODIFIED:
         classes = tuple(dict.fromkeys(c for f in fields for c in f.classes))
     elif change.element in REASONING:
@@ -212,7 +224,7 @@ def _change(change: ElementChange, base: ArchitectureIR, target: ArchitectureIR)
 def _architecture(fields: tuple[FieldChange, ...]) -> Change | None:
     if not fields:
         return None
-    deltas = tuple(_delta(f) for f in fields)
+    deltas = _deltas(fields)
     classes = tuple(dict.fromkeys(c for d in deltas for c in d.classes))
     element = ElementType.ARCHITECTURE
     own = change_id(element, ARCHITECTURE)
@@ -296,5 +308,8 @@ def semantic_diff(base: ArchitectureIR, target: ArchitectureIR) -> SemanticDiff:
     if len(changes) > MAX_CHANGES:
         raise DiffTooLarge(details={"limit": "changes", "value": len(changes)})
     ordered = tuple(sorted(changes, key=lambda c: (c.element.value, c.element_id)))
+    groups = _groups(ordered)
+    if len(groups) > MAX_GROUPS:
+        raise DiffTooLarge(details={"limit": "groups", "value": len(groups)})
     versions = {"semantic": RULE}
-    return SemanticDiff(content_hash(base), content_hash(target), ordered, _groups(ordered), versions)
+    return SemanticDiff(content_hash(base), content_hash(target), ordered, groups, versions)

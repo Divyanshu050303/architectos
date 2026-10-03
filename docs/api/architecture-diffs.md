@@ -143,6 +143,8 @@ An output is refused whole, never repaired, when it:
 - cites something it was not given;
 - explains a group or requirement that is not in the diff;
 - states a number the data does not;
+- states an outcome (faster, cheaper, more secure…) as fact without citing the engine finding that
+  establishes it;
 - uses score, rating or winner language;
 - asks a review question that does not ask;
 - contains a URL, an IP address or a credential.

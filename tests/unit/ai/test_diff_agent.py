@@ -10,8 +10,9 @@ import pytest
 from ai.agents.diff_agent import PROMPT_VERSION, PROVIDER_SCHEMA, SCHEMA, SYSTEM_PROMPT, DiffExplanationAgent
 from ai.llm.client import LlmError, LlmOverloaded, LlmTimeout, LlmUnavailable
 from ai.llm.guard import DATA_TAG, raw_output
+from core.domain.architecture_diff.impacts import EngineImpact, FindingDelta
 from core.domain.architecture_diff.ports import ExplainOutcome, ExplanationBudget, ExplanationContext
-from core.domain.architecture_diff.values import ExplanationFailure
+from core.domain.architecture_diff.values import ExplanationFailure, FindingState, ImpactStatus
 from engines.architecture_diff.explanation_context import assemble
 from tests.unit.ai.test_architecture_agent import SequencedLlm
 from tests.unit.architecture_agent.test_agent_context import passage
@@ -129,6 +130,7 @@ async def test_numbers_the_data_states_may_be_used() -> None:
         ({"summary": said("Adds a cache.")}, "invalid_item"),  # neither grounded nor an inference
         ({"summary": said("Latency drops by 40 ms.", ("change", CACHE))}, "unstated_number"),  # unsupported
         ({"summary": said("The target is the winner.", ("change", CACHE))}, "score_claim"),
+        ({"summary": said("The cache makes orders faster.", ("change", CACHE))}, "unsupported_outcome"),
         ({"summary": said("Overall rated 8/10.", inferred=True)}, "score_claim"),
         ({"questions": [said("The cache was added to cut load.", ("change", CACHE))]}, "not_a_question"),
         (
@@ -221,4 +223,32 @@ async def test_the_persons_context_can_be_cited_when_given() -> None:
     ctx = context(request=request(context="Launch doubles the orders."))
     data = output(summary=said("The person expects more orders.", ("user_input", "context")))
     outcome, _ = await explain(data, ctx=ctx)
+    assert outcome.explanation is not None, outcome.rejections
+
+
+# --- outcomes are the engines' to establish ---------------------------------------------------------
+
+EXPOSED = EngineImpact(
+    "security",
+    ImpactStatus.EVALUATED,
+    findings=(
+        FindingDelta("sec-public-db", FindingState.INTRODUCED, "high", "A database is public", ("db",)),
+    ),
+)
+
+
+async def test_an_outcome_that_contradicts_the_engines_is_refused() -> None:
+    """The security engine introduced a finding; the answer calls the target more secure, citing a change."""
+    ctx = context(engines=(EXPOSED,))
+    data = output(summary=said("The target is more secure.", ("change", API)))
+    outcome, llm = await explain(data, ctx=ctx)
+    assert codes(outcome) == {"unsupported_outcome"}
+    assert len(llm.requests) == 1
+
+
+async def test_an_outcome_citing_the_engines_finding_or_labelled_an_inference_is_kept() -> None:
+    ctx = context(engines=(EXPOSED,))
+    stated = said("The target is less secure: the database is public.", ("finding", "security:sec-public-db"))
+    hypothesis = said("The cache may reduce the load on the database.", inferred=True)
+    outcome, _ = await explain(output(summary=stated, risks=[hypothesis]), ctx=ctx)
     assert outcome.explanation is not None, outcome.rejections
