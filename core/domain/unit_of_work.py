@@ -11,6 +11,7 @@ from typing import Protocol, Self
 from core.domain.architecture.repository import ArchitectureRepository
 from core.domain.architecture_agent.repository import AgentRunRepository
 from core.domain.architecture_diff.repository import ArchitectureDiffRepository
+from core.domain.architecture_workflow.repository import WorkflowRepository
 from core.domain.audit.repository import AuditRepository
 from core.domain.capacity.repository import CapacityAnalysisRepository
 from core.domain.cost.repository import CostAnalysisRepository, PricingSnapshotRepository
@@ -126,6 +127,9 @@ class UnitOfWork(Protocol):
 
     @property
     def architecture_diffs(self) -> ArchitectureDiffRepository: ...
+
+    @property
+    def architecture_workflows(self) -> WorkflowRepository: ...
 
     async def __aenter__(self) -> Self: ...
 

@@ -33,6 +33,17 @@ from core.domain.architecture_diff.records import (
     explanation_run_from,
 )
 from core.domain.architecture_diff.repository import DiffListing
+from core.domain.architecture_workflow.candidates import WorkflowCandidate
+from core.domain.architecture_workflow.records import (
+    candidate_document,
+    candidate_from,
+    workflow_document,
+    workflow_from,
+)
+from core.domain.architecture_workflow.repository import WorkflowListing
+from core.domain.architecture_workflow.steps import WorkflowStep
+from core.domain.architecture_workflow.values import WorkflowStatus
+from core.domain.architecture_workflow.workflows import ArchitectureWorkflow
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.capacity.analyses import AnalysisReport, CapacityAnalysis
 from core.domain.capacity.queries import AnalysisQuery, BottleneckQuery, ComponentQuery
@@ -1943,6 +1954,70 @@ class FakeArchitectureDiffRepository:
         ]  # fmt: skip
 
 
+class FakeWorkflowRepository:
+    """Workflows and candidates kept as the database keeps them: written and read through documents."""
+
+    def __init__(self) -> None:
+        self.rows: dict[uuid.UUID, dict[str, Any]] = {}
+        self.candidate_rows: dict[uuid.UUID, dict[str, Any]] = {}
+        self.step_rows: list[WorkflowStep] = []
+
+    async def add(self, workflow: ArchitectureWorkflow) -> ArchitectureWorkflow:
+        self.rows[workflow.id] = workflow_document(workflow)
+        return workflow
+
+    async def get(
+        self, project_id: uuid.UUID, workflow_id: uuid.UUID, *, for_update: bool = False
+    ) -> ArchitectureWorkflow | None:
+        row = self.rows.get(workflow_id)
+        return workflow_from(row) if row is not None and row["project_id"] == project_id else None
+
+    async def save(self, workflow: ArchitectureWorkflow) -> ArchitectureWorkflow:
+        if workflow.id not in self.rows:
+            raise LookupError(workflow.id)
+        self.rows[workflow.id] = workflow_document(workflow)
+        return workflow
+
+    async def candidates(
+        self, project_id: uuid.UUID, workflow_id: uuid.UUID
+    ) -> tuple[WorkflowCandidate, ...]:
+        found = [
+            candidate_from(r)
+            for r in self.candidate_rows.values()
+            if r["project_id"] == project_id and r["workflow_id"] == workflow_id
+        ]
+        return tuple(sorted(found, key=lambda c: c.ordinal))
+
+    async def save_candidates(self, project_id: uuid.UUID, candidates: tuple[WorkflowCandidate, ...]) -> None:
+        for candidate in candidates:
+            self.candidate_rows[candidate.id] = candidate_document(project_id, candidate)
+
+    async def steps(self, project_id: uuid.UUID, workflow_id: uuid.UUID) -> tuple[WorkflowStep, ...]:
+        return tuple(s for s in self.step_rows if s.workflow_id == workflow_id)
+
+    async def list(
+        self,
+        project_id: uuid.UUID,
+        *,
+        status: WorkflowStatus | None = None,
+        after: tuple[datetime, uuid.UUID] | None = None,
+        limit: int = 50,
+    ) -> list[WorkflowListing]:
+        flows = [workflow_from(r) for r in self.rows.values() if r["project_id"] == project_id]
+        flows = [f for f in flows if status is None or f.status is status]
+        flows.sort(key=lambda f: (f.requested_at, f.id), reverse=True)
+        if after is not None:
+            flows = [f for f in flows if (f.requested_at, f.id) < after]
+        return [
+            WorkflowListing(
+                f.id, f.goal.objective, f.status, f.stage, f.iteration,
+                sum(1 for r in self.candidate_rows.values() if r["workflow_id"] == f.id),
+                f.failure.code if f.failure else None, f.requested_by_user_id, f.requested_at, f.completed_at,
+            )
+            for f in flows[:limit]
+        ]  # fmt: skip
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1974,6 +2049,7 @@ class FakeUnitOfWork:
         self._knowledge = FakeKnowledgeRepository()
         self._agent_runs = FakeAgentRunRepository()
         self._architecture_diffs = FakeArchitectureDiffRepository()
+        self._architecture_workflows = FakeWorkflowRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -2092,6 +2168,10 @@ class FakeUnitOfWork:
     @property
     def architecture_diffs(self) -> FakeArchitectureDiffRepository:
         return self._architecture_diffs
+
+    @property
+    def architecture_workflows(self) -> FakeWorkflowRepository:
+        return self._architecture_workflows
 
     async def __aenter__(self) -> Self:
         return self

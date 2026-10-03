@@ -3,6 +3,7 @@
 from .architecture import ArchitectureLayoutRecord, ArchitectureRecord, ArchitectureRevisionRecord
 from .architecture_agent import AgentRunRecord
 from .architecture_diff import ArchitectureDiffRecord, DiffExplanationRecord
+from .architecture_workflow import WorkflowCandidateRecord, WorkflowRecord, WorkflowStepRecord
 from .audit_log import AuditLogRecord
 from .base import Base
 from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, CapacityComponentRecord
@@ -97,4 +98,7 @@ __all__ = [
     "UserRecord",
     "ValidationFindingRecord",
     "ValidationRunRecord",
+    "WorkflowCandidateRecord",
+    "WorkflowRecord",
+    "WorkflowStepRecord",
 ]

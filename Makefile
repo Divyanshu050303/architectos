@@ -1,7 +1,7 @@
 # Backend developer commands. The frontend has its own scripts in apps/web/package.json.
 # Integration and migration targets need the local database: `make db-up`.
 
-PY_SOURCES := apps/api core persistence tests
+PY_SOURCES := apps/api core persistence tests workers
 UV := uv run
 
 API_PORT ?= 8000

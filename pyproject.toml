@@ -61,7 +61,7 @@ known-first-party = ["ai", "apps", "core", "engines", "persistence"]
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["ai", "apps/api", "core", "engines", "persistence", "tests"]
+files = ["ai", "apps/api", "core", "engines", "persistence", "tests", "workers"]
 exclude = ["^apps/web/"]
 explicit_package_bases = true
 namespace_packages = true

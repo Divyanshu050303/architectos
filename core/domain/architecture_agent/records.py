@@ -165,7 +165,7 @@ def _request(d: Mapping[str, Any]) -> AgentRequest:
     )
 
 
-def _question(d: Mapping[str, Any]) -> ClarificationQuestion:
+def question_from(d: Mapping[str, Any]) -> ClarificationQuestion:
     question = ClarificationQuestion(
         QuestionKind(d["kind"]), d["question"], tuple(d["requirement_refs"]), d["blocking"]
     )
@@ -174,7 +174,7 @@ def _question(d: Mapping[str, Any]) -> ClarificationQuestion:
     return question
 
 
-def _answer(d: Mapping[str, Any]) -> Answer:
+def answer_from(d: Mapping[str, Any]) -> Answer:
     by, at = uuid.UUID(d["answered_by_user_id"]), datetime.fromisoformat(d["answered_at"])
     return Answer(d["question_id"], d["answer"], by, at)
 
@@ -227,7 +227,7 @@ def candidate_from(d: Mapping[str, Any]) -> Candidate:
     return candidate
 
 
-def _report(d: Mapping[str, Any]) -> EngineReport:
+def report_from(d: Mapping[str, Any]) -> EngineReport:
     findings = tuple(
         AgentFinding(f["engine"], f["rule"], f["severity"], f["message"], tuple(f["elements"]))
         for f in d["findings"]
@@ -277,12 +277,12 @@ def run_from(row: Mapping[str, Any]) -> AgentRun:
             usage=AgentUsage(**{k: row["usage"][k] for k in USAGE_FIELDS}),
             model=row["model"],
             prompt_version=row["prompt_version"],
-            questions=tuple(_question(q) for q in row["questions"]),
-            answers=tuple(_answer(a) for a in row["answers"]),
+            questions=tuple(question_from(q) for q in row["questions"]),
+            answers=tuple(answer_from(a) for a in row["answers"]),
             proposal=proposal_from(row["proposal"]) if row["proposal"] else None,
             rejections=tuple(Rejection(r["code"], r["path"], r["detail"]) for r in row["rejections"]),
             candidate=candidate,
-            reports=tuple(_report(r) for r in row["reports"]),
+            reports=tuple(report_from(r) for r in row["reports"]),
             raw_output=RawOutput(sha256, row["raw_output_bytes"]) if sha256 else None,
             failure=_failure(row["failure"]),
             accepted=accepted,
