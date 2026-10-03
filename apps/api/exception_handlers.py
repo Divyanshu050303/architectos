@@ -47,6 +47,13 @@ from core.domain.architecture_diff.errors import (
     DiffTooLarge,
     InvalidDiffRequest,
 )
+from core.domain.architecture_workflow.errors import (
+    CandidateNotApprovable,
+    InvalidWorkflowRequest,
+    InvalidWorkflowTransition,
+    WorkflowCandidateNotFound,
+    WorkflowNotFound,
+)
 from core.domain.audit.errors import InvalidCursor
 from core.domain.capacity.errors import (
     CapacityAnalysisNotFound,
@@ -306,6 +313,11 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     ArchitectureDiffNotFound: 404,
     ComparedStateNotFound: 404,  # missing, hidden or not comparable: one answer
     DiffTooLarge: 422,
+    InvalidWorkflowRequest: 422,
+    WorkflowNotFound: 404,
+    WorkflowCandidateNotFound: 404,
+    InvalidWorkflowTransition: 409,
+    CandidateNotApprovable: 409,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

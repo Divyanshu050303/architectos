@@ -16,6 +16,8 @@ from apps.api.middleware.request_id import current_request_id
 from core.domain.architecture.architecture_service import ArchitectureService
 from core.domain.architecture_agent.agent_service import ArchitectureAgentService
 from core.domain.architecture_diff.diff_service import ArchitectureDiffService
+from core.domain.architecture_workflow.budget import WorkflowBudget
+from core.domain.architecture_workflow.workflow_service import ArchitectureWorkflowService
 from core.domain.audit.audit_service import AuditService
 from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
@@ -483,6 +485,32 @@ def get_diff_service(
 
 
 DiffServiceDep = Annotated[ArchitectureDiffService, Depends(get_diff_service)]
+
+
+def workflow_budget(settings: Settings) -> WorkflowBudget:
+    """The configured default limits of a workflow (up to the domain's ceilings)."""
+    return WorkflowBudget(
+        max_iterations=settings.architecture_workflow_max_iterations,
+        max_llm_calls=settings.architecture_workflow_max_llm_calls,
+        max_seconds=settings.architecture_workflow_max_seconds,
+    )
+
+
+def get_workflow_service(
+    db: DbSession,
+    client: Client,
+    settings: AppSettings,
+    clock: Annotated[Clock, Depends(get_clock)],
+    architectures: ArchitectureServiceDep,
+) -> ArchitectureWorkflowService:
+    # Only a person's moves: a worker carries the workflow forward (see workers/workflow_worker.py).
+    # Approval writes revisions through the architecture workflow.
+    return ArchitectureWorkflowService(
+        SqlAlchemyUnitOfWork(db, client), architectures, budget=workflow_budget(settings), clock=clock
+    )
+
+
+WorkflowServiceDep = Annotated[ArchitectureWorkflowService, Depends(get_workflow_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:

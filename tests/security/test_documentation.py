@@ -11,6 +11,7 @@ from core.architecture_ir import errors as ir_errors
 from core.domain.architecture import errors as architecture_errors
 from core.domain.architecture_agent import errors as agent_errors
 from core.domain.architecture_diff import errors as diff_errors
+from core.domain.architecture_workflow import errors as workflow_errors
 from core.domain.audit.entities import AuditAction
 from core.domain.capacity import errors as capacity_errors
 from core.domain.components import errors as component_errors
@@ -57,6 +58,7 @@ API_DOCS = "".join(
         "knowledge.md",
         "architecture-agent.md",
         "architecture-diffs.md",
+        "architecture-workflows.md",
         "components.md",
     )
 )
@@ -81,11 +83,11 @@ def test_every_endpoint_is_documented_and_nothing_else_is(app: FastAPI) -> None:
     # 9 project, 9 requirement, 4 requirement set, 3 requirement analysis, 14 architecture, 4
     # validation, 6 capacity, 4 cost, 5 reliability, 5 security, 5 observability, 6 simulation, 6
     # evolution, 8 decision, 14 migration plan, 10 discovery, 10 drift, 9 knowledge, 7 architecture
-    # agent and 4 architecture diff endpoints
+    # agent, 4 architecture diff and 8 architecture workflow endpoints
     # (GET /validation/rules,
     # /capacity/models, /cost/models, /reliability/models, /security/analyzers,
     # /observability/analyzers, /simulation/catalog and /evolution/catalog are not project-scoped)
-    assert len(served) == 142
+    assert len(served) == 150
     assert served - documented == set(), "undocumented endpoints"
     assert {d for d in documented if in_scope(d[1])} - served == set(), (
         "documented endpoints that do not exist"
@@ -157,6 +159,11 @@ def test_every_error_code_is_documented() -> None:
             diff_errors.ArchitectureDiffNotFound,
             diff_errors.ComparedStateNotFound,
             diff_errors.DiffTooLarge,
+            workflow_errors.InvalidWorkflowRequest,
+            workflow_errors.WorkflowNotFound,
+            workflow_errors.WorkflowCandidateNotFound,
+            workflow_errors.InvalidWorkflowTransition,
+            workflow_errors.CandidateNotApprovable,
             component_errors.ComponentNotFound,
         )
     }
@@ -182,6 +189,7 @@ def test_every_audit_action_is_documented() -> None:
             "knowledge_source",
             "agent_run",
             "architecture_diff",
+            "architecture_workflow",
         }
     }
     assert {a for a in actions if a not in API_DOCS} == set()

@@ -41,11 +41,16 @@ from persistence.repositories.validations import SqlAlchemyValidationRunReposito
 class SqlAlchemyUnitOfWork:
     """Implements core.domain.unit_of_work.UnitOfWork over one AsyncSession.
 
-    The session must not be in a transaction already: each ``async with`` is one transaction.
+    The session must not be in a transaction already: each ``async with`` is one transaction. With
+    ``closing``, the session is closed after each one (its identity map dropped): a long-running worker
+    then never reads an object loaded by an earlier transaction.
     """
 
-    def __init__(self, session: AsyncSession, client: ClientInfo | None = None) -> None:
+    def __init__(
+        self, session: AsyncSession, client: ClientInfo | None = None, *, closing: bool = False
+    ) -> None:
         self._session = session
+        self._closing = closing
         self._transaction: AsyncSessionTransaction | None = None
         self.users = SqlAlchemyUserRepository(session)
         self.email_verification_tokens = SqlAlchemySingleUseTokenRepository(
@@ -90,9 +95,13 @@ class SqlAlchemyUnitOfWork:
         transaction, self._transaction = self._transaction, None
         if transaction is None:
             return
-        if exc_type is None:
-            await transaction.commit()
-            self.audit.publish_committed()
-        else:
-            await transaction.rollback()
-            self.audit.discard_uncommitted()
+        try:
+            if exc_type is None:
+                await transaction.commit()
+                self.audit.publish_committed()
+            else:
+                await transaction.rollback()
+                self.audit.discard_uncommitted()
+        finally:
+            if self._closing:
+                await self._session.close()

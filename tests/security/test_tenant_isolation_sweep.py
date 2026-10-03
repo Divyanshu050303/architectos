@@ -157,6 +157,8 @@ async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing
         "architecture_id": architecture["id"],
         "run_id": run["id"],
         "diff_id": str(uuid.uuid4()),  # a stranger is refused at the project, before any diff
+        "workflow_id": str(uuid.uuid4()),  # likewise before any workflow or candidate
+        "workflow_candidate_id": str(uuid.uuid4()),
     }
 
     async def state() -> tuple[object, ...]:

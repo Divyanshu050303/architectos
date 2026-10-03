@@ -294,6 +294,18 @@ SPECIFIED = PUBLIC | {
     ("GET", "/api/v1/projects/{project_id}/architecture-diffs"),
     ("GET", "/api/v1/projects/{project_id}/architecture-diffs/{diff_id}"),
     ("POST", "/api/v1/projects/{project_id}/architecture-diffs/{diff_id}/explanations"),
+    # Architecture workflows: queue a goal, read, give input, cancel, and a person's decision.
+    ("POST", "/api/v1/projects/{project_id}/architecture-workflows"),
+    ("GET", "/api/v1/projects/{project_id}/architecture-workflows"),
+    ("GET", "/api/v1/projects/{project_id}/architecture-workflows/{workflow_id}"),
+    (
+        "GET",
+        "/api/v1/projects/{project_id}/architecture-workflows/{workflow_id}/candidates/{workflow_candidate_id}",
+    ),
+    ("POST", "/api/v1/projects/{project_id}/architecture-workflows/{workflow_id}/input"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-workflows/{workflow_id}/cancel"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-workflows/{workflow_id}/reject"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-workflows/{workflow_id}/approve"),
 }
 
 

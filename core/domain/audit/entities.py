@@ -87,6 +87,11 @@ class AuditAction(StrEnum):
     AGENT_RUN_ACCEPTED = "agent_run.accepted"  # a person accepted the candidate as a revision
     ARCHITECTURE_DIFF_CREATED = "architecture_diff.created"  # two exact states compared and stored
     ARCHITECTURE_DIFF_EXPLAINED = "architecture_diff.explained"  # an explanation run appended to a diff
+    WORKFLOW_CREATED = "architecture_workflow.created"  # a goal queued for the workflow
+    WORKFLOW_INPUT_PROVIDED = "architecture_workflow.input_provided"  # requirements confirmed or answers
+    WORKFLOW_CANCELLED = "architecture_workflow.cancelled"
+    WORKFLOW_REJECTED = "architecture_workflow.rejected"  # a person rejected the review package
+    WORKFLOW_APPROVED = "architecture_workflow.approved"  # a person approved a candidate as a revision
 
 
 # Defense in depth: metadata keys that look like secrets are refused outright.

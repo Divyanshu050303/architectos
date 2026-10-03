@@ -127,6 +127,9 @@ POLICIES: dict[str, dict[str, Rule]] = {
     "run_evolution_analysis": {"user": Rule(60, timedelta(hours=1))},
     # Each pass (a new run, or answers that resume one) may call a language model, at most twice.
     "run_architecture_agent": {"user": Rule(30, timedelta(hours=1)), "ip": Rule(60, timedelta(hours=1))},
+    # Queues a workflow (or resumes one with a person's input): its worker may call a model many times,
+    # each bounded by the workflow's budget.
+    "run_architecture_workflow": {"user": Rule(20, timedelta(hours=1)), "ip": Rule(60, timedelta(hours=1))},
     # Runs six engines on both states; stores the diff.
     "compare_architectures": {"user": Rule(120, timedelta(hours=1))},
     # Each explanation may call a language model, at most twice.

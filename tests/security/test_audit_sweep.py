@@ -14,10 +14,13 @@ from typing import Any
 
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from apps.api.email.transport import InMemoryTransport
+from apps.api.middleware.rate_limit import InMemoryRateLimiter
 from core.architecture_ir.serialization import to_dict
 from core.domain.audit.entities import AuditAction
+from tests.integration.api.workflow_support import drain
 from tests.unit.evolution.test_evolution_triggers import shop as evolving_shop
 
 from .support import inventory, signed_in
@@ -53,6 +56,7 @@ _PLAN_VERSION = _PLAN + "versions__version__"
 _DISCOVERY = "_api_v1_projects__project_id__discovery_runs__run_id__"
 _AGENT = "_api_v1_projects__project_id__architecture_agent_runs__run_id__"
 _DIFF = "_api_v1_projects__project_id__architecture_diffs__diff_id__"
+_WORKFLOW = "_api_v1_projects__project_id__architecture_workflows__workflow_id__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 _KNOWLEDGE = "_api_v1_projects__project_id__knowledge_sources__source_id__"
@@ -96,6 +100,9 @@ class Target:
     agent_question_ids: tuple[str, ...] = ()  # its blocking questions
     agent_candidate_hash: str = ""  # set by with_agent_candidate
     diff_id: str = ""  # set by with_diff
+    workflow_id: str = ""  # set by with_workflow
+    workflow_candidate: tuple[str, str] = ("", "")  # (id, content hash) of an approvable candidate
+    drain: Callable[[], Awaitable[int]] | None = None  # runs the workflow worker until the queue is empty
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -406,6 +413,55 @@ def diff_request(target: Target) -> dict[str, Any]:
     }
 
 
+def workflow_goal(target: Target) -> dict[str, Any]:
+    return {"objective": CANARY_STATEMENT, "requirementSetId": target.agent_set_id}
+
+
+async def with_workflow(client: AsyncClient, auth: dict[str, str], target: Target, **body: Any) -> None:
+    """A queued workflow (not yet carried by the worker)."""
+    started = await client.post(
+        f"/api/v1/projects/{target.project_id}/architecture-workflows", json=body, headers=auth
+    )
+    assert started.status_code == 202, started.text
+    target.workflow_id = str(started.json()["id"])
+
+
+async def with_workflow_queued(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    await with_agent_set(client, auth, target)
+    await with_workflow(client, auth, target, **workflow_goal(target))
+
+
+async def with_workflow_waiting(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """A workflow waiting for a person to confirm the requirements of its goal."""
+    await with_agent_set(client, auth, target)
+    await with_workflow(client, auth, target, objective=f"Support at least 2000 rps. {CANARY_STATEMENT}")
+    assert target.drain is not None
+    await target.drain()
+    flow = await client.get(
+        f"/api/v1/projects/{target.project_id}/architecture-workflows/{target.workflow_id}", headers=auth
+    )
+    assert flow.json()["status"] == "needs_input", flow.text
+
+
+async def with_workflow_review(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """A workflow the worker carried to its review package."""
+    await with_workflow_queued(client, auth, target)
+    assert target.drain is not None
+    await target.drain()
+    url = f"/api/v1/projects/{target.project_id}/architecture-workflows/{target.workflow_id}"
+    flow = await client.get(url, headers=auth)
+    if flow.json()["status"] == "needs_input":  # the agent's blocking questions, answered
+        asked = [q["id"] for q in flow.json()["inputNeeded"]["questions"] if q["blocking"]]
+        answers = {"answers": [{"questionId": q, "answer": CANARY_REASON} for q in asked]}
+        answered = await client.post(f"{url}/input", json=answers, headers=auth)
+        assert answered.status_code == 200, answered.text
+        await target.drain()
+        flow = await client.get(url, headers=auth)
+    assert flow.json()["status"] == "review_ready", flow.text
+    candidate = next(c for c in flow.json()["candidates"] if c["approvability"]["approvable"])
+    target.workflow_candidate = (candidate["id"], candidate["contentHash"])
+
+
 async def with_diff(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
     """A stored diff of an architecture whose names carry the canaries."""
     await with_two_revisions(client, auth, target)
@@ -674,6 +730,31 @@ PLANS: dict[str, Plan] = {
     f"reject_agent_candidate{_AGENT}reject_post": Plan(
         {"agent_run.rejected"}, "agent_run", {"reason": CANARY_REASON}, with_agent_candidate
     ),
+    "start_architecture_workflow_api_v1_projects__project_id__architecture_workflows_post": Plan(
+        {"architecture_workflow.created"}, "created", workflow_goal, with_agent_set
+    ),
+    f"provide_workflow_input{_WORKFLOW}input_post": Plan(
+        {"architecture_workflow.input_provided"},
+        "workflow",
+        lambda target: {"requirementSetId": target.agent_set_id},
+        with_workflow_waiting,
+    ),
+    f"cancel_architecture_workflow{_WORKFLOW}cancel_post": Plan(
+        {"architecture_workflow.cancelled"}, "workflow", None, with_workflow_queued
+    ),
+    f"reject_architecture_workflow{_WORKFLOW}reject_post": Plan(
+        {"architecture_workflow.rejected"}, "workflow", {"reason": CANARY_REASON}, with_workflow_review
+    ),
+    f"approve_workflow_candidate{_WORKFLOW}approve_post": Plan(
+        {"architecture_workflow.approved", "architecture.created"},
+        {"architecture_workflow.approved": "workflow", "architecture.created": "accepted_architecture"},
+        lambda target: {
+            "candidateId": target.workflow_candidate[0],
+            "candidateContentHash": target.workflow_candidate[1],
+            "name": CANARY_TITLE,
+        },
+        with_workflow_review,
+    ),
     f"accept_agent_candidate{_AGENT}accept_post": Plan(
         {"agent_run.accepted", "architecture.created"},
         {"agent_run.accepted": "agent_run", "architecture.created": "accepted_architecture"},
@@ -721,6 +802,7 @@ def test_every_project_scoped_audit_action_is_exercised() -> None:
         "knowledge_source",
         "agent_run",
         "architecture_diff",
+        "architecture_workflow",
     }
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
@@ -739,6 +821,7 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
         "knowledge": target.knowledge_source_id,
         "agent_run": target.agent_run_id,
         "diff": target.diff_id,
+        "workflow": target.workflow_id,
     }
     match resource:
         case "promoted":
@@ -795,14 +878,16 @@ async def fresh_target(client: AsyncClient, auth: dict[str, str], org_id: str) -
 
 
 async def test_every_mutation_is_audited_without_requirement_text(
-    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport
+    app: FastAPI, client: AsyncClient, connection: AsyncConnection, outbox: InMemoryTransport
 ) -> None:
     auth = await signed_in(client, outbox, "ada@example.com")
     org_id = (await client.post("/api/v1/organizations", json={"name": "Acme"}, headers=auth)).json()["id"]
     operations = {op.operation_id: op for op in inventory(app)}
 
     for operation_id, plan in PLANS.items():
+        app.state.rate_limiter = InMemoryRateLimiter()  # auditing is swept here, not rate limits
         target = await fresh_target(client, auth, org_id)
+        target.drain = lambda: drain(app, connection)
         await plan.prepare(client, auth, target)
         before = {entry["id"] for entry in await audit_entries(client, auth, org_id)}
 
@@ -820,6 +905,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             **({"item_id": target.drift_item_id} if target.drift_item_id else {}),
             **({"source_id": target.knowledge_source_id} if target.knowledge_source_id else {}),
             **({"diff_id": target.diff_id} if target.diff_id else {}),
+            **({"workflow_id": target.workflow_id} if target.workflow_id else {}),
         }
         url = op.url(**values)
         body = plan.body(target) if callable(plan.body) else plan.body
@@ -842,7 +928,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
 
 
 async def test_read_only_endpoints_write_nothing(  # noqa: PLR0915 - one sweep over every read
-    app: FastAPI, client: AsyncClient, outbox: InMemoryTransport
+    app: FastAPI, client: AsyncClient, connection: AsyncConnection, outbox: InMemoryTransport
 ) -> None:
     auth = await signed_in(client, outbox, "ada@example.com")
     org_id = (await client.post("/api/v1/organizations", json={"name": "Acme"}, headers=auth)).json()["id"]
@@ -915,6 +1001,9 @@ async def test_read_only_endpoints_write_nothing(  # noqa: PLR0915 - one sweep o
     knowledge = await knowledge_ids(client, auth, target)  # an indexed document in the main project
     agent = await fresh_target(client, auth, org_id)
     await with_agent_waiting(client, auth, agent)  # its own project: a run waiting for answers
+    flowed = await fresh_target(client, auth, org_id)
+    flowed.drain = lambda: drain(app, connection)
+    await with_workflow_review(client, auth, flowed)  # its own project: a workflow ready for review
     compared_target = await fresh_target(client, auth, org_id)
     await with_diff(client, auth, compared_target)  # its own project: a stored diff
     before = await audit_entries(client, auth, org_id)
@@ -966,6 +1055,12 @@ async def test_read_only_endpoints_write_nothing(  # noqa: PLR0915 - one sweep o
             }
         if "/architecture-agent-runs" in op.path:
             values = ids | {"project_id": agent.project_id, "run_id": agent.agent_run_id}
+        if "/architecture-workflows" in op.path:
+            values = ids | {
+                "project_id": flowed.project_id,
+                "workflow_id": flowed.workflow_id,
+                "workflow_candidate_id": flowed.workflow_candidate[0],
+            }
         if "/architecture-diffs" in op.path:
             values = ids | {"project_id": compared_target.project_id, "diff_id": compared_target.diff_id}
         body = READ_BODIES.get(op.operation_id)

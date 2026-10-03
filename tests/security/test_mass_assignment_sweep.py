@@ -45,6 +45,7 @@ DISCOVERY_ARTIFACT = {
 }
 _DISCOVERY_RUN = "_api_v1_projects__project_id__discovery_runs__run_id__"
 _AGENT_RUN = "_api_v1_projects__project_id__architecture_agent_runs__run_id__"
+_WORKFLOW = "_api_v1_projects__project_id__architecture_workflows__workflow_id__"
 _IDENTITY_MAPPINGS = "_api_v1_projects__project_id__architectures__architecture_id__identity_mappings_"
 VALID_BODIES: dict[str, dict[str, object]] = {
     "run_discovery_api_v1_projects__project_id__discovery_runs_post": {"artifacts": [DISCOVERY_ARTIFACT]},
@@ -76,6 +77,16 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     f"answer_agent_run{_AGENT_RUN}answers_post": {"answers": [{"questionId": "aq_x", "answer": "Yes"}]},
     f"reject_agent_candidate{_AGENT_RUN}reject_post": {"reason": "Too large"},
     f"accept_agent_candidate{_AGENT_RUN}accept_post": {"candidateContentHash": "0" * 64},
+    "start_architecture_workflow_api_v1_projects__project_id__architecture_workflows_post": {
+        "objective": "An order service",
+        "requirementSetId": str(uuid.uuid4()),
+    },
+    f"provide_workflow_input{_WORKFLOW}input_post": {"requirementSetId": str(uuid.uuid4())},
+    f"reject_architecture_workflow{_WORKFLOW}reject_post": {"reason": "Too large"},
+    f"approve_workflow_candidate{_WORKFLOW}approve_post": {
+        "candidateId": str(uuid.uuid4()),
+        "candidateContentHash": "0" * 64,
+    },
     "create_architecture_diff_api_v1_projects__project_id__architecture_diffs_post": {
         "base": {"kind": "revision", "architectureId": str(uuid.uuid4()), "revisionNumber": 1},
         "target": {"kind": "revision", "architectureId": str(uuid.uuid4()), "revisionNumber": 2},

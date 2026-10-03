@@ -50,7 +50,7 @@ from .errors import AgentRunNotFound, CandidateNotAcceptable, InvalidAgentReques
 from .ports import AgentPipeline, PassInputs
 from .proposals import Answer
 from .repository import RunListing
-from .requests import AgentRequest, Budget
+from .requests import AgentRequest, BaseRevision, Budget
 from .runs import AcceptedRevision, AgentRun
 from .values import EngineStatus, RunStatus
 
@@ -290,29 +290,11 @@ class ArchitectureAgentService:
     async def _load(self, project_id: uuid.UUID, user_id: uuid.UUID, request: AgentRequest) -> _Loaded:
         async with self._uow as uow:
             access = await project_access(uow, project_id, user_id, Permission.ARCHITECTURE_GENERATE)
-            found = await uow.requirement_sets.get(project_id, request.requirement_set_id)
-            planned = await uow.requirement_sets.get_planning_input(project_id, request.requirement_set_id)
-            if found is None or planned is None:
-                raise RequirementSetNotFound
-            requirements: list[Requirement] = []
-            missing: list[str] = []
-            for item in found.items:
-                version = await uow.requirements.get_version(project_id, item.requirement_id, item.version)
-                if version is None:
-                    missing.append(item.reference)
-                    continue
-                requirements.append(
-                    Requirement(
-                        id=item.requirement_id, project_id=project_id, number=item.number,
-                        version=version.version, content=version.content, source=version.source,
-                        confidence=version.confidence, created_by_user_id=version.created_by_user_id,
-                        created_at=version.created_at, updated_at=version.created_at,
-                    )
-                )  # fmt: skip
-            base = await _base(uow, project_id, request) if request.base is not None else None
-        planning_input = cast(PlanningInputV2, planned[1])
-        policy = access.project.policy
-        return _Loaded(planning_input, tuple(requirements), policy, base, tuple(missing))
+            planning_input, requirements, missing = await load_pinned(
+                uow, project_id, request.requirement_set_id
+            )
+            base = (await base_revision(uow, project_id, request.base)).ir if request.base else None
+        return _Loaded(planning_input, requirements, access.project.policy, base, missing)
 
     async def _advance(self, run: AgentRun, loaded: _Loaded, user_id: uuid.UUID) -> AgentRun:
         project_id = run.project_id
@@ -329,16 +311,42 @@ class ArchitectureAgentService:
         return await self._pipeline.advance(run, inputs)
 
 
-async def _base(uow: UnitOfWork, project_id: uuid.UUID, request: AgentRequest) -> ArchitectureIR:
+async def load_pinned(
+    uow: UnitOfWork, project_id: uuid.UUID, set_id: uuid.UUID
+) -> tuple[PlanningInputV2, tuple[Requirement, ...], tuple[str, ...]]:
+    """A pinned requirement set of the project: its planning input, the exact requirement versions it
+    pins (for the engines), and the references of those that can no longer be read."""
+    found = await uow.requirement_sets.get(project_id, set_id)
+    planned = await uow.requirement_sets.get_planning_input(project_id, set_id)
+    if found is None or planned is None:
+        raise RequirementSetNotFound
+    requirements: list[Requirement] = []
+    missing: list[str] = []
+    for item in found.items:
+        version = await uow.requirements.get_version(project_id, item.requirement_id, item.version)
+        if version is None:
+            missing.append(item.reference)
+            continue
+        requirements.append(
+            Requirement(
+                id=item.requirement_id, project_id=project_id, number=item.number,
+                version=version.version, content=version.content, source=version.source,
+                confidence=version.confidence, created_by_user_id=version.created_by_user_id,
+                created_at=version.created_at, updated_at=version.created_at,
+            )
+        )  # fmt: skip
+    return cast(PlanningInputV2, planned[1]), tuple(requirements), tuple(missing)
+
+
+async def base_revision(uow: UnitOfWork, project_id: uuid.UUID, base: BaseRevision) -> ArchitectureRevision:
     """The exact revision an iteration starts from — of an architecture of this project."""
-    assert request.base is not None  # noqa: S101 - checked by the caller
-    architecture = await uow.architectures.get(project_id, request.base.architecture_id)
+    architecture = await uow.architectures.get(project_id, base.architecture_id)
     if architecture is None:
         raise ArchitectureNotFound
-    revision = await uow.architectures.get_revision(architecture.id, request.base.number)
+    revision = await uow.architectures.get_revision(architecture.id, base.number)
     if revision is None:
         raise ArchitectureRevisionNotFound
-    return revision.ir
+    return revision
 
 
 async def _run(

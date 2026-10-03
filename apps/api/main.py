@@ -19,6 +19,7 @@ from apps.api.middleware.security_headers import SecurityHeadersMiddleware
 from apps.api.routes import (
     architecture_agent,
     architecture_diffs,
+    architecture_workflows,
     architectures,
     auth,
     capacity,
@@ -217,4 +218,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(knowledge.router, prefix=API_PREFIX)
     app.include_router(architecture_agent.router, prefix=API_PREFIX)
     app.include_router(architecture_diffs.router, prefix=API_PREFIX)
+    app.include_router(architecture_workflows.router, prefix=API_PREFIX)
     return app

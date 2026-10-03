@@ -110,6 +110,15 @@ class Settings(BaseSettings):
     architecture_diff_llm_model: str = "claude-sonnet-5"
     architecture_diff_llm_timeout_seconds: float = Field(default=45, gt=0, le=60)
 
+    # Architecture workflows: the default limits of a workflow (a request may only lower them; the
+    # domain's ceilings bound these too) and the worker's lease on a workflow it carries forward.
+    architecture_workflow_max_iterations: int = Field(default=3, ge=0, le=5)
+    architecture_workflow_max_llm_calls: int = Field(default=12, ge=1, le=20)
+    architecture_workflow_max_seconds: float = Field(default=1800, ge=60, le=3600)
+    architecture_workflow_lease_seconds: float = Field(default=120, ge=10, le=900)
+    architecture_workflow_worker_turns: int = Field(default=50, ge=1, le=200)
+    architecture_workflow_worker_idle_seconds: float = Field(default=2, gt=0, le=60)
+
     @field_validator("cors_allowed_origins", "avatar_url_allowed_hosts", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:

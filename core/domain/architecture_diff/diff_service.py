@@ -232,8 +232,8 @@ class ArchitectureDiffService:
             wanted = _traced(base.ir) | _traced(target.ir) | set(request.requirement_ids or ())
             traced = await uow.requirements.list_by_ids(project_id, sorted(wanted, key=str)) if wanted else []
             decisions = await _decisions(uow, project_id)
-            capacity = await _capacity(uow, project_id, request.capacity_analysis_id, architectures)
-            cost = await _cost(uow, access, request.cost_analysis_id, architectures)
+            capacity = await capacity_inputs(uow, project_id, request.capacity_analysis_id, architectures)
+            cost = await cost_inputs(uow, access, request.cost_analysis_id, architectures)
         warnings: list[str] = []
         if base_architecture is None or base_architecture != target_architecture:
             warnings.append(DIFFERENT_ARCHITECTURES)
@@ -289,7 +289,7 @@ def _of_compared(architectures: Iterable[uuid.UUID | None]) -> list[uuid.UUID]:
     return list(dict.fromkeys(a for a in architectures if a is not None))
 
 
-async def _capacity(
+async def capacity_inputs(
     uow: UnitOfWork,
     project_id: uuid.UUID,
     analysis_id: uuid.UUID | None,
@@ -306,7 +306,7 @@ async def _capacity(
     raise CapacityAnalysisNotFound
 
 
-async def _cost(
+async def cost_inputs(
     uow: UnitOfWork,
     access: ProjectAccess,
     analysis_id: uuid.UUID | None,
