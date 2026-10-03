@@ -20,6 +20,7 @@ from .tools import TOOLS
 from .values import Action, Stage, StepStatus, check, code, count, digest, text
 
 MAX_OUTPUTS = 40
+MAX_ATTEMPTS = 2  # a retryable failure is tried once more, never more
 
 
 def operation_key(workflow_id: uuid.UUID, iteration: int, action: Action, subject: str = "") -> str:
@@ -51,6 +52,7 @@ class WorkflowStep:
     started_at: datetime
     completed_at: datetime
     subject: str = ""  # what it acted on: a candidate id, an engine, "" for the workflow itself
+    attempt: int = 1  # a retryable failure is attempted again under the same key, at most MAX_ATTEMPTS
     candidate_id: uuid.UUID | None = None
     outputs: dict[str, Any] = field(default_factory=dict)  # references to what it produced
     usage: WorkflowUsage = field(default_factory=WorkflowUsage)
@@ -71,6 +73,9 @@ class WorkflowStep:
                 else "step.key",
                 count(self.ordinal, "step.ordinal", minimum=1),
                 count(self.iteration, "step.iteration"),
+                count(self.attempt, "step.attempt", minimum=1),
+                "step.attempt" if isinstance(self.attempt, int) and self.attempt > MAX_ATTEMPTS else None,
+                "step.retryable" if self.retryable and self.attempt >= MAX_ATTEMPTS else None,
                 None if isinstance(self.status, StepStatus) else "step.status",
                 text(self.subject, "step.subject", 64) if self.subject else None,
                 _outputs(self.outputs),

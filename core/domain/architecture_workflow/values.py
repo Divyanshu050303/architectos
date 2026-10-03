@@ -118,10 +118,12 @@ class FailureCode(StrEnum):
     ENGINE_ERROR = "engine_error"
     INFRASTRUCTURE_ERROR = "infrastructure_error"  # a step failed for a reason outside the workflow
     TIMED_OUT = "timed_out"  # the workflow's duration limit, with nothing reviewable
+    PERMISSION_DENIED = "permission_denied"  # the person no longer holds a permission an action needs
 
 
 FAILURE_CLASS: dict[FailureCode, FailureClass] = {
     FailureCode.REQUIREMENTS_UNAVAILABLE: FailureClass.USER,
+    FailureCode.PERMISSION_DENIED: FailureClass.USER,
     FailureCode.BUDGET_EXHAUSTED: FailureClass.WORKFLOW,
     FailureCode.NO_VALID_CANDIDATE: FailureClass.WORKFLOW,
     FailureCode.TIMED_OUT: FailureClass.WORKFLOW,
