@@ -1,0 +1,16 @@
+{
+  "calls_over_budget": 0,
+  "change_accuracy": 1.0,
+  "classification_accuracy": 1.0,
+  "explanation_accuracy": 1.0,
+  "grounding_integrity": 1.0,
+  "grouping_accuracy": 1.0,
+  "impact_accuracy": 1.0,
+  "injection_containment": 1.0,
+  "record_integrity": 1.0,
+  "rejection_accuracy": 1.0,
+  "score_language": 0,
+  "secret_leaks": 0,
+  "stored_leaks": 0,
+  "unsupported_explanations": 0
+}
