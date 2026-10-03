@@ -76,6 +76,10 @@ VALID_BODIES: dict[str, dict[str, object]] = {
     f"answer_agent_run{_AGENT_RUN}answers_post": {"answers": [{"questionId": "aq_x", "answer": "Yes"}]},
     f"reject_agent_candidate{_AGENT_RUN}reject_post": {"reason": "Too large"},
     f"accept_agent_candidate{_AGENT_RUN}accept_post": {"candidateContentHash": "0" * 64},
+    "create_architecture_diff_api_v1_projects__project_id__architecture_diffs_post": {
+        "base": {"kind": "revision", "architectureId": str(uuid.uuid4()), "revisionNumber": 1},
+        "target": {"kind": "revision", "architectureId": str(uuid.uuid4()), "revisionNumber": 2},
+    },
     f"confirm_identity_mapping{_IDENTITY_MAPPINGS}post": {
         "baselineId": "db",
         "discoveredKey": "compose:shop/service/db",

@@ -18,6 +18,7 @@ from apps.api.middleware.request_id import RequestIdMiddleware
 from apps.api.middleware.security_headers import SecurityHeadersMiddleware
 from apps.api.routes import (
     architecture_agent,
+    architecture_diffs,
     architectures,
     auth,
     capacity,
@@ -45,6 +46,9 @@ from apps.api.routes import (
 )
 from engines.architecture_agent.factory import build_pipeline
 from engines.architecture_agent.orchestrator import AgentEngines
+from engines.architecture_diff.engine import DeterministicDiffEngine
+from engines.architecture_diff.impact import DiffEngines
+from engines.architecture_diff.interpreter import build_interpreter
 from engines.capacity.service import DeterministicCapacityEngine
 from engines.constraints.service import DeterministicConstraintEngine
 from engines.cost.service import DeterministicCostEngine
@@ -118,6 +122,22 @@ def _build_engines(app: FastAPI, settings: Settings) -> None:
             app.state.observability_engine,
         ),
         catalog=app.state.component_catalog,
+    )
+    app.state.diff_engine = DeterministicDiffEngine(
+        DiffEngines(
+            app.state.validation_engine,
+            app.state.reliability_engine,
+            app.state.security_engine,
+            app.state.observability_engine,
+            app.state.capacity_engine,
+            app.state.cost_engine,
+        )
+    )
+    app.state.diff_interpreter = build_interpreter(
+        provider=settings.architecture_diff_llm_provider,
+        api_key=settings.anthropic_api_key.get_secret_value() if settings.anthropic_api_key else None,
+        model=settings.architecture_diff_llm_model,
+        timeout_seconds=settings.architecture_diff_llm_timeout_seconds,
     )
 
 
@@ -196,4 +216,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(drift.router, prefix=API_PREFIX)
     app.include_router(knowledge.router, prefix=API_PREFIX)
     app.include_router(architecture_agent.router, prefix=API_PREFIX)
+    app.include_router(architecture_diffs.router, prefix=API_PREFIX)
     return app

@@ -24,6 +24,15 @@ from core.domain.architecture_agent.records import run_document, run_from
 from core.domain.architecture_agent.repository import RunListing as AgentRunListing
 from core.domain.architecture_agent.runs import AgentRun
 from core.domain.architecture_agent.values import RunStatus as AgentRunStatus
+from core.domain.architecture_diff.diffs import ArchitectureDiff
+from core.domain.architecture_diff.explanations import ExplanationRun
+from core.domain.architecture_diff.records import (
+    diff_document,
+    diff_from,
+    explanation_document,
+    explanation_run_from,
+)
+from core.domain.architecture_diff.repository import DiffListing
 from core.domain.audit.entities import AuditCursor, AuditEntry, AuditEvent
 from core.domain.capacity.analyses import AnalysisReport, CapacityAnalysis
 from core.domain.capacity.queries import AnalysisQuery, BottleneckQuery, ComponentQuery
@@ -1878,6 +1887,62 @@ class FakeAgentRunRepository:
         ]  # fmt: skip
 
 
+class FakeArchitectureDiffRepository:
+    """Diffs and explanation runs kept as the database keeps them: appended, read back from documents."""
+
+    def __init__(self) -> None:
+        self.rows: dict[uuid.UUID, dict[str, Any]] = {}
+        self.explanations: list[dict[str, Any]] = []
+
+    async def add(self, diff: ArchitectureDiff) -> ArchitectureDiff:
+        if diff.id in self.rows:
+            raise LookupError(diff.id)  # append-only
+        self.rows[diff.id] = diff_document(diff)
+        return diff
+
+    async def get(self, project_id: uuid.UUID, diff_id: uuid.UUID) -> ArchitectureDiff | None:
+        row = self.rows.get(diff_id)
+        return diff_from(row) if row is not None and row["project_id"] == project_id else None
+
+    async def add_explanation(self, project_id: uuid.UUID, run: ExplanationRun) -> ExplanationRun:
+        row = self.rows.get(run.diff_id)
+        if row is None or row["project_id"] != project_id:
+            raise LookupError(run.diff_id)  # the foreign key
+        self.explanations.append(explanation_document(project_id, run))
+        return run
+
+    async def list_explanations(self, project_id: uuid.UUID, diff_id: uuid.UUID) -> list[ExplanationRun]:
+        rows = [r for r in self.explanations if r["project_id"] == project_id and r["diff_id"] == diff_id]
+        return [explanation_run_from(r) for r in sorted(rows, key=lambda r: (r["requested_at"], r["id"]))]
+
+    async def list(
+        self,
+        project_id: uuid.UUID,
+        *,
+        architecture_id: uuid.UUID | None = None,
+        after: tuple[datetime, uuid.UUID] | None = None,
+        limit: int = 50,
+    ) -> list[DiffListing]:
+        diffs = [diff_from(r) for r in self.rows.values() if r["project_id"] == project_id]
+        if architecture_id is not None:
+            diffs = [
+                d
+                for d in diffs
+                if architecture_id in {d.base.ref.architecture_id, d.target.ref.architecture_id}
+            ]
+        diffs.sort(key=lambda d: (d.created_at, d.id), reverse=True)
+        if after is not None:
+            diffs = [d for d in diffs if (d.created_at, d.id) < after]
+        return [
+            DiffListing(
+                d.id, d.base, d.target, len(d.semantic.changes), d.semantic.counts(),
+                sum(1 for r in self.explanations if r["diff_id"] == d.id),
+                d.requested_by_user_id, d.created_at,
+            )
+            for d in diffs[:limit]
+        ]  # fmt: skip
+
+
 class FakeUnitOfWork:
     def __init__(self, clock: FakeClock) -> None:
         self._users = FakeUserRepository(clock)
@@ -1908,6 +1973,7 @@ class FakeUnitOfWork:
         self._drift = FakeDriftRepository()
         self._knowledge = FakeKnowledgeRepository()
         self._agent_runs = FakeAgentRunRepository()
+        self._architecture_diffs = FakeArchitectureDiffRepository()
         self.commits = 0
         self.rollbacks = 0
 
@@ -2022,6 +2088,10 @@ class FakeUnitOfWork:
     @property
     def agent_runs(self) -> FakeAgentRunRepository:
         return self._agent_runs
+
+    @property
+    def architecture_diffs(self) -> FakeArchitectureDiffRepository:
+        return self._architecture_diffs
 
     async def __aenter__(self) -> Self:
         return self

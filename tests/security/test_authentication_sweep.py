@@ -289,6 +289,11 @@ SPECIFIED = PUBLIC | {
     ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/cancel"),
     ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/reject"),
     ("POST", "/api/v1/projects/{project_id}/architecture-agent-runs/{run_id}/accept"),
+    # Architecture diffs: compare, read, explain.
+    ("POST", "/api/v1/projects/{project_id}/architecture-diffs"),
+    ("GET", "/api/v1/projects/{project_id}/architecture-diffs"),
+    ("GET", "/api/v1/projects/{project_id}/architecture-diffs/{diff_id}"),
+    ("POST", "/api/v1/projects/{project_id}/architecture-diffs/{diff_id}/explanations"),
 }
 
 

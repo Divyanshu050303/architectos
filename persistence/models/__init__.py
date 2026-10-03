@@ -2,6 +2,7 @@
 
 from .architecture import ArchitectureLayoutRecord, ArchitectureRecord, ArchitectureRevisionRecord
 from .architecture_agent import AgentRunRecord
+from .architecture_diff import ArchitectureDiffRecord, DiffExplanationRecord
 from .audit_log import AuditLogRecord
 from .base import Base
 from .capacity import CapacityAnalysisRecord, CapacityBottleneckRecord, CapacityComponentRecord
@@ -42,6 +43,7 @@ from .validation import ValidationFindingRecord, ValidationRunRecord
 
 __all__ = [
     "AgentRunRecord",
+    "ArchitectureDiffRecord",
     "ArchitectureLayoutRecord",
     "ArchitectureRecord",
     "ArchitectureRevisionRecord",
@@ -53,6 +55,7 @@ __all__ = [
     "CostAnalysisRecord",
     "CostLineItemRecord",
     "DecisionRecord",
+    "DiffExplanationRecord",
     "DiscoveryRunRecord",
     "DriftAnalysisRecord",
     "DriftIdentityMappingRecord",

@@ -104,6 +104,12 @@ class Settings(BaseSettings):
     architecture_agent_llm_model: str = "claude-sonnet-5"
     architecture_agent_llm_timeout_seconds: float = Field(default=60, gt=0, le=300)
 
+    # Architecture diff explanations: a language model explains a stored diff, off unless configured.
+    # Without a model an explanation fails ``llm_unavailable``; the deterministic diff is unaffected.
+    architecture_diff_llm_provider: Literal["none", "anthropic"] = "none"
+    architecture_diff_llm_model: str = "claude-sonnet-5"
+    architecture_diff_llm_timeout_seconds: float = Field(default=45, gt=0, le=60)
+
     @field_validator("cors_allowed_origins", "avatar_url_allowed_hosts", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
@@ -123,6 +129,8 @@ class Settings(BaseSettings):
             raise ValueError("REQUIREMENTS_LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY")
         if self.architecture_agent_llm_provider == "anthropic" and self.anthropic_api_key is None:
             raise ValueError("ARCHITECTURE_AGENT_LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY")
+        if self.architecture_diff_llm_provider == "anthropic" and self.anthropic_api_key is None:
+            raise ValueError("ARCHITECTURE_DIFF_LLM_PROVIDER=anthropic requires ANTHROPIC_API_KEY")
         if self.cookie_samesite == "none" and not self.cookie_secure:
             raise ValueError("COOKIE_SAMESITE=none requires COOKIE_SECURE=true")
         if self.environment != "production":

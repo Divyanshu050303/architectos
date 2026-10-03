@@ -52,6 +52,7 @@ _PLAN = "_api_v1_projects__project_id__migration_plans__plan_id__"
 _PLAN_VERSION = _PLAN + "versions__version__"
 _DISCOVERY = "_api_v1_projects__project_id__discovery_runs__run_id__"
 _AGENT = "_api_v1_projects__project_id__architecture_agent_runs__run_id__"
+_DIFF = "_api_v1_projects__project_id__architecture_diffs__diff_id__"
 MUTATING = {"POST", "PUT", "PATCH", "DELETE"}
 # POSTs that change nothing (and so write no audit entry).
 _KNOWLEDGE = "_api_v1_projects__project_id__knowledge_sources__source_id__"
@@ -94,6 +95,7 @@ class Target:
     agent_run_id: str = ""  # set by with_agent_waiting
     agent_question_ids: tuple[str, ...] = ()  # its blocking questions
     agent_candidate_hash: str = ""  # set by with_agent_candidate
+    diff_id: str = ""  # set by with_diff
 
 
 Prepare = Callable[[AsyncClient, dict[str, str], Target], Awaitable[None]]
@@ -394,6 +396,26 @@ async def with_agent_candidate(client: AsyncClient, auth: dict[str, str], target
     target.agent_candidate_hash = answered.json()["candidate"]["contentHash"]
 
 
+def diff_request(target: Target) -> dict[str, Any]:
+    """Revision 1 against revision 2, with a canary in the person's own words."""
+    revision = {"kind": "revision", "architectureId": target.architecture_id}
+    return {
+        "base": revision | {"revisionNumber": 1},
+        "target": revision | {"revisionNumber": 2},
+        "context": CANARY_STATEMENT,
+    }
+
+
+async def with_diff(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
+    """A stored diff of an architecture whose names carry the canaries."""
+    await with_two_revisions(client, auth, target)
+    created = await client.post(
+        f"/api/v1/projects/{target.project_id}/architecture-diffs", json=diff_request(target), headers=auth
+    )
+    assert created.status_code == 201, created.text
+    target.diff_id = str(created.json()["id"])
+
+
 async def with_knowledge(client: AsyncClient, auth: dict[str, str], target: Target) -> None:
     """An indexed knowledge document."""
     registered = await client.post(
@@ -658,6 +680,12 @@ PLANS: dict[str, Plan] = {
         lambda target: {"candidateContentHash": target.agent_candidate_hash, "name": CANARY_TITLE},
         with_agent_candidate,
     ),
+    "create_architecture_diff_api_v1_projects__project_id__architecture_diffs_post": Plan(
+        {"architecture_diff.created"}, "created", diff_request, with_two_revisions
+    ),
+    f"explain_architecture_diff{_DIFF}explanations_post": Plan(
+        {"architecture_diff.explained"}, "diff", None, with_diff
+    ),
     f"run_validation{_ARCH}validations_post": Plan(
         {"architecture.validated"}, "architecture", {"profile": "default"}, with_architecture
     ),
@@ -692,6 +720,7 @@ def test_every_project_scoped_audit_action_is_exercised() -> None:
         "drift_identity",
         "knowledge_source",
         "agent_run",
+        "architecture_diff",
     }
     declared = {a.value for a in AuditAction if a.value.split(".")[0] in scoped}
     assert declared == set().union(*(plan.actions for plan in PLANS.values()))
@@ -709,6 +738,7 @@ def _expected_resource(resource: str, target: Target, response: Any) -> str | No
         "drift_architecture": target.drift_architecture_id,
         "knowledge": target.knowledge_source_id,
         "agent_run": target.agent_run_id,
+        "diff": target.diff_id,
     }
     match resource:
         case "promoted":
@@ -789,6 +819,7 @@ async def test_every_mutation_is_audited_without_requirement_text(
             **({"run_id": target.agent_run_id} if target.agent_run_id else {}),
             **({"item_id": target.drift_item_id} if target.drift_item_id else {}),
             **({"source_id": target.knowledge_source_id} if target.knowledge_source_id else {}),
+            **({"diff_id": target.diff_id} if target.diff_id else {}),
         }
         url = op.url(**values)
         body = plan.body(target) if callable(plan.body) else plan.body
@@ -884,6 +915,8 @@ async def test_read_only_endpoints_write_nothing(  # noqa: PLR0915 - one sweep o
     knowledge = await knowledge_ids(client, auth, target)  # an indexed document in the main project
     agent = await fresh_target(client, auth, org_id)
     await with_agent_waiting(client, auth, agent)  # its own project: a run waiting for answers
+    compared_target = await fresh_target(client, auth, org_id)
+    await with_diff(client, auth, compared_target)  # its own project: a stored diff
     before = await audit_entries(client, auth, org_id)
 
     reads = [
@@ -933,6 +966,8 @@ async def test_read_only_endpoints_write_nothing(  # noqa: PLR0915 - one sweep o
             }
         if "/architecture-agent-runs" in op.path:
             values = ids | {"project_id": agent.project_id, "run_id": agent.agent_run_id}
+        if "/architecture-diffs" in op.path:
+            values = ids | {"project_id": compared_target.project_id, "diff_id": compared_target.diff_id}
         body = READ_BODIES.get(op.operation_id)
         response = await client.request(op.method, op.url(**values), json=body, headers=auth)
         assert response.is_success, (op.operation_id, response.text)

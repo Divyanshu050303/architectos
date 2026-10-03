@@ -21,6 +21,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Text,
+    UniqueConstraint,
     Uuid,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -72,6 +73,7 @@ class AgentRunRecord(UuidPrimaryKey, Timestamps, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
+        UniqueConstraint("id", "project_id"),  # target of the diffs' same-project foreign keys
         ForeignKeyConstraint(
             ["requirement_set_id", "project_id"],
             ["requirement_sets.id", "requirement_sets.project_id"],

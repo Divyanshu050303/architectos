@@ -41,6 +41,12 @@ from core.domain.architecture_agent.errors import (
     InvalidAgentRequest,
     InvalidAgentTransition,
 )
+from core.domain.architecture_diff.errors import (
+    ArchitectureDiffNotFound,
+    ComparedStateNotFound,
+    DiffTooLarge,
+    InvalidDiffRequest,
+)
 from core.domain.audit.errors import InvalidCursor
 from core.domain.capacity.errors import (
     CapacityAnalysisNotFound,
@@ -296,6 +302,10 @@ STATUS_BY_ERROR: dict[type[DomainError], int] = {
     AgentRunNotFound: 404,
     InvalidAgentTransition: 409,
     CandidateNotAcceptable: 409,
+    InvalidDiffRequest: 422,
+    ArchitectureDiffNotFound: 404,
+    ComparedStateNotFound: 404,  # missing, hidden or not comparable: one answer
+    DiffTooLarge: 422,
 }
 
 # RFC 6750: 401s for Bearer-protected resources say how to authenticate.

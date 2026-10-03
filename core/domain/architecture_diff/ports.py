@@ -10,22 +10,29 @@ Absent inputs make the engine ``not_evaluated``, with why — never a guess.
 """
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 
+from core.architecture_ir.model import ArchitectureIR
 from core.domain.architecture_agent.requests import AgentUsage
 from core.domain.architecture_agent.results import Rejection
 from core.domain.architecture_agent.runs import RawOutput
 from core.domain.capacity.workload import WorkloadProfile
 from core.domain.cost.pricing import PricingSnapshot
+from core.domain.decisions.entities import Decision
+from core.domain.knowledge.retrieval import RetrievalQuery, RetrievalResult
 from core.domain.projects.policies import ArchitecturePolicy
 from core.domain.requirements.entities import Requirement
 
+from .changes import SemanticDiff
+from .diffs import ArchitectureDiff
 from .errors import InvalidDiffRecord, InvalidDiffRequest
-from .explanations import DiffExplanation
+from .explanations import DiffExplanation, ExplanationRun
+from .impacts import DecisionImpact, EngineImpact, RequirementImpact
+from .references import ComparedState
 from .values import Basis, ExplanationFailure
 
 
@@ -52,6 +59,44 @@ class ImpactInputs:
     policy: ArchitecturePolicy = field(default_factory=ArchitecturePolicy)
     capacity: CapacityInputs | None = None
     cost: CostInputs | None = None
+
+
+# --- the deterministic comparison ---------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedState:
+    """A compared state, read: its architecture (in memory, never copied into the diff) and how it is
+    recorded. A candidate is analyzed under its run's id."""
+
+    compared: ComparedState
+    ir: ArchitectureIR
+    analyzed_as: uuid.UUID  # the architecture id, or the agent run id of a candidate
+    number: int  # the revision number; 1 for a candidate
+
+
+@dataclass(frozen=True, slots=True)
+class DiffInputs:
+    impact: ImpactInputs  # the same for both states
+    requirements: Mapping[uuid.UUID, Requirement]  # every requirement a state may trace to, by id
+    decisions: tuple[Decision, ...] = ()  # the project's ADRs
+    scope: tuple[uuid.UUID, ...] | None = None  # the requirements the person asked about
+
+
+@dataclass(frozen=True, slots=True)
+class DiffOutcome:
+    semantic: SemanticDiff
+    requirements: tuple[RequirementImpact, ...] = ()
+    decisions: tuple[DecisionImpact, ...] = ()
+    engines: tuple[EngineImpact, ...] = ()
+    unknowns: tuple[str, ...] = ()
+
+
+class DiffComputer(Protocol):
+    def compare(self, base: ResolvedState, target: ResolvedState, inputs: DiffInputs) -> DiffOutcome:
+        """Deterministic: the same states and inputs always give the same outcome. ``DiffTooLarge``
+        for a comparison over its bounds."""
+        ...
 
 
 # --- the AI interpretation ------------------------------------------------------------------------
@@ -123,3 +168,23 @@ class DiffExplainer(Protocol):
     async def explain(self, context: ExplanationContext, budget: ExplanationBudget) -> ExplainOutcome:
         """At most ``budget.max_model_calls`` calls. Never raises for a model failure."""
         ...
+
+
+type Retrieve = Callable[[RetrievalQuery], Awaitable[RetrievalResult]]
+
+
+class DiffInterpreter(Protocol):
+    """Explains a stored diff: project knowledge through ``retrieve`` (authorized by the caller's
+    retriever), the bounded context, the explainer. Never raises for a model or retrieval failure:
+    the run says what happened."""
+
+    async def interpret(
+        self,
+        diff: ArchitectureDiff,
+        retrieve: Retrieve,
+        budget: ExplanationBudget,
+        *,
+        run_id: uuid.UUID,
+        user_id: uuid.UUID,
+        now: datetime,
+    ) -> ExplanationRun: ...

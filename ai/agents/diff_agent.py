@@ -32,12 +32,10 @@ from core.domain.architecture_diff.explanations import (
     MAX_REFS,
     MAX_STATEMENT,
     DiffExplanation,
-    Grounding,
-    GroupExplanation,
-    RequirementExplanation,
     Statement,
 )
 from core.domain.architecture_diff.ports import ExplainOutcome, ExplanationBudget, ExplanationContext
+from core.domain.architecture_diff.records import explanation_from_dict
 from core.domain.architecture_diff.values import Basis, ExplanationFailure
 
 PROMPT_VERSION = "diff-explanation-v1"
@@ -142,36 +140,6 @@ class Parsed:
     rejections: tuple[Rejection, ...] = ()
 
 
-def _statement(data: dict[str, Any]) -> Statement:
-    groundings = tuple(Grounding(Basis(g["basis"]), g["ref"]) for g in data["groundings"])
-    return Statement(data["text"], groundings, data["inferred"])
-
-
-def _build(data: dict[str, Any]) -> DiffExplanation:
-    groups = tuple(
-        GroupExplanation(
-            g["group_id"],
-            g["title"],
-            _statement(g["explanation"]),
-            tuple(_statement(c) for c in g["consequences"]),
-            tuple(g["unknowns"]),
-        )
-        for g in data["groups"]
-    )
-    requirements = tuple(
-        RequirementExplanation(r["reference"], _statement(r["explanation"])) for r in data["requirements"]
-    )
-    return DiffExplanation(
-        _statement(data["summary"]),
-        groups,
-        tuple(_statement(t) for t in data["tradeoffs"]),
-        requirements,
-        tuple(_statement(r) for r in data["risks"]),
-        tuple(_statement(q) for q in data["questions"]),
-        tuple(data["unknowns"]),
-    )
-
-
 def _number_ok(value: str, allowed: frozenset[str]) -> bool:
     return value in allowed or ("." not in value and int(value) <= SMALL_COUNT)
 
@@ -235,7 +203,7 @@ def parse(data: object, context: ExplanationContext) -> Parsed:
     if refused:
         return Parsed(None, rejections=tuple(refused))
     try:
-        explanation = _build(data)
+        explanation = explanation_from_dict(data)
     except InvalidDiffRecord as error:  # e.g. a statement neither grounded nor labelled an inference
         fields = ", ".join(str(f) for f in error.details.get("fields", ()))
         return Parsed(None, rejections=(Rejection("invalid_item", "$", f"Invalid: {fields}"[:500]),))

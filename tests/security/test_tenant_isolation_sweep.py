@@ -1,6 +1,8 @@
 """A member of one organization cannot reach any organization-scoped endpoint of another, and
 probing leaves the target's members, invitations and audit trail untouched."""
 
+import uuid
+
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
@@ -154,6 +156,7 @@ async def test_a_stranger_gets_404_on_every_project_endpoint_and_changes_nothing
         "requirement_id": requirement["id"],
         "architecture_id": architecture["id"],
         "run_id": run["id"],
+        "diff_id": str(uuid.uuid4()),  # a stranger is refused at the project, before any diff
     }
 
     async def state() -> tuple[object, ...]:

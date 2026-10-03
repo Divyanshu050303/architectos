@@ -21,6 +21,7 @@ from tests.integration.conftest import joined_session
 from tests.unit.identity.fakes import FakeClock
 
 from .agent_support import scripted_pipeline
+from .diff_support import scripted_interpreter
 
 if TYPE_CHECKING:
     from .requirement_support import World
@@ -76,6 +77,7 @@ def app(
     app = create_app(settings)
     app.state.email_transport = outbox
     app.state.agent_pipeline = scripted_pipeline(app)  # a scripted model: no provider is called
+    app.state.diff_interpreter = scripted_interpreter()  # likewise for diff explanations
 
     def test_clock() -> Clock:
         return clock

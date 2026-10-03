@@ -15,6 +15,7 @@ from apps.api.middleware.rate_limit import RateLimiter, RateLimits
 from apps.api.middleware.request_id import current_request_id
 from core.domain.architecture.architecture_service import ArchitectureService
 from core.domain.architecture_agent.agent_service import ArchitectureAgentService
+from core.domain.architecture_diff.diff_service import ArchitectureDiffService
 from core.domain.audit.audit_service import AuditService
 from core.domain.capacity.capacity_service import CapacityService
 from core.domain.client import ClientInfo
@@ -461,6 +462,27 @@ def get_agent_service(
 
 
 AgentServiceDep = Annotated[ArchitectureAgentService, Depends(get_agent_service)]
+
+
+def get_diff_service(
+    request: Request,
+    db: DbSession,
+    client: Client,
+    clock: Annotated[Clock, Depends(get_clock)],
+    knowledge: KnowledgeServiceDep,
+) -> ArchitectureDiffService:
+    # The comparison engine and the interpreter are built once at startup (see apps/api/main.py).
+    # Knowledge is read through the knowledge service (the retriever port, authorized there).
+    return ArchitectureDiffService(
+        SqlAlchemyUnitOfWork(db, client),
+        request.app.state.diff_engine,
+        request.app.state.diff_interpreter,
+        knowledge,
+        clock=clock,
+    )
+
+
+DiffServiceDep = Annotated[ArchitectureDiffService, Depends(get_diff_service)]
 
 
 def get_component_service(request: Request) -> ComponentService:
